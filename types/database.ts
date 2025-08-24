@@ -1,0 +1,212 @@
+export interface Database {
+  public: {
+    Tables: {
+      users: {
+        Row: {
+          id: string;
+          username: string;
+          email: string;
+          role: string;
+          is_verified_business: boolean | null;
+          join_date: string | null;
+          status: string | null;
+          reputation: number | null;
+          total_posts: number | null;
+          avatar_url: string | null;
+          location: string | null;
+          created_at: string | null;
+          updated_at: string | null;
+        };
+        Insert: {
+          id: string;
+          username: string;
+          email: string;
+          role?: string;
+          is_verified_business?: boolean | null;
+          join_date?: string | null;
+          status?: string | null;
+          reputation?: number | null;
+          total_posts?: number | null;
+          avatar_url?: string | null;
+          location?: string | null;
+          created_at?: string | null;
+          updated_at?: string | null;
+        };
+        Update: {
+          id?: string;
+          username?: string;
+          email?: string;
+          role?: string;
+          is_verified_business?: boolean | null;
+          join_date?: string | null;
+          status?: string | null;
+          reputation?: number | null;
+          total_posts?: number | null;
+          avatar_url?: string | null;
+          location?: string | null;
+          created_at?: string | null;
+          updated_at?: string | null;
+        };
+      };
+      deals: {
+        Row: {
+          id: string;
+          title: string;
+          description: string;
+          price: number;
+          original_price: number | null;
+          discount_percentage: number | null;
+          category_id: string;
+          store_id: string;
+          tags: string[] | null;
+          deal_url: string | null;
+          coupon_code: string | null;
+          images: string[] | null;
+          city: string;
+          state: string;
+          country: string | null;
+          is_online: boolean | null;
+          start_date: string | null;
+          expiry_date: string | null;
+          status: string | null;
+          created_by: string;
+          votes_up: number | null;
+          votes_down: number | null;
+          comment_count: number | null;
+          view_count: number | null;
+          click_count: number | null;
+          save_count: number | null;
+          created_at: string | null;
+          updated_at: string | null;
+        };
+        Insert: {
+          id?: string;
+          title: string;
+          description: string;
+          price: number;
+          original_price?: number | null;
+          discount_percentage?: number | null;
+          category_id: string;
+          store_id: string;
+          tags?: string[] | null;
+          deal_url?: string | null;
+          coupon_code?: string | null;
+          images?: string[] | null;
+          city: string;
+          state: string;
+          country?: string | null;
+          is_online?: boolean | null;
+          start_date?: string | null;
+          expiry_date?: string | null;
+          status?: string | null;
+          created_by: string;
+          votes_up?: number | null;
+          votes_down?: number | null;
+          comment_count?: number | null;
+          view_count?: number | null;
+          click_count?: number | null;
+          save_count?: number | null;
+          created_at?: string | null;
+          updated_at?: string | null;
+        };
+        Update: {
+          id?: string;
+          title?: string;
+          description?: string;
+          price?: number;
+          original_price?: number | null;
+          discount_percentage?: number | null;
+          category_id?: string;
+          store_id?: string;
+          tags?: string[] | null;
+          deal_url?: string | null;
+          coupon_code?: string | null;
+          images?: string[] | null;
+          city?: string;
+          state?: string;
+          country?: string | null;
+          is_online?: boolean | null;
+          start_date?: string | null;
+          expiry_date?: string | null;
+          status?: string | null;
+          created_by?: string;
+          votes_up?: number | null;
+          votes_down?: number | null;
+          comment_count?: number | null;
+          view_count?: number | null;
+          click_count?: number | null;
+          save_count?: number | null;
+          created_at?: string | null;
+          updated_at?: string | null;
+        };
+      };
+      categories: {
+        Row: {
+          id: string;
+          name: string;
+          slug: string;
+          emoji: string;
+          is_active: boolean | null;
+          deal_count: number | null;
+          created_at: string | null;
+          updated_at: string | null;
+        };
+        Insert: {
+          id?: string;
+          name: string;
+          slug: string;
+          emoji: string;
+          is_active?: boolean | null;
+          deal_count?: number | null;
+          created_at?: string | null;
+          updated_at?: string | null;
+        };
+        Update: {
+          id?: string;
+          name?: string;
+          slug?: string;
+          emoji?: string;
+          is_active?: boolean | null;
+          deal_count?: number | null;
+          created_at?: string | null;
+          updated_at?: string | null;
+        };
+      };
+      stores: {
+        Row: {
+          id: string;
+          name: string;
+          slug: string;
+          logo_url: string | null;
+          description: string | null;
+          website_url: string | null;
+          verified: boolean | null;
+          created_at: string | null;
+          updated_at: string | null;
+        };
+        Insert: {
+          id?: string;
+          name: string;
+          slug: string;
+          logo_url?: string | null;
+          description?: string | null;
+          website_url?: string | null;
+          verified?: boolean | null;
+          created_at?: string | null;
+          updated_at?: string | null;
+        };
+        Update: {
+          id?: string;
+          name?: string;
+          slug?: string;
+          logo_url?: string | null;
+          description?: string | null;
+          website_url?: string | null;
+          verified?: boolean | null;
+          created_at?: string | null;
+          updated_at?: string | null;
+        };
+      };
+    };
+  };
+}

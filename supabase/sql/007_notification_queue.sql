@@ -1,0 +1,1 @@
+/* SQL for notification_queue */

@@ -1,0 +1,4 @@
+import { serve } from 'https://deno.land/std@0.224.0/http/server.ts';
+import { requireAdmin } from '../_shared/admin-guard/index.ts';
+function json(o:any,s=200){return new Response(JSON.stringify(o),{status:s,headers:{'content-type':'application/json'}});}
+serve(async (req)=>{try{if(req.method!=='POST')return json({error:'method_not_allowed'},405);const ctx=await requireAdmin(req);const {target_user_id}=await req.json().catch(()=>({}));let q=ctx.supabase.from('impersonation_sessions').delete().eq('admin_id',ctx.userId);if(target_user_id) q=q.eq('target_user_id',target_user_id);const {error}=await q;if(error)return json({error:'db_error'},500);return json({ok:true});}catch(e){if(e instanceof Response) return e;console.error('admin-impersonate-stop error',e);return json({error:'internal'},500);}});

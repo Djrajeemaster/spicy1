@@ -1,0 +1,1 @@
+/* SQL for alert_notifications_sent */
