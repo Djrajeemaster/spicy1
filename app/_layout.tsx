@@ -5,6 +5,15 @@ import { AuthProvider } from '@/contexts/AuthProvider';
 import { CurrencyProvider } from '@/contexts/CurrencyProvider';
 import { usePushNotifications } from '@/hooks/usePushNotifications';
 import { useFrameworkReady } from '@/hooks/useFrameworkReady';
+import * as Notifications from 'expo-notifications';
+
+Notifications.setNotificationHandler({
+  handleNotification: async () => ({
+    shouldShowAlert: true,
+    shouldPlaySound: false,
+    shouldSetBadge: false,
+  }),
+});
 
 function PushInit() {
   usePushNotifications();
