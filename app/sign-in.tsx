@@ -15,6 +15,8 @@ import { ArrowLeft, Mail, Lock, Eye, EyeOff } from 'lucide-react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { router } from 'expo-router';
 import { useAuth } from '@/contexts/AuthProvider';
+import { sanitizeEmail } from '@/utils/sanitization';
+import { logger } from '@/utils/logger';
 
 export default function SignInScreen() {
   const [email, setEmail] = useState('');
@@ -24,12 +26,28 @@ export default function SignInScreen() {
   const { signIn } = useAuth();
 
   const handleSignIn = async () => {
+    // Validate inputs
+    const sanitizedEmail = sanitizeEmail(email.trim());
+    if (!sanitizedEmail) {
+      Alert.alert('Invalid Email', 'Please enter a valid email address.');
+      return;
+    }
+    
+    if (!password || password.length < 6) {
+      Alert.alert('Invalid Password', 'Password must be at least 6 characters long.');
+      return;
+    }
+    
     setLoading(true);
     try {
-      const { error } = await signIn(email, password);
+      logger.authEvent('sign_in_attempt', undefined, { email: sanitizedEmail });
+      const { error } = await signIn(sanitizedEmail, password);
       
       if (error) {
-        console.log('Sign in error:', error.message);
+        logger.authEvent('sign_in_failed', undefined, { 
+          email: sanitizedEmail, 
+          error: error.code || 'unknown' 
+        });
         
         // Determine alert buttons based on error type
         const alertButtons = [{ text: 'OK' }];
@@ -54,6 +72,7 @@ export default function SignInScreen() {
           alertButtons
         );
       } else {
+        logger.authEvent('sign_in_success', undefined, { email: sanitizedEmail });
         Alert.alert(
           'Welcome Back! 🎉',
           'You have successfully signed in to SpicyBeats.',
@@ -62,7 +81,7 @@ export default function SignInScreen() {
         router.replace('/');
       }
     } catch (error) {
-      console.error('Unexpected sign in error:', error);
+      logger.error('Unexpected sign in error', error);
       Alert.alert('Connection Error', 'Unable to connect to the server. Please check your internet connection and try again.');
     } finally {
       setLoading(false);

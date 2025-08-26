@@ -48,8 +48,10 @@ export default function PostDealScreen() {
     selectedStoreId: '',
     city: '',
     state: '',
-    country: 'India',
+    country: '',
     expiryDate: '',
+    dealUrl: '',
+    couponCode: '',
     rulesAccepted: false,
   });
 
@@ -156,10 +158,15 @@ export default function PostDealScreen() {
       mediaTypes: ImagePicker.MediaTypeOptions.Images,
       allowsEditing: true,
       aspect: [4, 3],
-      quality: 0.8,
+      quality: 0.5,
     });
     if (!result.canceled && result.assets[0]) {
-      setSelectedImages((prev) => [...prev, result.assets[0].uri]);
+      const asset = result.assets[0];
+      if (asset.fileSize && asset.fileSize > 2 * 1024 * 1024) {
+        notify('Image Too Large', 'Please select an image smaller than 2MB.');
+        return;
+      }
+      setSelectedImages((prev) => [...prev, asset.uri]);
     }
   };
 
@@ -168,11 +175,18 @@ export default function PostDealScreen() {
       mediaTypes: ImagePicker.MediaTypeOptions.Images,
       allowsMultipleSelection: true,
       allowsEditing: false,
-      quality: 0.8,
+      quality: 0.5,
       selectionLimit: 5,
     });
     if (!result.canceled && result.assets) {
-      const newImageUris = result.assets.map((a) => a.uri);
+      const validAssets = result.assets.filter(asset => {
+        if (asset.fileSize && asset.fileSize > 2 * 1024 * 1024) {
+          notify('Image Too Large', `Image ${asset.fileName || 'selected'} is larger than 2MB and was skipped.`);
+          return false;
+        }
+        return true;
+      });
+      const newImageUris = validAssets.map((a) => a.uri);
       setSelectedImages((prev) => {
         const combined = [...prev, ...newImageUris];
         return combined.slice(0, 5);
@@ -195,11 +209,13 @@ export default function PostDealScreen() {
         price,
         original_price: originalPrice ?? null,
         category_id: formData.selectedCategoryId,
-        store_id: formData.selectedStoreId,
-        city: formData.city.trim(),
+        store_id: formData.selectedStoreId || null,
+        city: formData.city.trim() || null,
         state: formData.state?.trim() || null,
-        country: formData.country?.trim() || 'India',
+        country: formData.country?.trim() || null,
         is_online: true,
+        deal_url: formData.dealUrl.trim() || null,
+        coupon_code: formData.couponCode.trim() || null,
         created_by: user!.id,
         images: uploadedImageUrls,
       };
@@ -245,8 +261,10 @@ export default function PostDealScreen() {
                 selectedStoreId: '',
                 city: '',
                 state: '',
-                country: 'India',
+                country: '',
                 expiryDate: '',
+                dealUrl: '',
+                couponCode: '',
                 rulesAccepted: false,
               });
               setSelectedImages([]);
@@ -276,12 +294,13 @@ export default function PostDealScreen() {
     if (!formData.title.trim()) return notify('Missing Information', 'Please enter a deal title.');
     if (!formData.description.trim()) return notify('Missing Information', 'Please enter a deal description.');
     if (!formData.selectedCategoryId) return notify('Missing Information', 'Please select a category.');
-    if (!formData.selectedStoreId) return notify('Missing Information', 'Please select a store.');
-    if (!formData.city.trim()) return notify('Missing Information', 'Please enter a city for the deal.');
     if (!formData.rulesAccepted) return notify('Community Rules', 'Please accept our community guidelines to continue.');
 
-    const price = parseFloat(formData.price);
-    if (isNaN(price) || price <= 0) return notify('Invalid Price', 'Please enter a valid price for the deal.');
+    // Allow deals without specific price (percentage off, coupon deals)
+    const price = formData.price.trim() ? parseFloat(formData.price) : 0;
+    if (formData.price.trim() && (isNaN(price) || price <= 0)) {
+      return notify('Invalid Price', 'Please enter a valid price or leave empty for percentage/coupon deals.');
+    }
     const originalPriceParsed = formData.originalPrice ? parseFloat(formData.originalPrice) : null;
     if (originalPriceParsed !== null && (isNaN(originalPriceParsed) || originalPriceParsed <= 0)) {
       return notify('Invalid Original Price', 'Please enter a valid original price.');
@@ -433,7 +452,7 @@ export default function PostDealScreen() {
 
       <ScrollView style={styles.form} showsVerticalScrollIndicator={false}>
         <View style={styles.section}>
-          <Text style={styles.sectionTitle}>📝 Deal Information</Text>
+          <Text style={styles.sectionTitle}>📝 Basic Information</Text>
 
           <View style={styles.inputGroup}>
             <Text style={styles.label}>Deal Title *</Text>
@@ -457,42 +476,6 @@ export default function PostDealScreen() {
               onChangeText={(text) => setFormData((prev) => ({ ...prev, description: text }))}
               placeholderTextColor="#94a3b8"
             />
-          </View>
-
-          <View style={styles.row}>
-            <View style={[styles.inputGroup, { flex: 1, marginRight: 8 }]}>
-              <Text style={styles.label}>Sale Price *</Text>
-              <View style={styles.inputWithIcon}>
-                <View style={styles.inputIcon}>
-                  <DollarSign size={18} color="#10b981" />
-                </View>
-                <TextInput
-                  style={styles.inputWithPadding}
-                  placeholder="29.99"
-                  value={formData.price}
-                  onChangeText={(text) => setFormData((prev) => ({ ...prev, price: text }))}
-                  keyboardType="numeric"
-                  placeholderTextColor="#94a3b8"
-                />
-              </View>
-            </View>
-
-            <View style={[styles.inputGroup, { flex: 1, marginLeft: 8 }]}>
-              <Text style={styles.label}>Original Price (Optional)</Text>
-              <View style={styles.inputWithIcon}>
-                <View style={styles.inputIcon}>
-                  <DollarSign size={18} color="#ef4444" />
-                </View>
-                <TextInput
-                  style={styles.inputWithPadding}
-                  placeholder="59.99"
-                  value={formData.originalPrice}
-                  onChangeText={(text) => setFormData((prev) => ({ ...prev, originalPrice: text }))}
-                  keyboardType="numeric"
-                  placeholderTextColor="#94a3b8"
-                />
-              </View>
-            </View>
           </View>
         </View>
 
@@ -527,9 +510,23 @@ export default function PostDealScreen() {
           </View>
 
           <View style={styles.inputGroup}>
-            <Text style={styles.label}>Store *</Text>
+            <Text style={styles.label}>Store (Optional)</Text>
             <ScrollView horizontal showsHorizontalScrollIndicator={false}>
               <View style={styles.categoryContainer}>
+                <TouchableOpacity
+                  style={styles.categoryWrapper}
+                  onPress={() => setFormData((p) => ({ ...p, selectedStoreId: '' }))}
+                >
+                  {!formData.selectedStoreId ? (
+                    <LinearGradient colors={['#64748b', '#475569']} style={styles.categoryButton}>
+                      <Text style={styles.categoryButtonTextActive}>No Store</Text>
+                    </LinearGradient>
+                  ) : (
+                    <View style={styles.categoryButtonInactive}>
+                      <Text style={styles.categoryButtonText}>No Store</Text>
+                    </View>
+                  )}
+                </TouchableOpacity>
                 {stores.map((store) => (
                   <TouchableOpacity
                     key={store.id}
@@ -551,48 +548,97 @@ export default function PostDealScreen() {
             </ScrollView>
           </View>
 
+        </View>
+
+        <View style={styles.section}>
+          <Text style={styles.sectionTitle}>💰 Pricing & Offers</Text>
+
+          <View style={styles.row}>
+            <View style={[styles.inputGroup, { flex: 1, marginRight: 8 }]}>
+              <Text style={styles.label}>Sale Price (Optional)</Text>
+              <View style={styles.inputWithIcon}>
+                <View style={styles.inputIcon}>
+                  <DollarSign size={18} color="#10b981" />
+                </View>
+                <TextInput
+                  style={styles.inputWithPadding}
+                  placeholder="29.99 or leave empty"
+                  value={formData.price}
+                  onChangeText={(text) => setFormData((prev) => ({ ...prev, price: text }))}
+                  keyboardType="numeric"
+                  placeholderTextColor="#94a3b8"
+                />
+              </View>
+              <Text style={styles.helpText}>For % off or coupon deals, leave empty</Text>
+            </View>
+
+            <View style={[styles.inputGroup, { flex: 1, marginLeft: 8 }]}>
+              <Text style={styles.label}>Original Price (Optional)</Text>
+              <View style={styles.inputWithIcon}>
+                <View style={styles.inputIcon}>
+                  <DollarSign size={18} color="#ef4444" />
+                </View>
+                <TextInput
+                  style={styles.inputWithPadding}
+                  placeholder="59.99"
+                  value={formData.originalPrice}
+                  onChangeText={(text) => setFormData((prev) => ({ ...prev, originalPrice: text }))}
+                  keyboardType="numeric"
+                  placeholderTextColor="#94a3b8"
+                />
+              </View>
+            </View>
+          </View>
+
           <View style={styles.inputGroup}>
-            <Text style={styles.label}>City *</Text>
+            <Text style={styles.label}>Coupon Code (Optional)</Text>
+            <TextInput
+              style={styles.input}
+              placeholder="SAVE20"
+              value={formData.couponCode}
+              onChangeText={(text) => setFormData((prev) => ({ ...prev, couponCode: text.toUpperCase() }))}
+              placeholderTextColor="#94a3b8"
+            />
+            <Text style={styles.helpText}>Promo code customers can use at checkout</Text>
+          </View>
+        </View>
+
+        <View style={styles.section}>
+          <Text style={styles.sectionTitle}>🔗 Links & Location</Text>
+
+          <View style={styles.inputGroup}>
+            <Text style={styles.label}>Deal URL (Optional)</Text>
+            <TextInput
+              style={styles.input}
+              placeholder="https://store.com/deal-link"
+              value={formData.dealUrl}
+              onChangeText={(text) => setFormData((prev) => ({ ...prev, dealUrl: text }))}
+              placeholderTextColor="#94a3b8"
+              keyboardType="url"
+            />
+            <Text style={styles.helpText}>Link to the deal on the store's website</Text>
+          </View>
+
+          <View style={styles.inputGroup}>
+            <Text style={styles.label}>Location (Optional)</Text>
             <View style={styles.inputWithIcon}>
               <View style={styles.inputIcon}>
                 <MapPin size={18} color="#6366f1" />
               </View>
               <TextInput
                 style={styles.inputWithPadding}
-                placeholder="e.g., New York"
+                placeholder="City, State, Country or 'Online'"
                 value={formData.city}
                 onChangeText={(text) => setFormData((prev) => ({ ...prev, city: text }))}
                 placeholderTextColor="#94a3b8"
               />
             </View>
-          </View>
-
-          <View style={styles.row}>
-            <View style={[styles.inputGroup, { flex: 1, marginRight: 8 }]}>
-              <Text style={styles.label}>State (Optional)</Text>
-              <TextInput
-                style={styles.input}
-                placeholder="e.g., NY"
-                value={formData.state}
-                onChangeText={(text) => setFormData((prev) => ({ ...prev, state: text }))}
-                placeholderTextColor="#94a3b8"
-              />
-            </View>
-            <View style={[styles.inputGroup, { flex: 1, marginLeft: 8 }]}>
-              <Text style={styles.label}>Country (Optional)</Text>
-              <TextInput
-                style={styles.input}
-                placeholder="e.g., USA"
-                value={formData.country}
-                onChangeText={(text) => setFormData((prev) => ({ ...prev, country: text }))}
-                placeholderTextColor="#94a3b8"
-              />
-            </View>
+            <Text style={styles.helpText}>Leave empty for global deals or enter specific location</Text>
           </View>
         </View>
 
         <View style={styles.section}>
-          <Text style={styles.sectionTitle}>📸 Photos & Details</Text>
+          <Text style={styles.sectionTitle}>📸 Photos & Expiry</Text>
 
           {selectedImages.length > 0 && (
             <View style={styles.imagePreviewContainer}>
@@ -621,6 +667,7 @@ export default function PostDealScreen() {
               <Text style={styles.imageUploaderSubtext}>
                 {selectedImages.length > 0 ? `${selectedImages.length}/5 photos selected` : 'Show off the deal with great photos'}
               </Text>
+              <Text style={styles.imageLimitText}>Max 5 photos, 2MB each • Auto-compressed for web</Text>
             </LinearGradient>
           </TouchableOpacity>
 
@@ -895,5 +942,7 @@ const styles = StyleSheet.create({
     borderLeftColor: '#10b981',
   },
   verificationText: { flex: 1, fontSize: 14, color: '#065f46', marginLeft: 12, lineHeight: 20, fontWeight: '500' },
+  helpText: { fontSize: 12, color: '#64748b', marginTop: 4, fontStyle: 'italic' },
+  imageLimitText: { fontSize: 11, color: '#94a3b8', textAlign: 'center', marginTop: 4 },
   bottomPadding: { height: 100 },
 });

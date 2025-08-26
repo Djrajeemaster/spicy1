@@ -1,12 +1,14 @@
 // components/DealCard.tsx
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   View,
   Text,
   StyleSheet,
   TouchableOpacity,
   Image,
-  Alert
+  Alert,
+  Platform,
+  Dimensions
 } from 'react-native';
 import {
   ChevronUp,
@@ -24,7 +26,7 @@ import { UserBadge } from '@/components/UserBadge';
 import { UserRole, getRolePrivileges } from '@/types/user';
 import { useCurrency } from '@/contexts/CurrencyProvider';
 import { formatTimeAgo } from '@/utils/time'; // Import formatTimeAgo
-import { DealWithRelations } from '@/services/dealService'; // Import DealWithRelations
+import { DealWithRelations, dealService } from '@/services/dealService'; // Import DealWithRelations
 
 import { router } from 'expo-router';
 
@@ -48,6 +50,24 @@ interface DealCardProps {
 export function DealCard({ deal, isGuest, onVote, userRole = 'guest' }: DealCardProps) {
   const { formatPrice } = useCurrency();
   const privileges = getRolePrivileges(userRole);
+  
+  // State for responsive layout
+  const [isDesktopWeb, setIsDesktopWeb] = useState(
+    Platform.OS === 'web' && typeof window !== 'undefined' && window.innerWidth >= 1024
+  );
+
+  // Handle window resize for responsive layout
+  useEffect(() => {
+    if (Platform.OS === 'web') {
+      const handleResize = () => {
+        const newIsDesktop = window.innerWidth >= 1024;
+        setIsDesktopWeb(newIsDesktop);
+      };
+      
+      window.addEventListener('resize', handleResize);
+      return () => window.removeEventListener('resize', handleResize);
+    }
+  }, []);
 
   const handleActionPress = (action: string) => {
     if (isGuest) {
@@ -111,6 +131,11 @@ export function DealCard({ deal, isGuest, onVote, userRole = 'guest' }: DealCard
   };
 
   const handleDealPress = () => {
+    // Increment view count asynchronously without blocking navigation
+    if (!deal.isSample) {
+      dealService.incrementViewCount(deal.id.toString()).catch(console.error);
+    }
+    
     router.push({
       pathname: '/deal-details',
       params: {
@@ -121,7 +146,7 @@ export function DealCard({ deal, isGuest, onVote, userRole = 'guest' }: DealCard
         originalPrice: deal.original_price?.toString() || '',
         location: deal.city, // Use city from DB
         distance: deal.distance, // Use UI-specific distance
-        image: deal.images?.[0] || 'https://images.pexels.com/photos/3394650/pexels-photo-3394650.jpeg?auto=compress&cs=tinysrgb&w=400',
+        image: deal.images?.[0] || 'https://placehold.co/400x300/e2e8f0/64748b?text=No+Image',
         upvotes: deal.votes_up?.toString() || '0',
         downvotes: deal.votes_down?.toString() || '0',
         comments: deal.comment_count?.toString() || '0',
@@ -139,7 +164,12 @@ export function DealCard({ deal, isGuest, onVote, userRole = 'guest' }: DealCard
     Math.round((1 - deal.price / deal.original_price) * 100) : 0;
 
   return (
-    <TouchableOpacity style={styles.container} onPress={handleDealPress} activeOpacity={0.95}>
+    <TouchableOpacity 
+      key={deal.id} 
+      style={[styles.container, isDesktopWeb && styles.tileContainer]} 
+      onPress={handleDealPress} 
+      activeOpacity={0.95}
+    >
       {deal.isPinned && (
         <LinearGradient
           colors={['#fbbf24', '#f59e0b']}
@@ -152,9 +182,14 @@ export function DealCard({ deal, isGuest, onVote, userRole = 'guest' }: DealCard
         </LinearGradient>
       )}
 
-      <View style={styles.content}>
-        <View style={styles.imageContainer}>
-          <Image source={{ uri: deal.images?.[0] || 'https://images.pexels.com/photos/3394650/pexels-photo-3394650.jpeg?auto=compress&cs=tinysrgb&w=400' }} style={styles.image} />
+      <View style={[styles.content, isDesktopWeb && styles.tileContent]}>
+        <View style={[styles.imageContainer, isDesktopWeb && styles.tileImageContainer]}>
+          <Image 
+            source={{ uri: deal.images?.[0] || 'https://placehold.co/400x300/e2e8f0/64748b?text=No+Image' }} 
+            style={[styles.image, isDesktopWeb && styles.tileImage]}
+            onError={() => console.log('Image failed to load')}
+            defaultSource={{ uri: 'https://placehold.co/400x300/e2e8f0/64748b?text=No+Image' }}
+          />
           {discountPercentage > 0 && (
             <View style={styles.discountBadge}>
               <Text style={styles.discountText}>{discountPercentage}% OFF</Text>
@@ -162,9 +197,9 @@ export function DealCard({ deal, isGuest, onVote, userRole = 'guest' }: DealCard
           )}
         </View>
 
-        <View style={styles.details}>
+        <View style={[styles.details, isDesktopWeb && styles.tileDetails]}>
           <View style={styles.header}>
-            <Text style={styles.title} numberOfLines={2}>{deal.title}</Text>
+            <Text style={[styles.title, isDesktopWeb && styles.tileTitle]} numberOfLines={2}>{deal.title}</Text>
             {deal.created_by_user?.role === 'verified' && ( // Use created_by_user for verified status
               <View style={styles.verifiedBadge}>
                 <Shield size={14} color="#10B981" />
@@ -172,14 +207,14 @@ export function DealCard({ deal, isGuest, onVote, userRole = 'guest' }: DealCard
             )}
           </View>
 
-          <Text style={styles.description} numberOfLines={2}>
+          <Text style={[styles.description, isDesktopWeb && styles.tileDescription]} numberOfLines={2}>
             {deal.description}
           </Text>
 
           <View style={styles.priceContainer}>
-            <Text style={styles.price}>{formatPrice(deal.price)}</Text>
+            <Text style={[styles.price, isDesktopWeb && styles.tilePrice]}>{formatPrice(deal.price)}</Text>
             {deal.original_price && (
-              <Text style={styles.originalPrice}>{formatPrice(deal.original_price)}</Text>
+              <Text style={[styles.originalPrice, isDesktopWeb && styles.tileOriginalPrice]}>{formatPrice(deal.original_price)}</Text>
             )}
           </View>
 
@@ -187,78 +222,77 @@ export function DealCard({ deal, isGuest, onVote, userRole = 'guest' }: DealCard
             <View style={styles.locationIcon}>
               <MapPin size={12} color="#6366f1" />
             </View>
-            <Text style={styles.locationText}>{deal.city} • {deal.distance}</Text>
+            <Text style={styles.locationText}>{deal.city || 'Unknown'} - {deal.distance || 'N/A'}</Text>
           </View>
 
           <View style={styles.metaContainer}>
             <View style={styles.metaLeft}>
               <Clock size={12} color="#94A3B8" />
-              <Text style={styles.timeText}>{formatTimeAgo(deal.created_at)}</Text>
+              <Text style={styles.timeText}>{formatTimeAgo(deal.created_at) || 'Just now'}</Text>
               <View style={styles.postedByContainer}>
-                <Text style={styles.postedBy}>by {deal.created_by_user?.username || 'Unknown'}</Text>
+                <Text style={styles.postedBy}>by {(deal.created_by_user?.username || 'Unknown').trim()}</Text>
                 {deal.created_by_user?.role && (
                   <UserBadge
                     role={deal.created_by_user.role as UserRole}
                     size="small"
                     showText={false}
-                    reputation={deal.created_by_user.reputation}
                   />
                 )}
               </View>
             </View>
             <View style={styles.viewsContainer}>
               <Eye size={12} color="#94A3B8" />
-              <Text style={styles.viewsText}>{(deal.view_count || 0) >= 1000 ? `${(deal.view_count / 1000).toFixed(1)}k` : deal.view_count || 0}</Text>
+              <Text style={styles.viewsText}>{String((deal.view_count || 0) >= 1000 ? `${(deal.view_count / 1000).toFixed(1)}k` : deal.view_count || 0)}</Text>
             </View>
           </View>
         </View>
       </View>
 
-      <View style={styles.actions}>
+      <View style={[styles.actions, isDesktopWeb && styles.tileActions]}>
         <View style={styles.votingContainer}>
           <TouchableOpacity
-            style={[styles.voteButton, styles.upvoteButton]}
-            onPress={() => handleVote(deal.id, 'up')}
+            style={[styles.voteButton, styles.upvoteButton, isDesktopWeb && styles.tileVoteButton]}
+            onPress={() => handleVote('up')}
             disabled={!privileges.canVote}
           >
             <LinearGradient
               colors={!privileges.canVote ? ['#f1f5f9', '#e2e8f0'] : ['#10b981', '#059669']}
-              style={styles.voteGradient}
+              style={[styles.voteGradient, isDesktopWeb && styles.tileVoteGradient]}
             >
               <ChevronUp size={18} color={!privileges.canVote ? '#cbd5e1' : '#FFFFFF'} />
             </LinearGradient>
             <Text style={[styles.voteCount, !privileges.canVote && styles.voteCountDisabled]}>
-              {deal.votes_up || 0}
+              {String(deal.votes_up || 0)}
             </Text>
           </TouchableOpacity>
 
           <TouchableOpacity
-            style={[styles.voteButton, styles.downvoteButton]}
-            onPress={() => handleVote(deal.id, 'down')}
+            style={[styles.voteButton, styles.downvoteButton, isDesktopWeb && styles.tileVoteButton]}
+            onPress={() => handleVote('down')}
             disabled={!privileges.canVote}
           >
-            <View style={[styles.voteGradient, styles.downvoteGradient, !privileges.canVote && styles.disabledGradient]}>
+            <View style={[styles.voteGradient, styles.downvoteGradient, !privileges.canVote && styles.disabledGradient, isDesktopWeb && styles.tileVoteGradient]}>
               <ChevronDown size={18} color={!privileges.canVote ? '#cbd5e1' : '#ef4444'} />
             </View>
             <Text style={[styles.voteCount, !privileges.canVote && styles.voteCountDisabled]}>
-              {deal.votes_down || 0}
+              {String(deal.votes_down || 0)}
             </Text>
           </TouchableOpacity>
         </View>
 
         <TouchableOpacity
-          style={styles.commentButton}
+          style={[styles.commentButton, isDesktopWeb && styles.tileCommentButton]}
           onPress={handleComment}
           disabled={!privileges.canComment}
         >
           <MessageCircle size={18} color={!privileges.canComment ? '#cbd5e1' : '#6366f1'} />
           <Text style={[styles.commentCount, !privileges.canComment && styles.commentCountDisabled]}>
-            {deal.comment_count || 0}
+            {String(deal.comment_count || 0)}
           </Text>
         </TouchableOpacity>
 
-        <TouchableOpacity style={styles.shareButton} onPress={handleShare}>
-          <Text style={styles.shareText}>Share</Text>
+        <TouchableOpacity style={[styles.getDealButton, isDesktopWeb && styles.tileGetDealButton]} onPress={handleDealPress}>
+          <Text style={styles.getDealText}>Get Deal</Text>
         </TouchableOpacity>
       </View>
     </TouchableOpacity>
@@ -380,7 +414,7 @@ const styles = StyleSheet.create({
     marginRight: 8,
   },
   locationText: {
-    fontSize: 14,
+    fontSize: 12,
     color: '#64748b',
     fontWeight: '500',
   },
@@ -392,6 +426,8 @@ const styles = StyleSheet.create({
   metaLeft: {
     flexDirection: 'row',
     alignItems: 'center',
+    flex: 1,
+    flexWrap: 'wrap',
   },
   timeText: {
     fontSize: 13,
@@ -421,13 +457,14 @@ const styles = StyleSheet.create({
   },
   actions: {
     flexDirection: 'row',
-    justifyContent: 'space-between',
+    justifyContent: 'flex-start',
     alignItems: 'center',
     paddingHorizontal: 20,
     paddingVertical: 16,
     backgroundColor: '#f8fafc',
     borderTopWidth: 1,
     borderTopColor: '#f1f5f9',
+
   },
   votingContainer: {
     flexDirection: 'row',
@@ -484,15 +521,94 @@ const styles = StyleSheet.create({
   commentCountDisabled: {
     color: '#cbd5e1',
   },
-  shareButton: {
-    backgroundColor: '#1e293b',
+  getDealButton: {
+    backgroundColor: '#10b981',
     paddingHorizontal: 16,
     paddingVertical: 10,
     borderRadius: 20,
   },
-  shareText: {
+  getDealText: {
     fontSize: 14,
-    fontWeight: '600',
+    fontWeight: '700',
     color: '#FFFFFF',
+  },
+  
+  // Tile-specific styles for desktop web
+  tileContainer: {
+    marginHorizontal: 0,
+    marginVertical: 0,
+    flex: 1,
+    height: 460,
+    display: 'flex',
+    flexDirection: 'column',
+  },
+  tileContent: {
+    flexDirection: 'column',
+    padding: 12,
+    paddingBottom: 8,
+  },
+  tileImageContainer: {
+    marginBottom: 8,
+    marginRight: 0,
+    alignSelf: 'center',
+  },
+  tileImage: {
+    width: '100%',
+    height: 80,
+    borderRadius: 12,
+    backgroundColor: '#f1f5f9',
+    resizeMode: 'cover',
+  },
+  tileDetails: {
+    // No additional styles needed, inherits from details
+  },
+  tileTitle: {
+    fontSize: 16,
+    lineHeight: 20,
+    marginBottom: 4,
+  },
+  tileDescription: {
+    fontSize: 13,
+    lineHeight: 18,
+    marginBottom: 6,
+  },
+  tilePrice: {
+    fontSize: 18,
+    marginRight: 8,
+  },
+  tileOriginalPrice: {
+    fontSize: 14,
+  },
+  tileActions: {
+    paddingHorizontal: 16,
+    paddingVertical: 16,
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+
+    minHeight: 60,
+  },
+  tileVoteButton: {
+    marginRight: 8,
+    minWidth: 32,
+  },
+  tileVoteGradient: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    marginBottom: 2,
+  },
+  tileCommentButton: {
+    paddingHorizontal: 8,
+    paddingVertical: 6,
+    borderRadius: 12,
+    minWidth: 50,
+  },
+  tileGetDealButton: {
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: 12,
+    flex: 1,
+    maxWidth: 80,
   },
 });

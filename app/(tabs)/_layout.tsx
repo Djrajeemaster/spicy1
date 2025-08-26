@@ -3,13 +3,33 @@ import { Chrome as Home, TrendingUp, Plus, Bell, User, MapPin, Bookmark } from '
 import { View, StyleSheet, Platform } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { BlurView } from 'expo-blur';
+import { useState, useEffect } from 'react';
 
 export default function TabLayout() {
+  const [isDesktopWeb, setIsDesktopWeb] = useState(
+    Platform.OS === 'web' && typeof window !== 'undefined' && window.innerWidth >= 1024
+  );
+
+  useEffect(() => {
+    if (Platform.OS === 'web') {
+      const handleResize = () => {
+        const newIsDesktop = window.innerWidth >= 1024;
+        setIsDesktopWeb(newIsDesktop);
+      };
+      
+      window.addEventListener('resize', handleResize);
+      return () => window.removeEventListener('resize', handleResize);
+    }
+  }, []);
+
   return (
     <Tabs
       screenOptions={{
         headerShown: false,
-        tabBarStyle: styles.tabBar,
+        tabBarStyle: isDesktopWeb ? { display: 'none' } : {
+          ...styles.tabBar,
+          ...(Platform.OS === 'web' && !isDesktopWeb ? { paddingBottom: 20, height: 90 } : {})
+        },
         tabBarActiveTintColor: '#6366f1',
         tabBarInactiveTintColor: '#94a3b8',
         tabBarLabelStyle: styles.tabBarLabel,
@@ -83,7 +103,8 @@ export default function TabLayout() {
           href: null, 
         }}
       />
-      <Tabs.Screen name="following" options={{ title: "Following" }} />
+      <Tabs.Screen name="following" options={{ href: null }} />
+      <Tabs.Screen name="saved" options={{ href: null }} />
 
       {/* NEW: Add the settings screen here */}
       <Tabs.Screen

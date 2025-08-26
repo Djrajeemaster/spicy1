@@ -5,6 +5,16 @@ import { Database } from '@/types/database';
 type User = Database['public']['Tables']['users']['Row'];
 
 class UserService {
+  async updateProfile(userId: string, updates: Database['public']['Tables']['users']['Update']) {
+    const { data, error } = await supabase
+      .from('users')
+      .update(updates)
+      .eq('id', userId)
+      .select()
+      .single();
+    return { data, error };
+  }
+
   async searchByUsernamePrefix(prefix: string, limit = 8) {
     if (!prefix) return { data: [] as User[], error: null };
     const { data, error } = await supabase

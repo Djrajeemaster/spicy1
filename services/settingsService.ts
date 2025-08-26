@@ -26,7 +26,7 @@ class SettingsService {
     try {
       const { data, error } = await supabase
         .from('system_settings')
-        .select('*')
+        .select('id, key, value, description, created_at, updated_at')
         .order('key');
 
       if (error) throw error;
@@ -43,7 +43,7 @@ class SettingsService {
         .from('system_settings')
         .select('*')
         .eq('key', key)
-        .single();
+        .maybeSingle();
 
       if (error) throw error;
       return { data, error: null };
@@ -53,17 +53,33 @@ class SettingsService {
     }
   }
 
-  async updateSetting(key: string, value: any): Promise<{ data: SystemSetting | null; error: any }> {
+  async updateSetting(key: string, value: any, description?: string | null): Promise<{ data: SystemSetting | null; error: any }> {
     try {
+      // Validate inputs
+      if (!key || typeof key !== 'string') {
+        throw new Error('Invalid key parameter');
+      }
+      
+      const timestamp = new Date().toISOString();
       const { data, error } = await supabase
         .from('system_settings')
-        .upsert({
-          key,
-          value,
-          updated_at: new Date().toISOString(),
-        })
+        .upsert(
+          { key, value, description: description ?? null, updated_at: timestamp },
+          { onConflict: 'key', ignoreDuplicates: false }
+        )
         .select()
-        .single();
+        .maybeSingle();
+
+      // Race fallback: if another insert snuck in, update the row
+      if (error && (error as any).code === '23505') {
+        const res = await supabase
+          .from('system_settings')
+          .update({ value, description: description ?? null, updated_at: timestamp })
+          .eq('key', key)
+          .select()
+          .maybeSingle();
+        return { data: res.data as any, error: res.error as any };
+      }
 
       if (error) throw error;
       return { data, error: null };
@@ -77,9 +93,9 @@ class SettingsService {
     try {
       const { data, error } = await supabase
         .from('system_settings')
-        .insert(settingData)
+        .upsert(settingData, { onConflict: 'key', ignoreDuplicates: false })
         .select()
-        .single();
+        .maybeSingle();
 
       if (error) throw error;
       return { data, error: null };
@@ -91,3 +107,26 @@ class SettingsService {
 }
 
 export const settingsService = new SettingsService();
+
+// Safer setter with duplicate fallback (use this from UI if possible)
+export async function setSetting(key: string, value: any, description?: string | null) {
+  const settingData = { key, value, description: description ?? null };
+  let { data, error } = await supabase
+    .from('system_settings')
+    .upsert(settingData, { onConflict: 'key', ignoreDuplicates: false })
+    .select()
+    .maybeSingle();
+
+  if (error && (error as any).code === '23505') {
+    const res = await supabase
+      .from('system_settings')
+      .update({ value, description: description ?? null })
+      .eq('key', key)
+      .select()
+      .maybeSingle();
+    data = res.data as any;
+    error = res.error as any;
+  }
+  if (error) throw error;
+  return data;
+}

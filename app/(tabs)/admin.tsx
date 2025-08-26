@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { View, Text, StyleSheet, ScrollView, ActivityIndicator } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, ActivityIndicator, TouchableOpacity } from 'react-native';
 import { AdminHeader } from '@/components/admin/AdminHeader';
 import { AdminTabNavigation, AdminTab } from '@/components/admin/AdminTabNavigation';
 import { useAdminData } from '@/hooks/useAdminData';
@@ -10,6 +10,7 @@ import { BannerManagement } from '@/components/admin/BannerManagement';
 import { SystemSettingsManagement } from '@/components/admin/SystemSettingsManagement';
 import ReportManagement from '@/components/admin/ReportManagement';
 import { useAuth } from '@/contexts/AuthProvider';
+import { router } from 'expo-router';
 
 export default function AdminScreen() {
   const [activeTab, setActiveTab] = useState<AdminTab>('dashboard');
@@ -66,14 +67,25 @@ export default function AdminScreen() {
                 <Text style={styles.statLabel}>Daily Active Users</Text>
               </View>
             </View>
+            
+            <TouchableOpacity 
+              style={styles.testButton}
+              onPress={() => router.push('/test-enhancements')}
+            >
+              <Text style={styles.testButtonText}>🧪 Test New Features</Text>
+            </TouchableOpacity>
           </View>
         );
       case 'users':
-        return <UserManagement users={users} onUserAction={(userId, action) => handleUserAction(userId, action, profile?.id || '')} />;
+        return <UserManagement 
+          users={users} 
+          onUserAction={(userId, action) => handleUserAction(userId, action, profile?.id || '')} 
+          onAddUser={() => router.push('/add-user')}
+        />;
       case 'deals':
         return <DealManagement deals={pendingDeals} onDealAction={(dealId, action) => handleDealAction(dealId, action, profile?.id || '')} />;
       case 'banners':
-        return <BannerManagement banners={banners} onToggleBanner={toggleBanner} onAddNewBanner={addNewBanner} />;
+        return <BannerManagement banners={banners} onToggleBanner={toggleBanner} onAddNewBanner={() => router.push('/add-banner')} />;
       case 'categories':
         return <CategoryManagement categories={categories} onToggleCategory={toggleCategory} onAddNewCategory={addNewCategory} />;
       case 'settings':
@@ -89,10 +101,10 @@ export default function AdminScreen() {
     <View style={styles.container}>
       <AdminHeader currentUserRole={currentUserRole} />
       <AdminTabNavigation activeTab={activeTab} onTabChange={setActiveTab} />
-      <ScrollView style={styles.content} showsVerticalScrollIndicator={false}>
+      <View style={styles.content} showsVerticalScrollIndicator={false}>
         {renderContent()}
         <View style={styles.bottomPadding} />
-      </ScrollView>
+      </View>
     </View>
   );
 }
@@ -111,5 +123,18 @@ const styles = StyleSheet.create({
   },
   statNumber: { fontSize: 28, fontWeight: '800', color: '#1e293b', marginBottom: 4 },
   statLabel: { fontSize: 14, color: '#64748b', textAlign: 'center' },
+  testButton: {
+    backgroundColor: '#6366f1',
+    marginHorizontal: 20,
+    marginTop: 20,
+    padding: 16,
+    borderRadius: 12,
+    alignItems: 'center',
+  },
+  testButtonText: {
+    color: '#FFFFFF',
+    fontSize: 16,
+    fontWeight: '700',
+  },
   bottomPadding: { height: 100 },
 });

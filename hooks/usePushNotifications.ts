@@ -80,7 +80,7 @@ export function usePushNotifications() {
           token,
           user_id: user.id,
           platform: Platform.OS as any,
-          device_id: `${Platform.OS}-${Math.random().toString(36).slice(2, 8)}`, // replace with your own stable ID if needed
+          device_id: Platform.OS + '-' + Math.random().toString(36).slice(2, 8), // replace with your own stable ID if needed
           app_version: '1.0.0',
           disabled: false,
         };

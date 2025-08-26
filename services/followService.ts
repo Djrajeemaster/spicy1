@@ -104,32 +104,49 @@ class FollowService {
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) return { data: [], error: null };
 
-    // Build a PostgREST RPC via SQL to include relations like dealService does
-    const sql = `
-      with
-      my_user_follows as (select followed_id from user_follows where follower_id = '${user.id}'),
-      my_store_follows as (select store_id from store_follows where follower_id = '${user.id}')
-      select
-        d.*,
-        s.id as store_id, s.name as store_name, s.slug as store_slug, s.logo_url as store_logo_url, s.verified as store_verified,
-        c.id as category_id, c.name as category_name, c.emoji as category_emoji,
-        u.id as created_by_id, u.username as created_by_username, u.role as created_by_role, u.reputation as created_by_reputation
-      from deals d
-        left join stores s on s.id = d.store_id
-        left join categories c on c.id = d.category_id
-        left join users u on u.id = d.created_by
-      where (d.created_by in (select followed_id from my_user_follows))
-         or (d.store_id in (select store_id from my_store_follows))
-      order by d.created_at desc
-      limit ${limit} offset ${offset};
-    `;
+    try {
+      // Get followed users and stores
+      const [{ data: followedUsers }, { data: followedStores }] = await Promise.all([
+        supabase.from('user_follows').select('followed_id').eq('follower_id', user.id),
+        supabase.from('store_follows').select('store_id').eq('follower_id', user.id)
+      ]);
 
-    const { data, error } = await supabase.rpc('exec_sql', { sql });
-    // NOTE: You need a helper SQL function:
-    // create or replace function exec_sql(sql text) returns setof record language sql as $$ EXECUTE sql $$;
-    // Or replace with a dedicated Postgres view + select.
+      const userIds = followedUsers?.map(f => f.followed_id) || [];
+      const storeIds = followedStores?.map(f => f.store_id) || [];
 
-    return { data, error };
+      if (userIds.length === 0 && storeIds.length === 0) {
+        return { data: [], error: null };
+      }
+
+      // Build query for deals from followed users or stores
+      let query = supabase
+        .from('deals')
+        .select(`
+          *,
+          store:stores(id, name, slug, logo_url, verified),
+          category:categories(id, name, emoji),
+          created_by_user:users!deals_created_by_fkey(id, username, role, reputation)
+        `)
+        .eq('status', 'live');
+
+      // Add filters for followed users and stores
+      if (userIds.length > 0 && storeIds.length > 0) {
+        query = query.or(`created_by.in.(${userIds.join(',')}),store_id.in.(${storeIds.join(',')})`);
+      } else if (userIds.length > 0) {
+        query = query.in('created_by', userIds);
+      } else if (storeIds.length > 0) {
+        query = query.in('store_id', storeIds);
+      }
+
+      const { data, error } = await query
+        .order('created_at', { ascending: false })
+        .range(offset, offset + limit - 1);
+
+      return { data: data || [], error };
+    } catch (error) {
+      console.error('Error fetching following feed:', error);
+      return { data: [], error };
+    }
   }
 }
 

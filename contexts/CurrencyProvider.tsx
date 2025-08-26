@@ -1,5 +1,6 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { locationService } from '@/services/locationService';
 
 export type CurrencyCode = 'INR' | 'USD' | 'EUR' | 'GBP';
 
@@ -42,46 +43,78 @@ export const CURRENCIES: Currency[] = [
   },
 ];
 
+// Country to currency mapping
+const COUNTRY_CURRENCY_MAP: { [key: string]: CurrencyCode } = {
+  'India': 'INR',
+  'United States': 'USD',
+  'United States of America': 'USD',
+  'US': 'USD',
+  'USA': 'USD',
+  'United Kingdom': 'GBP',
+  'UK': 'GBP',
+  'Great Britain': 'GBP',
+  'England': 'GBP',
+  'Scotland': 'GBP',
+  'Wales': 'GBP',
+  'Germany': 'EUR',
+  'France': 'EUR',
+  'Italy': 'EUR',
+  'Spain': 'EUR',
+  'Netherlands': 'EUR',
+  'Belgium': 'EUR',
+  'Austria': 'EUR',
+  'Portugal': 'EUR',
+  'Ireland': 'EUR',
+  'Finland': 'EUR',
+  'Greece': 'EUR',
+  'Luxembourg': 'EUR',
+};
+
 interface CurrencyContextType {
   currency: Currency;
-  setCurrency: (currency: Currency) => void;
   formatPrice: (amount: number, showSymbol?: boolean) => string;
   convertPrice: (amount: number, fromCurrency?: Currency) => number;
-  CURRENCIES: Currency[]; // Expose CURRENCIES array
 }
 
 const CurrencyContext = createContext<CurrencyContextType | undefined>(undefined);
 
 export function CurrencyProvider({ children }: { children: React.ReactNode }) {
-  const [currency, setCurrencyState] = useState<Currency>(CURRENCIES[0]); // Default to INR
+  const [currency, setCurrencyState] = useState<Currency>(CURRENCIES[1]); // Default to USD
 
   useEffect(() => {
-    // Load saved currency from storage
-    const loadSavedCurrency = async () => {
+    const detectLocationAndSetCurrency = async () => {
       try {
-        const savedCurrencyCode = await AsyncStorage.getItem('selectedCurrency');
-        if (savedCurrencyCode) {
-          const savedCurrency = CURRENCIES.find(c => c.code === savedCurrencyCode);
+        // Check if we have a cached currency based on location
+        const cachedCurrency = await AsyncStorage.getItem('locationBasedCurrency');
+        if (cachedCurrency) {
+          const savedCurrency = CURRENCIES.find(c => c.code === cachedCurrency);
           if (savedCurrency) {
             setCurrencyState(savedCurrency);
+            return;
+          }
+        }
+
+        // Get user's location
+        const { data: locationData } = await locationService.getCurrentLocation();
+        if (locationData?.country) {
+          const currencyCode = COUNTRY_CURRENCY_MAP[locationData.country] || 'USD';
+          const detectedCurrency = CURRENCIES.find(c => c.code === currencyCode);
+          
+          if (detectedCurrency) {
+            setCurrencyState(detectedCurrency);
+            // Cache the detected currency
+            await AsyncStorage.setItem('locationBasedCurrency', currencyCode);
           }
         }
       } catch (error) {
-        console.error('Error loading saved currency:', error);
+        console.error('Error detecting location for currency:', error);
+        // Fallback to USD if location detection fails
+        setCurrencyState(CURRENCIES.find(c => c.code === 'USD') || CURRENCIES[1]);
       }
     };
 
-    loadSavedCurrency();
+    detectLocationAndSetCurrency();
   }, []);
-
-  const setCurrency = async (newCurrency: Currency) => {
-    setCurrencyState(newCurrency);
-    try {
-      await AsyncStorage.setItem('selectedCurrency', newCurrency.code);
-    } catch (error) {
-      console.error('Error saving currency:', error);
-    }
-  };
 
   const formatPrice = (amount: number, showSymbol: boolean = true): string => {
     const convertedAmount = convertPrice(amount);
@@ -111,10 +144,8 @@ export function CurrencyProvider({ children }: { children: React.ReactNode }) {
 
   const value = {
     currency,
-    setCurrency,
     formatPrice,
     convertPrice,
-    CURRENCIES,
   };
 
   return (

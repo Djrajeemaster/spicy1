@@ -32,11 +32,17 @@ import {
   Flag,
   ArrowUp,
   ArrowDown,
+  ExternalLink,
+  Copy,
+  Tag,
+  Heart,
+  Eye,
 } from 'lucide-react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { formatTimeAgo } from '@/utils/time';
 import { dealService, DealWithRelations } from '@/services/dealService';
 import { useAuth } from '@/contexts/AuthProvider';
+import { useCurrency } from '@/contexts/CurrencyProvider';
 import { commentService, CommentNode } from '@/services/commentService';
 import CommentThread from '@/components/CommentThread';
 import MentionInput from '@/components/MentionInput';
@@ -49,6 +55,7 @@ const isUuid = (v: string) =>
 export default function DealDetailsScreen() {
   const params = useLocalSearchParams();
   const { user } = useAuth();
+  const { formatPrice } = useCurrency();
   const navigation = useNavigation();
   const dealId = params.id as string;
   const isSampleDealParam = params.isSample === 'true';
@@ -69,8 +76,12 @@ export default function DealDetailsScreen() {
       setThread([]);
       return;
     }
-    const { data } = await commentService.getThreadForDeal(dealId);
-    setThread(data);
+    try {
+      const { data } = await commentService.getThreadForDeal(dealId);
+      setThread(data);
+    } catch (error) {
+      console.error('Error reloading comments:', error);
+    }
   };
 
   // Report modal state
@@ -452,7 +463,7 @@ export default function DealDetailsScreen() {
               source={{
                 uri:
                   currentDeal.images?.[0] ||
-                  'https://images.pexels.com/photos/3394650/pexels-photo-3394650.jpeg?auto=compress&cs=tinysrgb&w=400'
+                  'https://placehold.co/400x300/e2e8f0/64748b?text=No+Image'
               }}
               style={styles.image}
             />
@@ -479,9 +490,9 @@ export default function DealDetailsScreen() {
             <Text style={styles.description}>{currentDeal.description}</Text>
 
             <View style={styles.priceContainer}>
-              <Text style={styles.price}>${currentDeal.price.toFixed(2)}</Text>
+              <Text style={styles.price}>{formatPrice(currentDeal.price)}</Text>
               {currentDeal.original_price && (
-                <Text style={styles.originalPrice}>${currentDeal.original_price.toFixed(2)}</Text>
+                <Text style={styles.originalPrice}>{formatPrice(currentDeal.original_price)}</Text>
               )}
             </View>
 
@@ -515,18 +526,91 @@ export default function DealDetailsScreen() {
               />
             </View>
 
+            {/* Coupon Code Section */}
+            {currentDeal.coupon_code && (
+              <View style={styles.couponSection}>
+                <View style={styles.couponHeader}>
+                  <Tag size={18} color="#f59e0b" />
+                  <Text style={styles.couponTitle}>Coupon Code</Text>
+                </View>
+                <View style={styles.couponContainer}>
+                  <Text style={styles.couponCode}>{currentDeal.coupon_code}</Text>
+                  <TouchableOpacity 
+                    style={styles.copyButton}
+                    onPress={() => {
+                      // Copy to clipboard logic here
+                      Alert.alert('Copied!', 'Coupon code copied to clipboard');
+                    }}
+                  >
+                    <Copy size={16} color="#6366f1" />
+                  </TouchableOpacity>
+                </View>
+                <Text style={styles.couponInstructions}>Tap to copy • Use at checkout</Text>
+              </View>
+            )}
+
+            {/* Enhanced Stats */}
+            <View style={styles.dealStats}>
+              <View style={styles.statItem}>
+                <Heart size={16} color="#ef4444" />
+                <Text style={styles.statValue}>{(currentDeal.votes_up || 0) - (currentDeal.votes_down || 0)}</Text>
+                <Text style={styles.statLabel}>Likes</Text>
+              </View>
+              <View style={styles.statItem}>
+                <Eye size={16} color="#6366f1" />
+                <Text style={styles.statValue}>{currentDeal.view_count || 0}</Text>
+                <Text style={styles.statLabel}>Views</Text>
+              </View>
+              <View style={styles.statItem}>
+                <Bookmark size={16} color="#10b981" />
+                <Text style={styles.statValue}>{currentDeal.save_count || 0}</Text>
+                <Text style={styles.statLabel}>Saves</Text>
+              </View>
+            </View>
+
             {/* Action Buttons */}
             <View style={styles.actionButtons}>
-              <TouchableOpacity style={styles.primaryButton} onPress={handleGetDirections}>
-                <LinearGradient colors={['#10b981', '#059669']} style={styles.primaryButtonGradient}>
-                  <Navigation size={20} color="#FFFFFF" />
-                  <Text style={styles.primaryButtonText}>Get Directions</Text>
-                </LinearGradient>
-              </TouchableOpacity>
+              {currentDeal.deal_url ? (
+                <TouchableOpacity 
+                  style={styles.primaryButton} 
+                  onPress={() => {
+                    Alert.alert(
+                      'Visit Store', 
+                      'This will open the store website in your browser.',
+                      [
+                        { text: 'Cancel', style: 'cancel' },
+                        { text: 'Open', onPress: () => {
+                          // Open URL logic here
+                          Alert.alert('Opening...', 'Store website would open here');
+                        }}
+                      ]
+                    );
+                  }}
+                >
+                  <LinearGradient colors={['#ef4444', '#dc2626']} style={styles.primaryButtonGradient}>
+                    <ExternalLink size={20} color="#FFFFFF" />
+                    <Text style={styles.primaryButtonText}>Get Deal</Text>
+                  </LinearGradient>
+                </TouchableOpacity>
+              ) : currentDeal.is_online ? (
+                <TouchableOpacity style={styles.primaryButton} onPress={handleCallStore}>
+                  <LinearGradient colors={['#6366f1', '#4f46e5']} style={styles.primaryButtonGradient}>
+                    <Phone size={20} color="#FFFFFF" />
+                    <Text style={styles.primaryButtonText}>Call Store</Text>
+                  </LinearGradient>
+                </TouchableOpacity>
+              ) : (
+                <TouchableOpacity style={styles.primaryButton} onPress={handleGetDirections}>
+                  <LinearGradient colors={['#10b981', '#059669']} style={styles.primaryButtonGradient}>
+                    <Navigation size={20} color="#FFFFFF" />
+                    <Text style={styles.primaryButtonText}>Get Directions</Text>
+                  </LinearGradient>
+                </TouchableOpacity>
+              )}
 
-              <TouchableOpacity style={styles.secondaryButton} onPress={handleCallStore}>
-                <Phone size={20} color="#6366f1" />
-                <Text style={styles.secondaryButtonText}>Call Store</Text>
+              <TouchableOpacity style={styles.secondaryButton} onPress={handleShare}>
+                <Share2 size={20} color="#6366f1" />
+                <Text style={styles.secondaryButtonText}>Share Deal</Text>
               </TouchableOpacity>
             </View>
 
@@ -743,18 +827,88 @@ const styles = StyleSheet.create({
   metaItem: { flexDirection: 'row', alignItems: 'center', marginBottom: 8 },
   metaText: { fontSize: 15, color: '#64748b', marginLeft: 8, fontWeight: '500' },
 
+  // Coupon section
+  couponSection: {
+    backgroundColor: '#fef3c7',
+    borderRadius: 12,
+    padding: 16,
+    marginBottom: 16,
+    borderWidth: 1,
+    borderColor: '#fbbf24',
+  },
+  couponHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 8,
+  },
+  couponTitle: {
+    fontSize: 16,
+    fontWeight: '700',
+    color: '#92400e',
+    marginLeft: 8,
+  },
+  couponContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#FFFFFF',
+    borderRadius: 8,
+    padding: 12,
+    marginBottom: 8,
+    borderWidth: 1,
+    borderColor: '#f59e0b',
+    borderStyle: 'dashed',
+  },
+  couponCode: {
+    flex: 1,
+    fontSize: 18,
+    fontWeight: '800',
+    color: '#1e293b',
+    letterSpacing: 1,
+  },
+  copyButton: {
+    padding: 8,
+  },
+  couponInstructions: {
+    fontSize: 12,
+    color: '#92400e',
+    textAlign: 'center',
+  },
+  
+  // Deal stats
+  dealStats: {
+    flexDirection: 'row',
+    justifyContent: 'space-around',
+    backgroundColor: '#f8fafc',
+    borderRadius: 12,
+    padding: 16,
+    marginBottom: 16,
+  },
+  statItem: {
+    alignItems: 'center',
+  },
+  statValue: {
+    fontSize: 20,
+    fontWeight: '800',
+    color: '#1e293b',
+    marginTop: 4,
+  },
+  statLabel: {
+    fontSize: 12,
+    color: '#64748b',
+    marginTop: 2,
+  },
+
   // Action buttons row with guaranteed spacing
   actionButtons: {
     flexDirection: 'row',
     alignItems: 'stretch',
-    paddingHorizontal: 20,
     marginBottom: 8,
+    gap: 12,
   },
   primaryButton: {
-    flex: 1,
+    flex: 2,
     borderRadius: 16,
     overflow: 'hidden',
-    marginRight: 12, // guaranteed gap
   },
   primaryButtonGradient: {
     flexDirection: 'row',
@@ -772,7 +926,7 @@ const styles = StyleSheet.create({
     borderWidth: 2,
     borderColor: '#6366f1',
     borderRadius: 16,
-    paddingVertical: 16
+    paddingVertical: 16,
   },
   secondaryButtonText: { fontSize: 16, fontWeight: '700', color: '#6366f1', marginLeft: 8 },
 

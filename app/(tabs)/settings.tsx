@@ -25,9 +25,11 @@ import {
   Eye,
   Lock
 } from 'lucide-react-native';
+import { LinearGradient } from 'expo-linear-gradient';
 import { router } from 'expo-router';
 import { useAuth } from '@/contexts/AuthProvider';
 import { useCurrency } from '@/contexts/CurrencyProvider';
+import { useTheme } from '@/contexts/ThemeProvider';
 
 /* -------------------- Small in-app confirm dialog (no browser popups) -------------------- */
 function ConfirmDialog({
@@ -82,6 +84,7 @@ function ConfirmDialog({
 export default function SettingsScreen() {
   const { user, signOut } = useAuth();
   const { currency } = useCurrency();
+  const { theme, toggleTheme } = useTheme();
 
   // toggles (unchanged)
   const [notificationSettings, setNotificationSettings] = useState({
@@ -116,10 +119,7 @@ export default function SettingsScreen() {
     setAppSettings(p => ({ ...p, [k]: !p[k] }));
 
   const handleChangePassword = () => {
-    // keep this non-blocking; no browser popup
-    // navigate to your change-password screen if you have one
-    // router.push('/change-password');
-    // or show your own in-app modal
+    router.push('/change-password');
   };
 
   const handleSignOut = () => setSignoutOpen(true);
@@ -168,42 +168,46 @@ export default function SettingsScreen() {
   }
 
   return (
-    <SafeAreaView style={styles.container}>
-      {/* Sign out confirm */}
-      <ConfirmDialog
-        visible={signoutOpen}
-        title="Sign Out"
-        message="Are you sure you want to sign out?"
-        confirmText="Sign Out"
-        cancelText="Cancel"
-        destructive
-        onConfirm={confirmSignOut}
-        onCancel={() => setSignoutOpen(false)}
-      />
+    <View style={styles.container}>
+      <LinearGradient colors={['#667eea', '#764ba2']} style={styles.gradient}>
+        {/* Sign out confirm */}
+        <ConfirmDialog
+          visible={signoutOpen}
+          title="Sign Out"
+          message="Are you sure you want to sign out?"
+          confirmText="Sign Out"
+          cancelText="Cancel"
+          destructive
+          onConfirm={confirmSignOut}
+          onCancel={() => setSignoutOpen(false)}
+        />
 
-      {/* Delete account confirm */}
-      <ConfirmDialog
-        visible={deleteOpen}
-        title="Delete Account"
-        message="This will permanently delete your account and data. This action cannot be undone."
-        confirmText="Delete Forever"
-        cancelText="Cancel"
-        destructive
-        onConfirm={confirmDeleteAccount}
-        onCancel={() => setDeleteOpen(false)}
-      />
+        {/* Delete account confirm */}
+        <ConfirmDialog
+          visible={deleteOpen}
+          title="Delete Account"
+          message="This will permanently delete your account and data. This action cannot be undone."
+          confirmText="Delete Forever"
+          cancelText="Cancel"
+          destructive
+          onConfirm={confirmDeleteAccount}
+          onCancel={() => setDeleteOpen(false)}
+        />
 
-      <View style={styles.header}>
-        <TouchableOpacity style={styles.backButton} onPress={() => router.back()}>
-          <ArrowLeft size={24} color="#374151" />
-        </TouchableOpacity>
-        <Text style={styles.headerTitle}>Settings</Text>
-      </View>
+        <SafeAreaView style={styles.safeArea} edges={['top']}>
+          <View style={styles.header}>
+            <TouchableOpacity style={styles.backButton} onPress={() => router.back()}>
+              <ArrowLeft size={24} color="#FFFFFF" />
+            </TouchableOpacity>
+            <Text style={styles.headerTitle}>Settings</Text>
+            <View style={styles.headerSpacer} />
+          </View>
+        </SafeAreaView>
 
-      <ScrollView style={styles.content} showsVerticalScrollIndicator={false}>
-        {/* Account */}
-        <View style={styles.section}>
-          <Text style={styles.sectionTitle}>Account</Text>
+        <ScrollView style={styles.content} showsVerticalScrollIndicator={false}>
+          {/* Account */}
+          <View style={styles.section}>
+            <Text style={styles.sectionTitle}>Account</Text>
           
           <TouchableOpacity 
             style={styles.settingItem}
@@ -233,11 +237,11 @@ export default function SettingsScreen() {
             </View>
             <Text style={styles.settingValue}>→</Text>
           </TouchableOpacity>
-        </View>
+          </View>
 
-        {/* Notifications */}
-        <View style={styles.section}>
-          <Text style={styles.sectionTitle}>Notifications</Text>
+          {/* Notifications */}
+          <View style={styles.section}>
+            <Text style={styles.sectionTitle}>Notifications</Text>
           
           <View style={styles.settingItem}>
             <View style={styles.settingLeft}>
@@ -312,11 +316,11 @@ export default function SettingsScreen() {
               />
             </View>
           )}
-        </View>
+          </View>
 
-        {/* Privacy */}
-        <View style={styles.section}>
-          <Text style={styles.sectionTitle}>Privacy</Text>
+          {/* Privacy */}
+          <View style={styles.section}>
+            <Text style={styles.sectionTitle}>Privacy</Text>
           
           <View style={styles.settingItem}>
             <View style={styles.settingLeft}>
@@ -371,11 +375,11 @@ export default function SettingsScreen() {
               thumbColor={privacySettings.showLocation ? '#ffffff' : '#f3f4f6'}
             />
           </View>
-        </View>
+          </View>
 
-        {/* App Preferences */}
-        <View style={styles.section}>
-          <Text style={styles.sectionTitle}>App Preferences</Text>
+          {/* App Preferences */}
+          <View style={styles.section}>
+            <Text style={styles.sectionTitle}>App Preferences</Text>
           
           <View style={styles.settingItem}>
             <View style={styles.settingLeft}>
@@ -388,10 +392,10 @@ export default function SettingsScreen() {
               </View>
             </View>
             <Switch
-              value={appSettings.darkMode}
-              onValueChange={() => toggleApp('darkMode')}
+              value={theme === 'dark'}
+              onValueChange={toggleTheme}
               trackColor={{ false: '#e5e7eb', true: '#10b981' }}
-              thumbColor={appSettings.darkMode ? '#ffffff' : '#f3f4f6'}
+              thumbColor={theme === 'dark' ? '#ffffff' : '#f3f4f6'}
             />
           </View>
 
@@ -425,11 +429,11 @@ export default function SettingsScreen() {
               thumbColor={appSettings.autoRefresh ? '#ffffff' : '#f3f4f6'}
             />
           </View>
-        </View>
+          </View>
 
-        {/* Account Actions */}
-        <View style={styles.section}>
-          <Text style={styles.sectionTitle}>Account Actions</Text>
+          {/* Account Actions */}
+          <View style={styles.section}>
+            <Text style={styles.sectionTitle}>Account Actions</Text>
           
           <TouchableOpacity style={styles.settingItem} onPress={handleSignOut}>
             <View style={styles.settingLeft}>
@@ -454,11 +458,11 @@ export default function SettingsScreen() {
               </View>
             </View>
           </TouchableOpacity>
-        </View>
+          </View>
 
-        {/* About */}
-        <View style={styles.section}>
-          <Text style={styles.sectionTitle}>About</Text>
+          {/* About */}
+          <View style={styles.section}>
+            <Text style={styles.sectionTitle}>About</Text>
           
           <View style={styles.infoItem}>
             <Text style={styles.infoLabel}>App Version</Text>
@@ -479,23 +483,43 @@ export default function SettingsScreen() {
             <Text style={styles.infoLabel}>Terms of Service</Text>
             <Text style={styles.infoLink}>View →</Text>
           </TouchableOpacity>
-        </View>
+          </View>
 
-        <View style={styles.bottomPadding} />
-      </ScrollView>
-    </SafeAreaView>
+          <View style={styles.bottomPadding} />
+        </ScrollView>
+      </LinearGradient>
+    </View>
   );
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#f8fafc' },
+  container: { flex: 1 },
+  gradient: { flex: 1 },
+  safeArea: { paddingBottom: 0 },
 
   header: {
-    flexDirection: 'row', alignItems: 'center', paddingHorizontal: 20, paddingVertical: 16,
-    backgroundColor: '#ffffff', borderBottomWidth: 1, borderBottomColor: '#e2e8f0',
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: 20,
+    paddingVertical: 16,
   },
-  backButton: { marginRight: 16, padding: 4 },
-  headerTitle: { fontSize: 20, fontWeight: '700', color: '#1e293b' },
+  backButton: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: 'rgba(255,255,255,0.2)',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  headerTitle: {
+    fontSize: 20,
+    fontWeight: '800',
+    color: '#FFFFFF',
+  },
+  headerSpacer: {
+    width: 40,
+  },
 
   content: { flex: 1 },
 
@@ -505,17 +529,45 @@ const styles = StyleSheet.create({
   signInButton: { backgroundColor: '#6366f1', paddingHorizontal: 24, paddingVertical: 12, borderRadius: 12 },
   signInButtonText: { color: '#ffffff', fontSize: 16, fontWeight: '700' },
 
-  section: { backgroundColor: '#ffffff', marginVertical: 8, paddingVertical: 20 },
-  sectionTitle: { fontSize: 18, fontWeight: '700', color: '#1e293b', marginBottom: 16, paddingHorizontal: 20 },
+  section: {
+    backgroundColor: '#FFFFFF',
+    marginHorizontal: 16,
+    marginVertical: 8,
+    borderRadius: 20,
+    paddingVertical: 20,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.08,
+    shadowRadius: 12,
+    elevation: 4,
+  },
+  sectionTitle: {
+    fontSize: 18,
+    fontWeight: '800',
+    color: '#1e293b',
+    marginBottom: 16,
+    paddingHorizontal: 20,
+    letterSpacing: -0.3,
+  },
 
   settingItem: {
-    flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
-    paddingHorizontal: 20, paddingVertical: 16, borderBottomWidth: 1, borderBottomColor: '#f1f5f9',
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: 20,
+    paddingVertical: 16,
+    borderBottomWidth: 1,
+    borderBottomColor: '#f1f5f9',
   },
   settingLeft: { flexDirection: 'row', alignItems: 'center', flex: 1 },
   settingIcon: {
-    width: 40, height: 40, borderRadius: 20, backgroundColor: '#f8fafc',
-    justifyContent: 'center', alignItems: 'center', marginRight: 16,
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: '#f8fafc',
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginRight: 16,
   },
   signOutIcon: { backgroundColor: '#fef2f2' },
   deleteIcon: { backgroundColor: '#fef2f2' },
@@ -527,8 +579,13 @@ const styles = StyleSheet.create({
   settingValue: { fontSize: 16, fontWeight: '600', color: '#6366f1' },
 
   infoItem: {
-    flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center',
-    paddingHorizontal: 20, paddingVertical: 16, borderBottomWidth: 1, borderBottomColor: '#f1f5f9',
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingHorizontal: 20,
+    paddingVertical: 16,
+    borderBottomWidth: 1,
+    borderBottomColor: '#f1f5f9',
   },
   infoLabel: { fontSize: 16, fontWeight: '600', color: '#374151' },
   infoValue: { fontSize: 16, color: '#64748b' },
@@ -538,12 +595,22 @@ const styles = StyleSheet.create({
 
   // modal styles
   modalOverlay: {
-    flex: 1, backgroundColor: 'rgba(0,0,0,0.35)', justifyContent: 'center', alignItems: 'center',
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.35)',
+    justifyContent: 'center',
+    alignItems: 'center',
     paddingHorizontal: 24,
   },
   modalCard: {
-    width: '100%', maxWidth: 420, backgroundColor: '#fff', borderRadius: 16, padding: 18,
-    shadowColor: '#000', shadowOpacity: 0.15, shadowRadius: 12, elevation: 6,
+    width: '100%',
+    maxWidth: 420,
+    backgroundColor: '#fff',
+    borderRadius: 16,
+    padding: 18,
+    shadowColor: '#000',
+    shadowOpacity: 0.15,
+    shadowRadius: 12,
+    elevation: 6,
   },
   modalTitle: { fontSize: 18, fontWeight: '800', color: '#111827', marginBottom: 8 },
   modalMessage: { fontSize: 15, color: '#374151', lineHeight: 22 },

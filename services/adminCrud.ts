@@ -42,19 +42,29 @@ export async function create(entity: Entity, data: any, elevationToken: string) 
   const url = new URL(base);
   url.searchParams.set('op', 'create');
   url.searchParams.set('entity', entity);
-  const { data: session } = await supabase.auth.getSession();
-  const jwt = session.session?.access_token;
-  const res = await fetch(url.toString(), {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      ...(jwt ? { Authorization: `Bearer ${jwt}` } : {}),
-      'x-admin-elevation': elevationToken
-    },
-    body: JSON.stringify(data)
-  });
-  if (!res.ok) throw new Error(`admin-crud create failed: ${res.status}`);
-  return res.json() as Promise<{ ok: boolean; id: string }>;
+  
+  try {
+    const { data: session } = await supabase.auth.getSession();
+    const jwt = session.session?.access_token;
+    
+    // Sanitize elevation token to prevent HTTP response splitting
+    const sanitizedToken = elevationToken.replace(/[\r\n]/g, '');
+    
+    const res = await fetch(url.toString(), {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        ...(jwt ? { Authorization: `Bearer ${jwt}` } : {}),
+        'x-admin-elevation': sanitizedToken
+      },
+      body: JSON.stringify(data)
+    });
+    if (!res.ok) throw new Error(`admin-crud create failed: ${res.status}`);
+    return res.json() as Promise<{ ok: boolean; id: string }>;
+  } catch (error) {
+    console.error('Error in admin-crud create:', error);
+    throw error;
+  }
 }
 
 export async function update(entity: Entity, id: string, data: any, elevationToken: string) {
@@ -62,19 +72,29 @@ export async function update(entity: Entity, id: string, data: any, elevationTok
   url.searchParams.set('op', 'update');
   url.searchParams.set('entity', entity);
   url.searchParams.set('id', id);
-  const { data: session } = await supabase.auth.getSession();
-  const jwt = session.session?.access_token;
-  const res = await fetch(url.toString(), {
-    method: 'PATCH',
-    headers: {
-      'Content-Type': 'application/json',
-      ...(jwt ? { Authorization: `Bearer ${jwt}` } : {}),
-      'x-admin-elevation': elevationToken
-    },
-    body: JSON.stringify(data)
-  });
-  if (!res.ok) throw new Error(`admin-crud update failed: ${res.status}`);
-  return res.json() as Promise<{ ok: boolean }>;
+  
+  try {
+    const { data: session } = await supabase.auth.getSession();
+    const jwt = session.session?.access_token;
+    
+    // Sanitize elevation token to prevent HTTP response splitting
+    const sanitizedToken = elevationToken.replace(/[\r\n]/g, '');
+    
+    const res = await fetch(url.toString(), {
+      method: 'PATCH',
+      headers: {
+        'Content-Type': 'application/json',
+        ...(jwt ? { Authorization: `Bearer ${jwt}` } : {}),
+        'x-admin-elevation': sanitizedToken
+      },
+      body: JSON.stringify(data)
+    });
+    if (!res.ok) throw new Error(`admin-crud update failed: ${res.status}`);
+    return res.json() as Promise<{ ok: boolean }>;
+  } catch (error) {
+    console.error('Error in admin-crud update:', error);
+    throw error;
+  }
 }
 
 export async function remove(entity: Entity, id: string, elevationToken: string, soft = true) {
@@ -83,15 +103,25 @@ export async function remove(entity: Entity, id: string, elevationToken: string,
   url.searchParams.set('entity', entity);
   url.searchParams.set('id', id);
   url.searchParams.set('soft', String(soft));
-  const { data: session } = await supabase.auth.getSession();
-  const jwt = session.session?.access_token;
-  const res = await fetch(url.toString(), {
-    method: 'DELETE',
-    headers: {
-      ...(jwt ? { Authorization: `Bearer ${jwt}` } : {}),
-      'x-admin-elevation': elevationToken
-    }
-  });
-  if (!res.ok) throw new Error(`admin-crud delete failed: ${res.status}`);
-  return res.json() as Promise<{ ok: boolean }>;
+  
+  try {
+    const { data: session } = await supabase.auth.getSession();
+    const jwt = session.session?.access_token;
+    
+    // Sanitize elevation token to prevent HTTP response splitting
+    const sanitizedToken = elevationToken.replace(/[\r\n]/g, '');
+    
+    const res = await fetch(url.toString(), {
+      method: 'DELETE',
+      headers: {
+        ...(jwt ? { Authorization: `Bearer ${jwt}` } : {}),
+        'x-admin-elevation': sanitizedToken
+      }
+    });
+    if (!res.ok) throw new Error(`admin-crud delete failed: ${res.status}`);
+    return res.json() as Promise<{ ok: boolean }>;
+  } catch (error) {
+    console.error('Error in admin-crud remove:', error);
+    throw error;
+  }
 }

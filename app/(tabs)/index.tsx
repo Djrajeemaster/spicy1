@@ -13,34 +13,24 @@ import {
   Switch,
   AppState,
 } from 'react-native';
+import { useFocusEffect } from '@react-navigation/native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { MapPin, Zap, TrendingUp, DollarSign, Percent } from 'lucide-react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Header } from '@/components/Header';
 import { DealCard } from '@/components/DealCard';
+import { EnhancedDealCard } from '@/components/EnhancedDealCard';
 import { UserRole } from '@/types/user';
 import { useAuth } from '@/contexts/AuthProvider';
 import { dealService } from '@/services/dealService';
 import { categoryService } from '@/services/categoryService';
 import { storeService } from '@/services/storeService';
 import { locationService } from '@/services/locationService';
+import { bannerService } from '@/services/bannerService';
 import { router } from 'expo-router';
 import { Database } from '@/types/database';
 
-// ---------- Helpers ----------
-function withTimeout<T>(p: Promise<T>, ms = 10000): Promise<T> {
-  return new Promise((resolve, reject) => {
-    const t = setTimeout(() => reject(new Error('request_timeout')), ms);
-    p.then((v) => {
-      clearTimeout(t);
-      resolve(v);
-    }).catch((e) => {
-      clearTimeout(t);
-      reject(e);
-    });
-  });
-}
-// -----------------------------
+
 
 type Category = Database['public']['Tables']['categories']['Row'];
 type Store = Database['public']['Tables']['stores']['Row'];
@@ -53,6 +43,8 @@ export default function HomeScreen() {
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedCategories, setSelectedCategories] = useState<string[]>(['all']);
   const [selectedStores, setSelectedStores] = useState<string[]>(['all']);
+  const [isDesktopView, setIsDesktopView] = useState(Platform.OS === 'web' && typeof window !== 'undefined' && window.innerWidth >= 1024);
+  const [windowWidth, setWindowWidth] = useState(Platform.OS === 'web' && typeof window !== 'undefined' ? window.innerWidth : 1024);
 
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [loading, setLoading] = useState(true);
@@ -71,6 +63,7 @@ export default function HomeScreen() {
 
   const [availableCategories, setAvailableCategories] = useState<Category[]>([]);
   const [availableStores, setAvailableStores] = useState<Store[]>([]);
+  const [banners, setBanners] = useState<any[]>([]);
   const [dataLoading, setDataLoading] = useState(true);
 
   const { user, profile } = useAuth();
@@ -82,179 +75,101 @@ export default function HomeScreen() {
   const aliveRef = useRef(true);
   useEffect(() => () => { aliveRef.current = false; }, []);
 
+  // Handle window resize for responsive layout
+  useEffect(() => {
+    if (Platform.OS === 'web') {
+      const handleResize = () => {
+        const newIsDesktop = window.innerWidth >= 1024;
+        setIsDesktopView(newIsDesktop);
+        setWindowWidth(window.innerWidth);
+      };
+      
+      window.addEventListener('resize', handleResize);
+      return () => window.removeEventListener('resize', handleResize);
+    }
+  }, []);
+
   // ----- Filters data (categories/stores) -----
   const loadFilterData = useCallback(async () => {
     setDataLoading(true);
     try {
-      const [
-        { data: fetchedCategories, error: catErr },
-        { data: fetchedStores, error: storeErr },
-      ] = await Promise.all([
-        withTimeout(categoryService.getCategories(), 10000),
-        withTimeout(storeService.getStores(), 10000),
+      const [categoriesRes, storesRes, bannersRes] = await Promise.all([
+        categoryService.getCategories().catch(() => ({ data: [], error: null })),
+        storeService.getStores().catch(() => ({ data: [], error: null })),
+        bannerService.getBanners().catch(() => ({ data: [], error: null }))
       ]);
 
-      if (!aliveRef.current) return;
-
-      if (catErr) console.error('Error fetching categories:', catErr);
-      if (storeErr) console.error('Error fetching stores:', storeErr);
-
-      setAvailableCategories([{ id: 'all' as any, name: 'All', emoji: '🔥' } as any, ...(fetchedCategories || [])]);
-      setAvailableStores([{ id: 'all' as any, name: 'All' } as any, ...(fetchedStores || [])]);
+      setAvailableCategories([{ id: 'all' as any, name: 'All', emoji: '🔥' } as any, ...(categoriesRes.data || [])]);
+      setAvailableStores([{ id: 'all' as any, name: 'All' } as any, ...(storesRes.data || [])]);
+      setBanners((bannersRes.data || []).filter((b: any) => b.is_active));
     } catch (err) {
-      console.error('Unexpected error loading filter data:', err);
-      if (!aliveRef.current) return;
-      // Ensure UI doesn't hang
+      console.error('Error loading filter data:', err);
       setAvailableCategories([{ id: 'all' as any, name: 'All', emoji: '🔥' } as any]);
       setAvailableStores([{ id: 'all' as any, name: 'All' } as any]);
     } finally {
-      if (aliveRef.current) setDataLoading(false);
+      setDataLoading(false);
     }
   }, []);
 
   useEffect(() => {
-    loadFilterData();
-  }, [loadFilterData]);
+    setAvailableCategories([{ id: 'all' as any, name: 'All', emoji: '🔥' } as any]);
+    setAvailableStores([{ id: 'all' as any, name: 'All' } as any]);
+    setBanners([]);
+    setDataLoading(false);
+  }, []);
 
   // ----- Deals loader -----
   const loadDeals = useCallback(async () => {
     try {
       setLoading(true);
-
-      const tags = selectedTags.split(',').map(t => t.trim()).filter(Boolean);
-      const catFilter = selectedCategories.filter(c => c !== 'all');
-      const storeFilter = selectedStores.filter(s => s !== 'all');
-
-      const filters: any = {
-        sortBy,
-        limit: 50,
-        categories: catFilter.length ? catFilter : undefined,
-        stores: storeFilter.length ? storeFilter : undefined,
-        search: searchQuery.trim() === '' ? undefined : searchQuery.trim(),
-        minPrice: minPrice ? parseFloat(minPrice) : undefined,
-        maxPrice: maxPrice ? parseFloat(maxPrice) : undefined,
-        minDiscount: minDiscount ? parseInt(minDiscount) : undefined,
-        tags: tags.length ? tags : undefined,
-        expiringOnly: expiringSoon,
-      };
-
-      if (locationEnabled && userLocation) {
-        filters.userLocation = userLocation;
-        if (selectedRadius != null) filters.radius = selectedRadius;
-      }
-
-      const { data, error } = await withTimeout(
-        dealService.getDeals(filters, user?.id),
-        10000
-      );
-
-      if (!aliveRef.current) return;
-
-      if (error) {
-        console.error('Error loading deals from Supabase:', error);
-        Alert.alert(
-          'Loading Demo Data',
-          'Unable to connect to the database. Showing sample deals for demonstration.',
-          [{ text: 'OK' }]
-        );
-        const sample = getSampleDeals();
-        setDeals(sample);
-        setFilteredDeals(sample);
+      const result = await dealService.getDeals({ sortBy, limit: 50 }, user?.id).catch(() => ({ data: [], error: 'Failed to load' }));
+      
+      if (result.data && result.data.length > 0) {
+        const mappedData = result.data.map((d: any) => ({
+          ...d,
+          id: String(d.id),
+          createdAt: d.created_at || new Date().toISOString(),
+          created_at: d.created_at || new Date().toISOString(),
+          category: d.category || {},
+          store: d.store || {},
+          postedBy: d.created_by_user?.username || 'Unknown',
+          votes: { up: d.votes_up || 0, down: d.votes_down || 0 },
+          votes_up: d.votes_up || 0,
+          comments: d.comment_count || 0,
+          image: d.images?.[0] || 'https://images.pexels.com/photos/3394650/pexels-photo-3394650.jpeg',
+          images: d.images || [],
+          city: d.city || 'Online',
+          distance: '0.5 miles',
+          view_count: d.view_count || 0,
+        }));
+        setDeals(mappedData);
+        setFilteredDeals(mappedData);
       } else {
-        if (data && data.length > 0) {
-          const mappedData = data.map((d: any) => ({
-            ...d,
-            createdAt: d.created_at,
-            isSample: false,
-            category: d.category,
-            store: d.store,
-            postedBy: d.created_by_user?.username || 'Unknown',
-            isVerified: d.created_by_user?.role === 'verified' || d.created_by_user?.role === 'business',
-            posterRole: d.created_by_user?.role,
-            posterReputation: d.created_by_user?.reputation,
-            votes: { up: d.votes_up || 0, down: d.votes_down || 0 },
-            comments: d.comment_count || 0,
-            location: d.city,
-            distance: 'N/A',
-            image: d.images?.[0] || 'https://images.pexels.com/photos/3394650/pexels-photo-3394650.jpeg?auto=compress&cs=tinysrgb&w=400',
-            isPinned: false,
-          }));
-          setDeals(mappedData);
-          setFilteredDeals(mappedData);
-        } else {
-          const sample = getSampleDeals();
-          setDeals(sample);
-          setFilteredDeals(sample);
-        }
+        setDeals([]);
+        setFilteredDeals([]);
       }
     } catch (error) {
-      console.error('Unexpected error loading deals:', error);
-      if (!aliveRef.current) return;
-      Alert.alert(
-        'Connection Error',
-        'Unable to load deals. Please check your internet connection.',
-        [
-          { text: 'Retry', onPress: () => loadDeals() },
-          { text: 'Use Demo Data', onPress: () => {
-            const s = getSampleDeals();
-            setDeals(s);
-            setFilteredDeals(s);
-          } },
-        ]
-      );
-      const s = getSampleDeals();
-      setDeals(s);
-      setFilteredDeals(s);
+      console.error('Error loading deals:', error);
+      setDeals([]);
+      setFilteredDeals([]);
     } finally {
-      if (aliveRef.current) setLoading(false);
+      setLoading(false);
     }
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [
-    user?.id,
-    sortBy,
-    selectedCategories,
-    selectedStores,
-    minPrice,
-    maxPrice,
-    minDiscount,
-    selectedTags,
-    searchQuery,
-    locationEnabled,
-    selectedRadius,
-    expiringSoon,
-    userLocation,
-  ]);
+  }, [user?.id, sortBy]);
 
   // initial + whenever filters change
   useEffect(() => {
     loadDeals();
   }, [loadDeals]);
 
-  // Re-trigger if user returns to the tab/app and a loader is stuck
-  useEffect(() => {
-    if (Platform.OS === 'web') {
-      const onVis = () => {
-        if (!document.hidden) {
-          if (dataLoading) loadFilterData();
-          if (loading) loadDeals();
-        }
-      };
-      document.addEventListener('visibilitychange', onVis);
-      window.addEventListener('focus', onVis);
-      return () => {
-        document.removeEventListener('visibilitychange', onVis);
-        window.removeEventListener('focus', onVis);
-      };
-    } else {
-      const sub = AppState.addEventListener('change', (s) => {
-        if (s === 'active') {
-          if (dataLoading) loadFilterData();
-          if (loading) loadDeals();
-        }
-      });
-      return () => sub.remove();
-    }
-  }, [dataLoading, loading, loadDeals, loadFilterData]);
+  // Refresh deals when screen comes into focus
+  useFocusEffect(
+    useCallback(() => {
+      loadDeals();
+    }, [loadDeals])
+  );
+
+
 
   const toggleCategory = (id: string) => {
     setSelectedCategories(prev => {
@@ -372,192 +287,7 @@ export default function HomeScreen() {
         onFiltersToggle={() => setShowFilters(!showFilters)}
       />
 
-      {showFilters && (
-        <View style={styles.filterSection}>
-          <View style={styles.sortContainer}>
-            <Text style={styles.sortLabel}>Sort by:</Text>
-            <ScrollView horizontal showsHorizontalScrollIndicator={false}>
-              <View style={styles.sortOptions}>
-                {[
-                  { id: 'newest', name: 'Newest', icon: '🕐' },
-                  { id: 'popular', name: 'Popular', icon: '🔥' },
-                  { id: 'price_low', name: 'Price Low', icon: '⬇️' },
-                  { id: 'price_high', name: 'Price High', icon: '⬆️' },
-                ].map(sort => (
-                  <TouchableOpacity
-                    key={sort.id}
-                    style={styles.sortOptionWrapper}
-                    onPress={() => setSortBy(sort.id as any)}
-                  >
-                    {sortBy === sort.id ? (
-                      <LinearGradient colors={['#6366f1', '#4f46e5']} style={styles.sortOption}>
-                        <Text style={styles.sortEmoji}>{sort.icon}</Text>
-                        <Text style={styles.sortOptionTextActive}>{sort.name}</Text>
-                      </LinearGradient>
-                    ) : (
-                      <View style={styles.sortOptionInactive}>
-                        <Text style={styles.sortEmojiInactive}>{sort.icon}</Text>
-                        <Text style={styles.sortOptionText}>{sort.name}</Text>
-                      </View>
-                    )}
-                  </TouchableOpacity>
-                ))}
-              </View>
-            </ScrollView>
-          </View>
 
-          <View style={styles.advancedFilters}>
-            <Text style={styles.filterLabel}>Price Range:</Text>
-            <View style={styles.priceInputs}>
-              <View style={styles.inputWithIcon}>
-                <DollarSign size={16} color="#64748b" style={styles.inputIcon} />
-                <TextInput
-                  style={styles.filterInput}
-                  placeholder="Min Price"
-                  keyboardType="numeric"
-                  value={minPrice}
-                  onChangeText={setMinPrice}
-                  placeholderTextColor="#94a3b8"
-                />
-              </View>
-              <Text style={styles.priceSeparator}>-</Text>
-              <View style={styles.inputWithIcon}>
-                <DollarSign size={16} color="#64748b" style={styles.inputIcon} />
-                <TextInput
-                  style={styles.filterInput}
-                  placeholder="Max Price"
-                  keyboardType="numeric"
-                  value={maxPrice}
-                  onChangeText={setMaxPrice}
-                  placeholderTextColor="#94a3b8"
-                />
-              </View>
-            </View>
-
-            <Text style={styles.filterLabel}>Minimum Discount:</Text>
-            <View style={styles.inputWithIcon}>
-              <Percent size={16} color="#64748b" style={styles.inputIcon} />
-              <TextInput
-                style={styles.filterInput}
-                placeholder="e.g., 20%"
-                keyboardType="numeric"
-                value={minDiscount}
-                onChangeText={setMinDiscount}
-                placeholderTextColor="#94a3b8"
-              />
-            </View>
-
-            <Text style={styles.filterLabel}>Tags:</Text>
-            <View style={styles.inputWithIcon}>
-              <TextInput
-                style={styles.filterInput}
-                placeholder="e.g., electronics, clearance, bogo"
-                value={selectedTags}
-                onChangeText={setSelectedTags}
-                autoCapitalize="none"
-                autoCorrect={false}
-                placeholderTextColor="#94a3b8"
-              />
-            </View>
-
-            <Text style={styles.filterLabel}>Categories:</Text>
-            <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.storeFilterScroll}>
-              <View style={styles.storeOptions}>
-                {availableCategories.map(cat => {
-                  const active = selectedCategories.includes(cat.id as any);
-                  return (
-                    <TouchableOpacity
-                      key={cat.id}
-                      style={styles.storeOptionWrapper}
-                      onPress={() => toggleCategory(cat.id as any)}
-                    >
-                      {active ? (
-                        <LinearGradient colors={['#6366f1', '#4f46e5']} style={styles.storeOption}>
-                          <Text style={styles.storeOptionTextActive}>
-                            {cat.emoji ? `${cat.emoji} ` : ''}{cat.name}
-                          </Text>
-                        </LinearGradient>
-                      ) : (
-                        <View style={styles.storeOptionInactive}>
-                          <Text style={styles.storeOptionText}>
-                            {cat.emoji ? `${cat.emoji} ` : ''}{cat.name}
-                          </Text>
-                        </View>
-                      )}
-                    </TouchableOpacity>
-                  );
-                })}
-              </View>
-            </ScrollView>
-
-            <Text style={styles.filterLabel}>Store:</Text>
-            <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.storeFilterScroll}>
-              <View style={styles.storeOptions}>
-                {availableStores.map(store => {
-                  const active = selectedStores.includes(store.id as any);
-                  return (
-                    <TouchableOpacity
-                      key={store.id}
-                      style={styles.storeOptionWrapper}
-                      onPress={() => toggleStore(store.id as any)}
-                    >
-                      {active ? (
-                        <LinearGradient colors={['#6366f1', '#4f46e5']} style={styles.storeOption}>
-                          <Text style={styles.storeOptionTextActive}>{store.name}</Text>
-                        </LinearGradient>
-                      ) : (
-                        <View style={styles.storeOptionInactive}>
-                          <Text style={styles.storeOptionText}>{store.name}</Text>
-                        </View>
-                      )}
-                    </TouchableOpacity>
-                  );
-                })}
-              </View>
-            </ScrollView>
-
-            <View style={styles.filterItemWithSwitch}>
-              <Text style={styles.filterLabel}>Expiring Soon</Text>
-              <Switch
-                value={expiringSoon}
-                onValueChange={setExpiringSoon}
-                trackColor={{ false: '#e2e8f0', true: '#6366f1' }}
-                thumbColor={expiringSoon ? '#FFFFFF' : '#f4f3f4'}
-              />
-            </View>
-
-            {locationEnabled && (
-              <View style={{ marginTop: 16 }}>
-                <Text style={styles.filterLabel}>Search Radius:</Text>
-                <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.storeFilterScroll}>
-                  <View style={styles.storeOptions}>
-                    {RADIUS_OPTIONS.map(mi => {
-                      const active = selectedRadius === mi;
-                      return (
-                        <TouchableOpacity
-                          key={mi}
-                          onPress={() => setSelectedRadius(r => (r === mi ? null : mi))}
-                          style={styles.storeOptionWrapper}
-                        >
-                          {active ? (
-                            <LinearGradient colors={['#6366f1', '#4f46e5']} style={styles.storeOption}>
-                              <Text style={styles.storeOptionTextActive}>{mi} mi</Text>
-                            </LinearGradient>
-                          ) : (
-                            <View style={styles.storeOptionInactive}>
-                              <Text style={styles.storeOptionText}>{mi} mi</Text>
-                            </View>
-                          )}
-                        </TouchableOpacity>
-                      );
-                    })}
-                  </View>
-                </ScrollView>
-              </View>
-            )}
-          </View>
-        </View>
-      )}
 
       <ScrollView
         style={styles.dealsContainer}
@@ -571,30 +301,7 @@ export default function HomeScreen() {
         }
         showsVerticalScrollIndicator={false}
       >
-        <View style={styles.statsHeader}>
-          <View style={styles.statsItem}>
-            <TrendingUp size={16} color="#10b981" />
-            <Text style={styles.statsText}>{filteredDeals.length} active deals</Text>
-          </View>
-          <View style={styles.statsItem}>
-            <Zap size={16} color="#f59e0b" />
-            <Text style={styles.statsText}>{filteredDeals.filter(d => d.isPinned).length} hot deals</Text>
-          </View>
-          <TouchableOpacity style={styles.statsItem} onPress={() => router.push('/updeals')}>
-            <Text style={styles.trendingLink}>View Trending →</Text>
-          </TouchableOpacity>
-        </View>
 
-        {locationEnabled && (
-          <View style={styles.locationBanner}>
-            <LinearGradient colors={['#10b981', '#059669']} style={styles.locationBannerGradient}>
-              <MapPin size={16} color="#FFFFFF" />
-              <Text style={styles.locationBannerText}>
-                Showing deals near {userLocation?.city || 'your area'}
-              </Text>
-            </LinearGradient>
-          </View>
-        )}
 
         {loading ? (
           <View style={styles.loadingContainer}>
@@ -603,34 +310,59 @@ export default function HomeScreen() {
           </View>
         ) : (
           <>
-            {filteredDeals.map(deal => (
-              <DealCard
-                key={deal.id}
-                deal={deal}
-                isGuest={isGuest}
-                onVote={handleVote}
-                userRole={currentUserRole}
-              />
-            ))}
-
-            {filteredDeals.length === 0 && (
-              <View style={styles.emptyState}>
-                <LinearGradient colors={['#f8fafc', '#f1f5f9']} style={styles.emptyStateContainer}>
-                  <Text style={styles.emptyStateEmoji}>🔍</Text>
-                  <Text style={styles.emptyStateText}>No deals found</Text>
-                  <Text style={styles.emptyStateSubtext}>
-                    {searchQuery ? `No results for "${searchQuery}"` : 'Try adjusting your filters to discover amazing deals'}
-                  </Text>
-                  {searchQuery && (
-                    <TouchableOpacity style={styles.clearSearchButton} onPress={() => setSearchQuery('')}>
-                      <Text style={styles.clearSearchText}>Clear Search</Text>
-                    </TouchableOpacity>
-                  )}
-                </LinearGradient>
+            {isDesktopView ? (
+              <View style={styles.dealsGrid}>
+                {filteredDeals.map(deal => (
+                  <View key={deal.id} style={[styles.dealTile, {
+                    width: Platform.OS === 'web' ? (() => {
+                      if (windowWidth >= 1600) return '18.5%';
+                      if (windowWidth >= 1400) return '23%';
+                      if (windowWidth >= 1200) return '30.5%';
+                      if (windowWidth >= 1024) return '47%';
+                      return '100%';
+                    })() : '100%'
+                  }]}>
+                    <EnhancedDealCard
+                      deal={deal}
+                      isGuest={isGuest}
+                      onVote={handleVote}
+                      userRole={currentUserRole}
+                      userId={user?.id}
+                    />
+                  </View>
+                ))}
               </View>
+            ) : (
+              filteredDeals.map(deal => (
+                <EnhancedDealCard
+                  key={deal.id}
+                  deal={deal}
+                  isGuest={isGuest}
+                  onVote={handleVote}
+                  userRole={currentUserRole}
+                  userId={user?.id}
+                />
+              ))
             )}
           </>
         )}
+
+        {filteredDeals.length === 0 ? (
+          <View style={styles.emptyState}>
+            <LinearGradient colors={['#f8fafc', '#f1f5f9']} style={styles.emptyStateContainer}>
+              <Text style={styles.emptyStateEmoji}>🔍</Text>
+              <Text style={styles.emptyStateText}>No deals found</Text>
+              <Text style={styles.emptyStateSubtext}>
+                {searchQuery ? `No results for "${searchQuery}"` : 'Try adjusting your filters to discover amazing deals'}
+              </Text>
+              {searchQuery ? (
+                <TouchableOpacity style={styles.clearSearchButton} onPress={() => setSearchQuery('')}>
+                  <Text style={styles.clearSearchText}>Clear Search</Text>
+                </TouchableOpacity>
+              ) : null}
+            </LinearGradient>
+          </View>
+        ) : null}
 
         <View style={styles.bottomPadding} />
       </ScrollView>
@@ -717,7 +449,25 @@ const styles = StyleSheet.create({
   emptyStateSubtext: { fontSize: 15, color: '#94a3b8', textAlign: 'center', lineHeight: 22, marginBottom: 20 },
   clearSearchButton: { backgroundColor: '#6366f1', paddingHorizontal: 24, paddingVertical: 12, borderRadius: 20 },
   clearSearchText: { color: '#FFFFFF', fontSize: 14, fontWeight: '700' },
+  bannersContainer: { marginHorizontal: 16, marginBottom: 8 },
+  bannerCard: { marginBottom: 12, borderRadius: 16, overflow: 'hidden' },
+  bannerGradient: { padding: 20 },
+  bannerContent: { alignItems: 'center' },
+  bannerTitle: { fontSize: 18, fontWeight: '800', color: '#FFFFFF', marginBottom: 8, textAlign: 'center' },
+  bannerDescription: { fontSize: 14, color: 'rgba(255,255,255,0.9)', textAlign: 'center', lineHeight: 20 },
   bottomPadding: { height: 100 },
+  
+  // Web tile layout
+  dealsGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    paddingHorizontal: 8,
+    justifyContent: 'flex-start',
+  },
+  dealTile: {
+    paddingHorizontal: 6,
+    marginBottom: 12,
+  },
 });
 
 // Sample data (unchanged)

@@ -19,8 +19,19 @@ class ActivityService {
     description: string,
     targetType?: string,
     targetId?: string
-  ): Promise<{ data: UserActivity | null; error: any }> {
+  ): Promise<{ data: UserActivity | null; error: Error | null }> {
     try {
+      // Input validation
+      if (!userId || typeof userId !== 'string') {
+        throw new Error('Invalid userId parameter');
+      }
+      if (!activityType || typeof activityType !== 'string') {
+        throw new Error('Invalid activityType parameter');
+      }
+      if (!description || typeof description !== 'string') {
+        throw new Error('Invalid description parameter');
+      }
+      
       const { data, error } = await supabase
         .from('user_activities')
         .insert({
@@ -50,8 +61,16 @@ class ActivityService {
   async getUserActivities(
     userId: string,
     limit: number = 10
-  ): Promise<{ data: UserActivity[]; error: any }> {
+  ): Promise<{ data: UserActivity[]; error: Error | null }> {
     try {
+      // Input validation
+      if (!userId || typeof userId !== 'string') {
+        throw new Error('Invalid userId parameter');
+      }
+      if (limit <= 0 || limit > 100) {
+        throw new Error('Limit must be between 1 and 100');
+      }
+      
       const { data, error } = await supabase
         .from('user_activities')
         .select('*')

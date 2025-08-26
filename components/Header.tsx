@@ -1,5 +1,5 @@
 // components/Header.tsx
-import React, { useState } from 'react';
+import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import {
   View,
   Text,
@@ -14,9 +14,11 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { UserBadge } from '@/components/UserBadge';
 import { getRolePrivileges } from '@/types/user';
 import { useAuth } from '@/contexts/AuthProvider';
-import { useCurrency } from '@/contexts/CurrencyProvider';
+import { alertService } from '@/services/alertService';
+
 import { canAccessAdmin } from '@/lib/supabase';
 import { router } from 'expo-router';
+import { logger } from '@/utils/logger';
 
 interface HeaderProps {
   onPostPress?: () => void;
@@ -42,69 +44,116 @@ export function Header({
   onFiltersToggle,
 }: HeaderProps) {
   const { user, profile, signOut } = useAuth();
-  const { currency, setCurrency, CURRENCIES } = useCurrency();
 
   const [showUserMenu, setShowUserMenu] = useState(false);
-  const [showCurrencyMenu, setShowCurrencyMenu] = useState(false);
-  const [alertCount] = useState(2);
+  const [alertCount, setAlertCount] = useState(0);
+  const [isDesktopWeb, setIsDesktopWeb] = useState(
+    Platform.OS === 'web' && typeof window !== 'undefined' && window.innerWidth >= 1024
+  );
+
+  // Fetch alert count
+  useEffect(() => {
+    if (user?.id) {
+      const fetchAlertCount = async () => {
+        try {
+          const { data } = await alertService.getUnreadCount(user.id);
+          setAlertCount(data || 0);
+        } catch (error) {
+          logger.error('Failed to fetch alert count', error);
+        }
+      };
+      
+      fetchAlertCount();
+      
+      // Refresh alert count every 30 seconds
+      const interval = setInterval(fetchAlertCount, 30000);
+      return () => clearInterval(interval);
+    } else {
+      setAlertCount(0);
+    }
+  }, [user?.id]);
+
+  // Handle window resize for responsive layout
+  useEffect(() => {
+    if (Platform.OS === 'web') {
+      const handleResize = () => {
+        const newIsDesktop = window.innerWidth >= 1024;
+        setIsDesktopWeb(newIsDesktop);
+      };
+      
+      window.addEventListener('resize', handleResize);
+      return () => window.removeEventListener('resize', handleResize);
+    }
+  }, []);
 
   // Sign-out dialog state
   const [showSignOutConfirm, setShowSignOutConfirm] = useState(false);
   const [signingOut, setSigningOut] = useState(false);
   const [signOutError, setSignOutError] = useState<string | null>(null);
 
+  // Memoize expensive calculations
   const isGuest = !user;
   const userRole = profile?.role || 'guest';
   const reputation = profile?.reputation || 0;
-  const privileges = getRolePrivileges(userRole, reputation);
-  const showAdminButton = profile && canAccessAdmin(profile.role);
+  
+  const privileges = useMemo(() => 
+    getRolePrivileges(userRole, reputation), 
+    [userRole, reputation]
+  );
+  
+  const showAdminButton = useMemo(() => 
+    profile && canAccessAdmin(profile.role), 
+    [profile?.role]
+  );
 
-  const handlePostPress = () => {
+  const handlePostPress = useCallback(() => {
     if (!privileges.canPost) {
       // Keep your existing alert style elsewhere if you want; sign-out uses custom dialog
       return;
     }
     onPostPress?.();
-  };
+  }, [privileges.canPost, onPostPress]);
 
   const openSignOutDialog = () => {
     setSignOutError(null);
     setShowUserMenu(false);
-    setShowCurrencyMenu(false);
     setShowSignOutConfirm(true);
   };
 
-  const doSignOut = async () => {
+  const doSignOut = useCallback(async () => {
     if (signingOut) return;
     try {
       setSignOutError(null);
       setSigningOut(true);
+      logger.authEvent('sign_out_attempt', user?.id);
       await signOut(); // uses your hard-reset version in AuthProvider
       setShowSignOutConfirm(false);
       setShowUserMenu(false);
+      logger.authEvent('sign_out_success', user?.id);
       router.replace('/sign-in');
     } catch (e: any) {
+      logger.authEvent('sign_out_failed', user?.id, { error: e?.message });
       setSignOutError(e?.message || 'Failed to sign out. Please try again.');
     } finally {
       setSigningOut(false);
     }
-  };
+  }, [signingOut, signOut, user?.id]);
 
-  const handleAuthPress = () => {
+  const handleAuthPress = useCallback(() => {
     if (isGuest) {
       router.push('/sign-in');
     } else {
       openSignOutDialog();
     }
-  };
+  }, [isGuest]);
 
-  const handleAlertsPress = () => {
+  const handleAlertsPress = useCallback(() => {
     onAlertsPress ? onAlertsPress() : router.push('/alerts');
-  };
+  }, [onAlertsPress]);
 
-  const handleAdminAccess = () => {
+  const handleAdminAccess = useCallback(() => {
     router.push('/admin');
-  };
+  }, []);
 
   return (
     <View style={styles.container}>
@@ -116,13 +165,53 @@ export function Header({
       >
         <View style={styles.mainRow}>
           <View style={styles.leftSection}>
-            <LinearGradient colors={['#fbbf24', '#f59e0b', '#d97706']} style={styles.logo}>
-              <Sparkles size={18} color="#FFFFFF" />
-            </LinearGradient>
-            <Text style={styles.appName}>SpicyBeats</Text>
+            <TouchableOpacity onPress={() => router.push('/')} style={styles.logoContainer}>
+              <LinearGradient colors={['#fbbf24', '#f59e0b', '#d97706']} style={styles.logo}>
+                <Sparkles size={18} color="#FFFFFF" />
+              </LinearGradient>
+              <Text style={styles.appName}>SpicyBeats</Text>
+            </TouchableOpacity>
           </View>
 
           <View style={styles.rightSection}>
+            {/* Desktop Web Search Bar */}
+            {isDesktopWeb && showSearch && (
+              <View style={styles.desktopSearchContainer}>
+                <View style={styles.desktopSearchBar}>
+                  <Search size={20} color="#6366f1" style={styles.searchIcon} />
+                  <TextInput
+                    style={styles.desktopSearchInput}
+                    placeholder="Search amazing deals..."
+                    value={searchQuery}
+                    onChangeText={onSearchChange}
+                    placeholderTextColor="#94a3b8"
+                  />
+                  {searchQuery.length > 0 ? (
+                    <TouchableOpacity onPress={() => onSearchChange?.('')}>
+                      <Text style={styles.clearButton}>×</Text>
+                    </TouchableOpacity>
+                  ) : null}
+                </View>
+                
+                <TouchableOpacity style={styles.desktopFilterButton} onPress={onFiltersToggle}>
+                  <LinearGradient
+                    colors={showFilters ? ['#6366f1', '#4f46e5'] : ['#f1f5f9', '#e2e8f0']}
+                    style={styles.desktopFilterGradient}
+                  >
+                    <Filter size={18} color={showFilters ? '#FFFFFF' : '#64748b'} />
+                  </LinearGradient>
+                </TouchableOpacity>
+                
+                <TouchableOpacity style={styles.desktopLocationButton} onPress={onLocationToggle}>
+                  <LinearGradient
+                    colors={locationEnabled ? ['#10b981', '#059669'] : ['#f1f5f9', '#e2e8f0']}
+                    style={styles.desktopLocationGradient}
+                  >
+                    <Navigation size={18} color={locationEnabled ? '#FFFFFF' : '#64748b'} />
+                  </LinearGradient>
+                </TouchableOpacity>
+              </View>
+            )}
             {showAdminButton && (
               <TouchableOpacity style={styles.adminButton} onPress={handleAdminAccess}>
                 <LinearGradient colors={['#ef4444', '#dc2626']} style={styles.adminButtonGradient}>
@@ -146,15 +235,7 @@ export function Header({
               </TouchableOpacity>
             )}
 
-            <TouchableOpacity
-              style={styles.currencyButton}
-              onPress={() => {
-                setShowCurrencyMenu(!showCurrencyMenu);
-                setShowUserMenu(false);
-              }}
-            >
-              <Text style={styles.currencyText}>{currency.symbol}</Text>
-            </TouchableOpacity>
+
 
             <TouchableOpacity style={styles.alertButton} onPress={handleAlertsPress}>
               <View style={styles.alertIconContainer}>
@@ -179,71 +260,23 @@ export function Header({
                 style={styles.userButton}
                 onPress={() => {
                   setShowUserMenu(!showUserMenu);
-                  setShowCurrencyMenu(false);
                 }}
               >
                 <LinearGradient colors={['#8b5cf6', '#7c3aed']} style={styles.avatar}>
-                  <Text style={styles.avatarText}>{profile?.username?.[0]?.toUpperCase() || 'U'}</Text>
+                  <Text style={styles.avatarText}>{profile?.username?.[0]?.toUpperCase() || '?'}</Text>
                 </LinearGradient>
-                <UserBadge role={userRole} size="small" showText={false} reputation={reputation} />
                 <ChevronDown size={14} color="#FFFFFF" />
               </TouchableOpacity>
             )}
           </View>
         </View>
 
-        {showUserMenu && (
-          <View style={styles.userMenu}>
-            <TouchableOpacity
-              style={styles.userMenuItem}
-              onPress={() => {
-                setShowUserMenu(false);
-                router.push('/profile');
-              }}
-            >
-              <Text style={styles.userMenuText}>Profile</Text>
-            </TouchableOpacity>
-            <TouchableOpacity
-              style={styles.userMenuItem}
-              onPress={() => {
-                setShowUserMenu(false);
-                router.push('/settings');
-              }}
-            >
-              <Text style={styles.userMenuText}>Settings</Text>
-            </TouchableOpacity>
-            <TouchableOpacity
-              style={[styles.userMenuItem, styles.userMenuItemLast]}
-              onPress={openSignOutDialog}
-            >
-              <Text style={styles.userMenuText}>Sign Out</Text>
-            </TouchableOpacity>
-          </View>
-        )}
 
-        {showCurrencyMenu && (
-          <View style={styles.currencyMenu}>
-            {CURRENCIES.map((curr) => (
-              <TouchableOpacity
-                key={curr.code}
-                style={[
-                  styles.currencyMenuItem,
-                  currency.code === curr.code && styles.currencyMenuItemActive,
-                ]}
-                onPress={() => {
-                  setCurrency(curr);
-                  setShowCurrencyMenu(false);
-                }}
-              >
-                <Text style={styles.currencyMenuText}>
-                  {curr.symbol} {curr.name}
-                </Text>
-              </TouchableOpacity>
-            ))}
-          </View>
-        )}
 
-        {showSearch && (
+
+
+        {/* Mobile/Tablet Search Bar */}
+        {!isDesktopWeb && showSearch && (
           <View style={styles.searchSection}>
             <View style={styles.searchContainer}>
               <View style={styles.searchBar}>
@@ -255,11 +288,11 @@ export function Header({
                   onChangeText={onSearchChange}
                   placeholderTextColor="#94a3b8"
                 />
-                {searchQuery.length > 0 && (
+                {searchQuery.length > 0 ? (
                   <TouchableOpacity onPress={() => onSearchChange?.('')}>
-                    <Text style={styles.clearButton}>✕</Text>
+                    <Text style={styles.clearButton}>×</Text>
                   </TouchableOpacity>
-                )}
+                ) : null}
               </View>
 
               <TouchableOpacity style={styles.filterButton} onPress={onFiltersToggle}>
@@ -283,25 +316,38 @@ export function Header({
           </View>
         )}
 
-        <View style={styles.navRow}>
-          {[
-            { id: 'discover', name: 'Discover', route: '/' },
-            { id: 'trending', name: 'Trending', route: '/updeals' },
-            { id: 'nearby', name: 'Nearby', route: '/nearby' },
-            { id: 'saved', name: 'Saved', route: '/saved' },
-          ].map((nav) => (
-            <TouchableOpacity
-              key={nav.id}
-              style={styles.navItem}
-              onPress={() => {
-                if (nav.route) router.push(nav.route);
-              }}
-            >
-              <Text style={styles.navText}>{nav.name}</Text>
-            </TouchableOpacity>
-          ))}
-        </View>
+
       </LinearGradient>
+
+      {/* User Menu Dropdown */}
+      {showUserMenu && (
+        <View style={styles.userMenu}>
+          <TouchableOpacity
+            style={styles.userMenuItem}
+            onPress={() => {
+              setShowUserMenu(false);
+              router.push('/profile');
+            }}
+          >
+            <Text style={styles.userMenuText}>Profile</Text>
+          </TouchableOpacity>
+          <TouchableOpacity
+            style={styles.userMenuItem}
+            onPress={() => {
+              setShowUserMenu(false);
+              router.push('/settings');
+            }}
+          >
+            <Text style={styles.userMenuText}>Settings</Text>
+          </TouchableOpacity>
+          <TouchableOpacity
+            style={[styles.userMenuItem, styles.userMenuItemLast]}
+            onPress={openSignOutDialog}
+          >
+            <Text style={styles.userMenuText}>Sign Out</Text>
+          </TouchableOpacity>
+        </View>
+      )}
 
       {/* Sign-out Confirm Dialog (custom, works on web & native) */}
       {showSignOutConfirm && (
@@ -350,13 +396,14 @@ export function Header({
 }
 
 const styles = StyleSheet.create({
-  container: { backgroundColor: '#030849' },
+  container: { backgroundColor: '#030849', zIndex: 9999, position: 'relative' },
   gradient: { paddingTop: Platform.OS === 'ios' ? 0 : 8 },
   mainRow: {
     flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
     paddingHorizontal: 20, paddingVertical: 16,
   },
   leftSection: { flexDirection: 'row', alignItems: 'center' },
+  logoContainer: { flexDirection: 'row', alignItems: 'center' },
   logo: {
     width: 36, height: 36, borderRadius: 10, marginRight: 12,
     justifyContent: 'center', alignItems: 'center',
@@ -365,16 +412,16 @@ const styles = StyleSheet.create({
   appName: { fontSize: 22, fontWeight: '800', color: '#FFFFFF', letterSpacing: -0.5 },
   rightSection: { flexDirection: 'row', alignItems: 'center' },
 
-  adminButton: { borderRadius: 16, overflow: 'hidden', marginRight: 12 },
+  adminButton: { borderRadius: 16, overflow: 'hidden', marginRight: 6 },
   adminButtonGradient: { paddingHorizontal: 12, paddingVertical: 6 },
   adminButtonText: { color: '#FFFFFF', fontSize: 12, fontWeight: '700' },
 
-  postButton: { borderRadius: 16, overflow: 'hidden', marginRight: 12 },
+  postButton: { borderRadius: 16, overflow: 'hidden', marginRight: 6 },
   postButtonGradient: { paddingHorizontal: 16, paddingVertical: 8 },
   postButtonText: { color: '#FFFFFF', fontSize: 14, fontWeight: '700' },
   disabledButton: { opacity: 0.6 },
 
-  alertButton: { marginRight: 16 },
+  alertButton: { marginRight: 8 },
   alertIconContainer: { position: 'relative', padding: 8 },
   alertBadge: {
     position: 'absolute', top: 2, right: 2, backgroundColor: '#ef4444',
@@ -387,19 +434,7 @@ const styles = StyleSheet.create({
   loginGradient: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 20, paddingVertical: 10 },
   loginButtonText: { color: '#FFFFFF', fontSize: 15, fontWeight: '700', marginLeft: 6 },
 
-  currencyButton: {
-    backgroundColor: 'rgba(255, 255, 255, 0.2)', borderRadius: 12,
-    paddingHorizontal: 12, paddingVertical: 8, marginRight: 12,
-  },
-  currencyText: { color: '#FFFFFF', fontSize: 14, fontWeight: '700' },
-  currencyMenu: {
-    position: 'absolute', top: 60, right: 20, backgroundColor: '#FFFFFF',
-    borderRadius: 12, shadowColor: '#000', shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.15, shadowRadius: 8, elevation: 8, zIndex: 1000,
-  },
-  currencyMenuItem: { paddingHorizontal: 16, paddingVertical: 12, borderBottomWidth: 1, borderBottomColor: '#f1f5f9' },
-  currencyMenuItemActive: { backgroundColor: '#eef2ff' },
-  currencyMenuText: { fontSize: 14, fontWeight: '600', color: '#374151' },
+
 
   userButton: { flexDirection: 'row', alignItems: 'center' },
   avatar: {
@@ -435,9 +470,57 @@ const styles = StyleSheet.create({
   locationButton: { borderRadius: 16, overflow: 'hidden' },
   locationGradient: { width: 44, height: 44, justifyContent: 'center', alignItems: 'center' },
 
-  navRow: { flexDirection: 'row', paddingHorizontal: 20, paddingBottom: 16 },
-  navItem: { position: 'relative', paddingHorizontal: 16, paddingVertical: 8, marginRight: 8 },
-  navText: { fontSize: 15, fontWeight: '500', color: 'rgba(255, 255, 255, 0.7)' },
+  // Desktop search styles
+  desktopSearchContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    flex: 4, // Balanced flex to share space with other elements
+    maxWidth: 1200,
+    marginHorizontal: 16,
+  },
+  desktopSearchBar: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: 'rgba(255, 255, 255, 0.2)',
+    borderRadius: 16,
+    paddingHorizontal: 16,
+    height: 42,
+    marginRight: 8,
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.3)',
+    minWidth: 400, // Larger minimum with reduced other margins
+    maxWidth: '65%', // Slightly larger max width
+  },
+  desktopSearchInput: {
+    flex: 1,
+    fontSize: 15, // Slightly larger font
+    color: '#FFFFFF',
+    fontWeight: '500',
+    paddingVertical: 8, // Add vertical padding for better touch target
+  },
+  desktopFilterButton: {
+    borderRadius: 14, // Slightly larger border radius
+    overflow: 'hidden',
+    marginRight: 6,
+  },
+  desktopFilterGradient: {
+    width: 42, // Increased size to match search bar height
+    height: 42,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  desktopLocationButton: {
+    borderRadius: 14,
+    overflow: 'hidden',
+    marginRight: 12, // Increased margin from other elements
+  },
+  desktopLocationGradient: {
+    width: 42, // Increased size to match search bar height
+    height: 42,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
 
   /* Modal styles */
   modalOverlay: {

@@ -1,4 +1,8 @@
 // app/(tabs)/profile.tsx
+import { useLocalSearchParams, router } from 'expo-router';
+import { followService } from '@/services/followService';
+import { dealService, type DealWithRelations } from '@/services/dealService';
+
 import React, { useState, useEffect } from 'react';
 import {
   View,
@@ -23,22 +27,73 @@ import {
   Clock,
   CircleCheck as CheckCircle,
   Circle as XCircle,
-  CreditCard as Edit3,
+
   Crown,
   Zap,
   Award,
+  ArrowLeft,
 } from 'lucide-react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useAuth } from '@/contexts/AuthProvider';
-import { router } from 'expo-router';
-import { dealService } from '@/services/dealService';
-import { DealWithRelations } from '@/services/dealService';
 import { activityService, UserActivity } from '@/services/activityService';
-import { followService, type FollowCounts } from '@/services/followService';
+import {  type FollowCounts } from '@/services/followService';
 import { formatTimeAgo } from '@/utils/time';
+import { DealCard } from '@/components/DealCard';
+import { Header } from '@/components/Header';
 
 export default function ProfileScreen() {
   const { user, profile, signOut } = useAuth();
+  
+  // New: local tab state (Overview | Following | Saved)
+  const params = useLocalSearchParams<{ tab?: string }>();
+  const initialTab = (params?.tab as string) || 'overview';
+  const [profileTab, setProfileTab] = useState<'overview'|'following'|'saved'>(
+    initialTab === 'following' ? 'following' : initialTab === 'saved' ? 'saved' : 'overview'
+  );
+
+  // Data for Following & Saved
+  const [followingFeed, setFollowingFeed] = useState<DealWithRelations[]>([] as any);
+  const [loadingFollowing, setLoadingFollowing] = useState(false);
+
+  const [savedDeals, setSavedDeals] = useState<DealWithRelations[]>([] as any);
+  const [loadingSaved, setLoadingSaved] = useState(false);
+
+  useEffect(() => {
+    if (profileTab === 'following') {
+      (async () => {
+        try {
+          setLoadingFollowing(true);
+          const { data, error } = await followService.getFollowingFeed(30, 0);
+          if (error) {
+            console.error('Error fetching following feed:', error);
+          } else if (data) {
+            setFollowingFeed((data as any) as DealWithRelations[]);
+          }
+        } catch (error) {
+          console.error('Error in following feed:', error);
+        } finally {
+          setLoadingFollowing(false);
+        }
+      })();
+    } else if (profileTab === 'saved' && user) {
+      (async () => {
+        try {
+          setLoadingSaved(true);
+          const { data, error } = await dealService.getSavedDeals(user.id);
+          if (error) {
+            console.error('Error fetching saved deals:', error);
+          } else if (data) {
+            setSavedDeals(data as DealWithRelations[]);
+          }
+        } catch (error) {
+          console.error('Error in saved deals:', error);
+        } finally {
+          setLoadingSaved(false);
+        }
+      })();
+    }
+  }, [profileTab, user]);
+
   const [activeTab, setActiveTab] = useState<'approved' | 'pending' | 'rejected'>('approved');
   const [fetchedUserDeals, setFetchedUserDeals] = useState<DealWithRelations[]>([]);
   const [loadingDeals, setLoadingDeals] = useState(true);
@@ -143,7 +198,7 @@ useEffect(() => {
         price: deal.price.toString(),
         originalPrice: deal.original_price?.toString() || '',
         location: deal.city,
-        distance: 'N/A',
+        distance: deal.city ? '0 mi' : 'N/A',
         image:
           deal.images?.[0] ||
           'https://images.pexels.com/photos/3394650/pexels-photo-3394650.jpeg?auto=compress&cs=tinysrgb&w=400',
@@ -162,7 +217,7 @@ useEffect(() => {
   };
 
   const handleSettingsPress = () => router.push('/settings');
-  const handleEditProfilePress = () => router.push('/edit-profile');
+
 
   // Open custom logout dialog (no browser Alert on web)
   const openLogoutDialog = () => {
@@ -197,6 +252,7 @@ useEffect(() => {
             >
               <UserIcon size={48} color="#FFFFFF" />
             </LinearGradient>
+
             <Text style={styles.guestTitle}>Join the SpicyBeats Community</Text>
             <Text style={styles.guestDescription}>
               Connect with deal hunters, build your reputation, and never miss amazing savings again!
@@ -228,6 +284,13 @@ useEffect(() => {
 
   return (
     <View style={styles.container}>
+      <View style={styles.simpleHeader}>
+        <TouchableOpacity onPress={() => router.back()} style={styles.backBtn}>
+          <ArrowLeft size={24} color="#FFFFFF" />
+        </TouchableOpacity>
+        <Text style={styles.headerTitle}>Profile</Text>
+        <View style={styles.headerSpacer} />
+      </View>
       <ScrollView showsVerticalScrollIndicator={false}>
         {/* Profile Header */}
         <LinearGradient colors={['#6366f1', '#8b5cf6']} style={styles.profileHeader}>
@@ -245,6 +308,27 @@ useEffect(() => {
                       <Shield size={16} color="#10B981" />
                     </View>
                   )}
+                  
+                  {Platform.OS === 'web' && (
+                    <View style={styles.inlineStatsContainer}>
+                      <LinearGradient colors={['#10b981', '#059669']} style={styles.inlineStat}>
+                        <Text style={styles.inlineStatNumber}>{userStats.totalPosts}</Text>
+                        <Text style={styles.inlineStatLabel}>Posts</Text>
+                      </LinearGradient>
+                      <LinearGradient colors={['#f59e0b', '#d97706']} style={styles.inlineStat}>
+                        <Text style={styles.inlineStatNumber}>{followCounts?.followers || 0}</Text>
+                        <Text style={styles.inlineStatLabel}>Followers</Text>
+                      </LinearGradient>
+                      <LinearGradient colors={['#8b5cf6', '#7c3aed']} style={styles.inlineStat}>
+                        <Text style={styles.inlineStatNumber}>{(followCounts?.following_users || 0) + (followCounts?.following_stores || 0)}</Text>
+                        <Text style={styles.inlineStatLabel}>Following</Text>
+                      </LinearGradient>
+                      <LinearGradient colors={['#ef4444', '#dc2626']} style={styles.inlineStat}>
+                        <Text style={styles.inlineStatNumber}>{userStats.reputation}</Text>
+                        <Text style={styles.inlineStatLabel}>Reputation</Text>
+                      </LinearGradient>
+                    </View>
+                  )}
                 </View>
 
                 <View style={styles.levelContainer}>
@@ -254,41 +338,37 @@ useEffect(() => {
 
                 <View style={styles.memberInfo}>
                   <Calendar size={12} color="rgba(255,255,255,0.8)" />
-                  <Text style={styles.memberSince}>Member since {userStats.memberSince}</Text>
+                  <Text style={styles.memberSince}>{userStats.memberSince}</Text>
                 </View>
 
-                <View style={styles.miniStatsContainer}>
-                  <LinearGradient colors={['#10b981', '#059669']} style={styles.miniStatCard}>
-                    <Award size={16} color="#FFFFFF" />
-                    <Text style={styles.miniStatNumber}>{userStats.totalPosts}</Text>
-                    <Text style={styles.miniStatLabel}>Posts</Text>
-                  </LinearGradient>
-
-                  <LinearGradient colors={['#f59e0b', '#d97706']} style={styles.miniStatCard}>
-                    <Zap size={16} color="#FFFFFF" />
-                    <Text style={styles.miniStatNumber}>{userStats.approvalRate}%</Text>
-                    <Text style={styles.miniStatLabel}>Approval</Text>
-                  </LinearGradient>
-
-                  <LinearGradient colors={['#8b5cf6', '#7c3aed']} style={styles.miniStatCard}>
-                    <ThumbsUp size={16} color="#FFFFFF" />
-                    <Text style={styles.miniStatNumber}>{userStats.totalVotes}</Text>
-                    <Text style={styles.miniStatLabel}>Votes</Text>
-                  </LinearGradient>
-
-                  <LinearGradient colors={['#ef4444', '#dc2626']} style={styles.miniStatCard}>
-                    <Eye size={16} color="#FFFFFF" />
-                    <Text style={styles.miniStatNumber}>{userStats.reputation}</Text>
-                    <Text style={styles.miniStatLabel}>Reputation</Text>
-                  </LinearGradient>
-                </View>
+                {Platform.OS !== 'web' && (
+                  <View style={styles.mobileStatsContainer}>
+                    <LinearGradient colors={['#10b981', '#059669']} style={styles.mobileStatCard}>
+                      <Award size={16} color="#FFFFFF" />
+                      <Text style={styles.mobileStatNumber}>{userStats.totalPosts}</Text>
+                      <Text style={styles.mobileStatLabel}>Posts</Text>
+                    </LinearGradient>
+                    <LinearGradient colors={['#f59e0b', '#d97706']} style={styles.mobileStatCard}>
+                      <Zap size={16} color="#FFFFFF" />
+                      <Text style={styles.mobileStatNumber}>{followCounts?.followers || 0}</Text>
+                      <Text style={styles.mobileStatLabel}>Followers</Text>
+                    </LinearGradient>
+                    <LinearGradient colors={['#8b5cf6', '#7c3aed']} style={styles.mobileStatCard}>
+                      <ThumbsUp size={16} color="#FFFFFF" />
+                      <Text style={styles.mobileStatNumber}>{(followCounts?.following_users || 0) + (followCounts?.following_stores || 0)}</Text>
+                      <Text style={styles.mobileStatLabel}>Following</Text>
+                    </LinearGradient>
+                    <LinearGradient colors={['#ef4444', '#dc2626']} style={styles.mobileStatCard}>
+                      <Eye size={16} color="#FFFFFF" />
+                      <Text style={styles.mobileStatNumber}>{userStats.reputation}</Text>
+                      <Text style={styles.mobileStatLabel}>Reputation</Text>
+                    </LinearGradient>
+                  </View>
+                )}
               </View>
             </View>
 
             <View style={styles.headerRightButtons}>
-              <TouchableOpacity style={styles.iconButton} onPress={handleEditProfilePress}>
-                <Edit3 size={22} color="rgba(255,255,255,0.9)" />
-              </TouchableOpacity>
               <TouchableOpacity style={styles.iconButton} onPress={handleSettingsPress}>
                 <Settings size={22} color="rgba(255,255,255,0.9)" />
               </TouchableOpacity>
@@ -299,7 +379,24 @@ useEffect(() => {
           </View>
         </LinearGradient>
 
-        {/* My Deals */}
+        {/* Profile Tabs */}
+        <View style={styles.tabsBar}>
+          {['overview','following','saved'].map((key) => (
+            <TouchableOpacity
+              key={key}
+              onPress={() => setProfileTab(key as any)}
+              style={[styles.tabPill, profileTab === key && styles.tabPillActive]}
+            >
+              <Text style={[styles.tabPillText, profileTab === key && styles.tabPillTextActive]}>
+                {key === 'overview' ? 'Overview' : key === 'following' ? 'Following' : 'Saved'}
+              </Text>
+            </TouchableOpacity>
+          ))}
+        </View>
+
+        {/* My Deals (Overview) */}
+        {profileTab === 'overview' && (
+        <>
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>My Deals</Text>
 
@@ -459,7 +556,69 @@ useEffect(() => {
         </View>
 
         <View style={styles.bottomPadding} />
-      </ScrollView>
+      
+        </>
+        )}
+
+        {profileTab === 'following' && (
+          <View style={styles.section}>
+            <Text style={styles.sectionTitle}>Following Feed</Text>
+            {loadingFollowing ? (
+              <View style={styles.emptyState}><Text style={styles.emptyStateText}>Loading feed...</Text></View>
+            ) : followingFeed.length ? (
+              followingFeed.map((deal: any) => (
+                <DealCard 
+                  key={deal.id} 
+                  deal={{...deal, distance: '0 mi', isPinned: false, isSample: false}} 
+                  isGuest={false}
+                  userRole={profile?.role || 'user'}
+                  onVote={async (dealId, voteType) => {
+                    if (user?.id) {
+                      await dealService.voteDeal(dealId.toString(), user.id, voteType);
+                    }
+                  }}
+                />
+              ))
+            ) : (
+              <View style={styles.emptyState}>
+                <Text style={styles.emptyStateEmoji}>🧭</Text>
+                <Text style={styles.emptyStateText}>Follow users or stores to see their deals here.</Text>
+              </View>
+            )}
+          </View>
+        )}
+
+        {profileTab === 'saved' && (
+          <View style={styles.section}>
+            <Text style={styles.sectionTitle}>Saved Deals</Text>
+            {loadingSaved ? (
+              <View style={styles.emptyState}><Text style={styles.emptyStateText}>Loading saved deals...</Text></View>
+            ) : savedDeals.length ? (
+              savedDeals.map((deal: any) => (
+                <DealCard 
+                  key={deal.id} 
+                  deal={{...deal, distance: '0 mi', isPinned: false, isSample: false}} 
+                  isGuest={false}
+                  userRole={profile?.role || 'user'}
+                  onVote={async (dealId, voteType) => {
+                    if (user?.id) {
+                      await dealService.voteDeal(dealId.toString(), user.id, voteType);
+                    }
+                  }}
+                />
+              ))
+            ) : (
+              <View style={styles.emptyState}>
+                <Text style={styles.emptyStateEmoji}>💾</Text>
+                <Text style={styles.emptyStateText}>No saved deals yet</Text>
+                <Text style={styles.emptyStateSubtext}>Save deals you're interested in to see them here!</Text>
+              </View>
+            )}
+          </View>
+        )}
+
+
+</ScrollView>
 
       {/* Logout Confirm Dialog (custom, web & native) */}
       {showLogoutConfirm && (
@@ -515,7 +674,7 @@ const styles = StyleSheet.create({
   joinButton: { paddingHorizontal: 40, paddingVertical: 18 },
   joinButtonText: { color: '#FFFFFF', fontSize: 18, fontWeight: '700', textAlign: 'center' },
 
-  profileHeader: { paddingHorizontal: 20, paddingTop: Platform.OS === 'ios' ? 20 : 40, paddingBottom: 30 },
+  profileHeader: { paddingHorizontal: 20, paddingTop: Platform.OS === 'ios' ? 8 : 16, paddingBottom: 16 },
   profileHeaderContent: { flexDirection: 'row', alignItems: 'flex-start', justifyContent: 'space-between' },
   profileInfoSection: { flexDirection: 'row', alignItems: 'flex-start', flex: 1 },
   avatar: {
@@ -524,24 +683,72 @@ const styles = StyleSheet.create({
   },
   avatarText: { color: '#FFFFFF', fontSize: 28, fontWeight: '800' },
   profileInfo: { flex: 1 },
-  nameContainer: { flexDirection: 'row', alignItems: 'center', marginBottom: 8 },
+  nameContainer: { flexDirection: 'row', alignItems: 'center', marginBottom: 8, flexWrap: 'wrap' },
   username: { fontSize: 22, fontWeight: '800', color: '#FFFFFF', marginRight: 8, letterSpacing: -0.3 },
   verifiedContainer: { backgroundColor: 'rgba(16, 185, 129, 0.2)', borderRadius: 12, padding: 4 },
-  levelContainer: { flexDirection: 'row', alignItems: 'center', marginBottom: 6 },
+  levelContainer: { flexDirection: 'row', alignItems: 'center', marginBottom: 3 },
   levelText: { fontSize: 15, fontWeight: '700', color: '#fbbf24', marginLeft: 6 },
-  memberInfo: { flexDirection: 'row', alignItems: 'center', marginBottom: 15 },
+  memberInfo: { flexDirection: 'row', alignItems: 'center', marginBottom: 6 },
   memberSince: { fontSize: 14, color: 'rgba(255,255,255,0.8)', marginLeft: 6, fontWeight: '500' },
 
   headerRightButtons: { flexDirection: 'row', alignItems: 'center', marginTop: 5 },
   iconButton: { padding: 8, marginLeft: 10 },
 
-  miniStatsContainer: { flexDirection: 'row', justifyContent: 'space-between', marginTop: 10, width: '100%' },
-  miniStatCard: {
-    width: '23%', padding: 8, borderRadius: 12, alignItems: 'center',
-    shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.1, shadowRadius: 4, elevation: 4,
+  inlineStatsContainer: { 
+    flexDirection: 'row', 
+    marginLeft: 12, 
+    gap: 16 
   },
-  miniStatNumber: { fontSize: 16, fontWeight: '800', color: '#FFFFFF', marginTop: 4, marginBottom: 2 },
-  miniStatLabel: { fontSize: 9, fontWeight: '600', color: 'rgba(255,255,255,0.9)', textAlign: 'center', lineHeight: 12 },
+  inlineStat: { 
+    alignItems: 'center',
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 12,
+    minWidth: 50
+  },
+  inlineStatNumber: { 
+    fontSize: 16, 
+    fontWeight: '800', 
+    color: '#FFFFFF' 
+  },
+  inlineStatLabel: { 
+    fontSize: 10, 
+    fontWeight: '600', 
+    color: 'rgba(255,255,255,0.8)' 
+  },
+
+  // Mobile Stats
+  mobileStatsContainer: { 
+    flexDirection: 'row', 
+    justifyContent: 'space-between', 
+    marginTop: 10, 
+    width: '100%' 
+  },
+  mobileStatCard: {
+    width: '23%', 
+    padding: 8, 
+    borderRadius: 12, 
+    alignItems: 'center',
+    shadowColor: '#000', 
+    shadowOffset: { width: 0, height: 2 }, 
+    shadowOpacity: 0.1, 
+    shadowRadius: 4, 
+    elevation: 4,
+  },
+  mobileStatNumber: { 
+    fontSize: 16, 
+    fontWeight: '800', 
+    color: '#FFFFFF', 
+    marginTop: 4, 
+    marginBottom: 2 
+  },
+  mobileStatLabel: { 
+    fontSize: 9, 
+    fontWeight: '600', 
+    color: 'rgba(255,255,255,0.9)', 
+    textAlign: 'center', 
+    lineHeight: 12 
+  },
 
   section: {
     backgroundColor: '#FFFFFF', marginHorizontal: 16, marginVertical: 8, borderRadius: 20, paddingHorizontal: 20, paddingVertical: 24,
@@ -612,4 +819,54 @@ const styles = StyleSheet.create({
   modalConfirm: { borderRadius: 10, overflow: 'hidden' },
   modalConfirmGradient: { paddingVertical: 10, paddingHorizontal: 16, borderRadius: 10 },
   modalConfirmText: { color: '#fff', fontWeight: '800' },
+
+  tabsBar: {
+    flexDirection: 'row',
+    alignSelf: 'center',
+    backgroundColor: '#eef2ff',
+    borderRadius: 999,
+    padding: 6,
+    marginTop: 12,
+    marginBottom: 16,
+    gap: 6,
+  },
+  tabPill: {
+    paddingVertical: 8,
+    paddingHorizontal: 14,
+    borderRadius: 999,
+  },
+  tabPillActive: {
+    backgroundColor: '#6366f1',
+  },
+  tabPillText: {
+    color: '#1f2937',
+    fontWeight: '700'
+  },
+  tabPillTextActive: {
+    color: '#ffffff',
+  },
+
+  // Simple Header
+  simpleHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    backgroundColor: '#6366f1',
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+    paddingTop: Platform.OS === 'ios' ? 44 : 24,
+  },
+  backBtn: {
+    padding: 8,
+    borderRadius: 8,
+    backgroundColor: 'rgba(255,255,255,0.2)',
+  },
+  headerTitle: {
+    fontSize: 20,
+    fontWeight: '800',
+    color: '#FFFFFF',
+  },
+  headerSpacer: {
+    width: 40,
+  },
 });

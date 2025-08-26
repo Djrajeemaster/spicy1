@@ -16,23 +16,19 @@ export default function ReportManagement() {
   const refresh = async () => {
     setLoading(true);
     try {
-      const { data, error } = await reportService.getPendingReports();
+      // Use a single query with joins to avoid N+1 problem
+      const { data, error } = await supabase
+        .from('reports')
+        .select(`
+          *,
+          deal:deals!reports_target_id_fkey(*),
+          reporter:users!reports_reporter_id_fkey(id, username, email, role)
+        `)
+        .eq('status', 'pending')
+        .order('created_at', { ascending: false });
+        
       if (error) throw error;
-
-      const hydrated = await Promise.all(
-        (data || []).map(async (r) => {
-          const [dealRes, userRes] = await Promise.all([
-            supabase.from('deals').select('*').eq('id', r.target_id).single(),
-            supabase.from('users').select('*').eq('id', r.reporter_id).single()
-          ]);
-          return {
-            ...r,
-            deal: dealRes.data ?? null,
-            reporter: userRes.data ?? null,
-          };
-        })
-      );
-      setReports(hydrated);
+      setReports(data || []);
     } catch (e) {
       console.error(e);
       Alert.alert('Error', 'Failed to load reports');

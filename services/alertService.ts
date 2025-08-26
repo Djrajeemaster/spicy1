@@ -129,8 +129,13 @@ class AlertService {
     try {
       // For now, return mock data since we don't have a notifications table
       // In a real implementation, you'd query a notifications/alerts_history table
-      const mockAlerts: RecentAlert[] = [
-        {
+      
+      // Simulate some variability in mock data
+      const hasNewDeals = Math.random() > 0.5;
+      const mockAlerts: RecentAlert[] = [];
+      
+      if (hasNewDeals) {
+        mockAlerts.push({
           id: '1',
           title: "New Electronics Deal Near You",
           description: "Gaming laptop 40% off at TechWorld - 3.2 miles away",
@@ -138,22 +143,41 @@ class AlertService {
           isRead: false,
           category: "electronics",
           created_at: new Date(Date.now() - 2 * 60 * 60 * 1000).toISOString(),
-        },
-        {
-          id: '2',
-          title: "Weekly Deals Digest",
-          description: "15 new deals this week in your favorite categories",
-          time: "1 day ago",
-          isRead: true,
-          category: "digest",
-          created_at: new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString(),
-        },
-      ];
+        });
+      }
+      
+      // Always include digest
+      mockAlerts.push({
+        id: '2',
+        title: "Weekly Deals Digest",
+        description: "15 new deals this week in your favorite categories",
+        time: "1 day ago",
+        isRead: true,
+        category: "digest",
+        created_at: new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString(),
+      });
 
       return { data: mockAlerts, error: null };
     } catch (error) {
       console.error('Error fetching recent alerts:', error);
       return { data: [], error };
+    }
+  }
+
+  /**
+   * Gets the count of unread alerts for a user.
+   */
+  async getUnreadCount(userId: string): Promise<{ data: number; error: any }> {
+    try {
+      // In a real implementation, you'd query a notifications table
+      // For now, return a mock count based on recent alerts
+      const { data: alerts } = await this.getRecentAlerts(userId);
+      const unreadCount = alerts.filter(alert => !alert.isRead).length;
+      
+      return { data: unreadCount, error: null };
+    } catch (error) {
+      console.error('Error fetching unread alert count:', error);
+      return { data: 0, error };
     }
   }
 

@@ -2,7 +2,15 @@ import { serve } from 'https://deno.land/std@0.224.0/http/server.ts';
 import { requireAdmin, audit } from '../_shared/admin-guard.ts';
 
 function json(obj: any, status = 200) {
-  return new Response(JSON.stringify(obj), { status, headers: { 'content-type': 'application/json' } });
+  return new Response(JSON.stringify(obj), { 
+    status, 
+    headers: { 
+      'content-type': 'application/json',
+      'Access-Control-Allow-Origin': '*',
+      'Access-Control-Allow-Methods': 'POST, OPTIONS',
+      'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type, x-admin-elevation'
+    } 
+  });
 }
 
 function randToken(n = 32) {
@@ -13,6 +21,18 @@ function randToken(n = 32) {
 }
 
 serve(async (req) => {
+  // Handle CORS preflight
+  if (req.method === 'OPTIONS') {
+    return new Response(null, {
+      status: 200,
+      headers: {
+        'Access-Control-Allow-Origin': '*',
+        'Access-Control-Allow-Methods': 'POST, OPTIONS',
+        'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type, x-admin-elevation'
+      }
+    });
+  }
+
   try {
     if (req.method !== 'POST') return json({ error: 'method_not_allowed' }, 405);
     const ctx = await requireAdmin(req);

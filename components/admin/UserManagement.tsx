@@ -8,6 +8,7 @@ import { AdminUser } from '@/hooks/useAdminData';
 interface UserManagementProps {
   users: AdminUser[];
   onUserAction: (userId: string, action: 'Ban' | 'Unban') => void;
+  onAddUser?: () => void;
 }
 
 interface UserItemProps {
@@ -83,7 +84,7 @@ const UserItem: React.FC<UserItemProps> = React.memo(({ user, onUserAction }) =>
 
 UserItem.displayName = 'UserItem';
 
-export const UserManagement: React.FC<UserManagementProps> = ({ users, onUserAction }) => {
+export const UserManagement: React.FC<UserManagementProps> = ({ users, onUserAction, onAddUser }) => {
   const renderUser = ({ item }: { item: AdminUser }) => (
     <UserItem user={item} onUserAction={onUserAction} />
   );
@@ -96,6 +97,7 @@ export const UserManagement: React.FC<UserManagementProps> = ({ users, onUserAct
         <Text style={styles.title}>User Management</Text>
         <TouchableOpacity 
           style={styles.addButton}
+          onPress={onAddUser}
           accessibilityRole="button"
           accessibilityLabel="Add new user"
         >

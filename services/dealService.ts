@@ -37,10 +37,7 @@ export interface DealFilters {
   radius?: number; // miles
 }
 
-/** Escape single quotes for literal embedding in SQL strings */
-function escapeSingleQuotes(input: string): string {
-  return input.replace(/'/g, "''");
-}
+
 
 // NOTE: If your FK name differs, you can swap to `users!created_by(...)`
 // which targets the column name rather than the constraint name.
@@ -109,23 +106,21 @@ class DealService {
       // --- search + rank ---
       let finalQuery = query;
       if (filters.search?.trim()) {
-        const raw = filters.search.trim();
-        finalQuery = finalQuery.textSearch('searchable_text', raw, { type: 'websearch', config: 'english' });
+        const searchTerm = filters.search.trim();
+        finalQuery = finalQuery.textSearch('searchable_text', searchTerm, { type: 'websearch', config: 'english' });
 
-        const esc = escapeSingleQuotes(raw);
+        // Use Supabase's built-in text search instead of raw SQL interpolation
         finalQuery = finalQuery
           .select(
             `
             *,
             ${REL_STORE},
             ${REL_CATEGORY},
-            ${REL_USER},
-            rank:ts_rank(searchable_text, websearch_to_tsquery('english','${esc}'))
+            ${REL_USER}
             ${withUserBits}
           `,
             { count: null }
           )
-          .order('rank', { ascending: false })
           .order('created_at', { ascending: false });
       } else {
         finalQuery = finalQuery.select(baseSelect, { count: null });
@@ -434,6 +429,29 @@ class DealService {
     } catch (error) {
       console.error('Error fetching pending deals:', error);
       return { data: [], error };
+    }
+  }
+
+  async incrementViewCount(dealId: string) {
+    try {
+      const { data, error } = await supabase
+        .from('deals')
+        .select('view_count')
+        .eq('id', dealId)
+        .single();
+      
+      if (error) throw error;
+      
+      const newCount = (data.view_count || 0) + 1;
+      const { error: updateError } = await supabase
+        .from('deals')
+        .update({ view_count: newCount })
+        .eq('id', dealId);
+        
+      if (updateError) throw updateError;
+      return { error: null };
+    } catch (error) {
+      return { error };
     }
   }
 

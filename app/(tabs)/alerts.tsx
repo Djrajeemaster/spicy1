@@ -1,5 +1,7 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { View, Text, TextInput, TouchableOpacity, ScrollView, ActivityIndicator, Switch } from 'react-native';
+import { View, Text, TextInput, TouchableOpacity, ScrollView, ActivityIndicator, Switch, StyleSheet } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
+import { Header } from '@/components/Header';
 import { useAuth } from '@/contexts/AuthProvider';
 import { alertService } from '@/services/alertService';
 import { storeService } from '@/services/storeService';
@@ -25,12 +27,12 @@ export default function AlertsScreen() {
     (async () => {
       setLoading(true);
       try {
-        const [a, s] = await Promise.all([
+        const [alertsRes, storesRes] = await Promise.all([
           alertService.getUserAlerts(user.id),
           storeService.getStores()
         ]);
-        setAlerts(a || []);
-        setStores((s || []).map((x: any) => ({ id: x.id, name: x.name })));
+        setAlerts(Array.isArray(alertsRes.data) ? alertsRes.data : []);
+        setStores(Array.isArray(storesRes.data) ? storesRes.data.map((x: any) => ({ id: x.id, name: x.name })) : []);
       } finally {
         setLoading(false);
       }
@@ -55,108 +57,145 @@ export default function AlertsScreen() {
     if (type === 'price_threshold' && (!keyword.trim() || !maxPrice.trim())) return;
     if (type === 'store' && !storeId) return;
 
-    const created = await alertService.createAlert({
-      user_id: user.id,
-      type,
-      rules: rulesPreview,
-      is_active: true
-    });
-    setAlerts(prev => [created, ...(prev || [])]);
-    setKeyword(''); setMaxPrice(''); setStoreId('');
+    try {
+      const { data: created } = await alertService.createAlert({
+        user_id: user.id,
+        type,
+        rules: rulesPreview,
+        is_active: true
+      });
+      if (created) setAlerts(prev => [created, ...(prev || [])]);
+      setKeyword(''); setMaxPrice(''); setStoreId('');
+    } catch (error) {
+      console.error('Error creating alert:', error);
+    }
   };
 
   const toggleActive = async (alertId: string, isActive: boolean) => {
-    await alertService.updateAlert(alertId, { is_active: isActive });
-    setAlerts(prev => (prev || []).map(a => a.id === alertId ? { ...a, is_active: isActive } : a));
+    try {
+      await alertService.updateAlert(alertId, { is_active: isActive });
+      setAlerts(prev => (prev || []).map(a => a.id === alertId ? { ...a, is_active: isActive } : a));
+    } catch (error) {
+      console.error('Error updating alert:', error);
+    }
   };
 
   if (loading) {
-    return <View style={{ flex:1, alignItems:'center', justifyContent:'center' }}><ActivityIndicator /></View>;
+    return <View style={styles.loadingContainer}><ActivityIndicator size="large" color="#6366f1" /></View>;
   }
 
   return (
-    <ScrollView contentContainerStyle={{ padding: 16 }}>
-      <TouchableOpacity onPress={() => setExpanded(x => !x)} style={{ flexDirection:'row', justifyContent:'space-between', marginBottom: 8 }}>
-        <Text style={{ fontSize:18, fontWeight:'700' }}>Create New Alert</Text>
-        <Text>{expanded ? '▲' : '▼'}</Text>
-      </TouchableOpacity>
+    <SafeAreaView style={styles.container}>
+      <Header />
+      <ScrollView contentContainerStyle={styles.content}>
+        <TouchableOpacity onPress={() => setExpanded(x => !x)} style={styles.expandButton}>
+          <Text style={styles.title}>Create New Alert</Text>
+          <Text style={styles.arrow}>{expanded ? '▲' : '▼'}</Text>
+        </TouchableOpacity>
 
-      {expanded && (
-        <View style={{ padding:12, borderWidth:1, borderColor:'#e5e7eb', borderRadius:10, marginBottom:16 }}>
-          <View style={{ flexDirection:'row', flexWrap:'wrap', gap:8, marginBottom:8 }}>
-            {(['keyword','price_threshold','store'] as AlertType[]).map(t => (
-              <TouchableOpacity
-                key={t}
-                onPress={() => setType(t)}
-                style={{
-                  paddingHorizontal:12, paddingVertical:8, borderRadius:999,
-                  borderWidth:1, borderColor: type===t ? '#111' : '#cbd5e1',
-                  backgroundColor: type===t ? '#f3f4f6' : 'transparent'
-                }}
-              >
-                <Text style={{ textTransform:'capitalize' }}>{t.replace('_',' ')}</Text>
-              </TouchableOpacity>
-            ))}
-          </View>
-
-          {type !== 'store' && (
-            <View style={{ marginBottom: 8 }}>
-              <Text style={{ fontWeight:'600' }}>Keyword</Text>
-              <TextInput
-                placeholder="e.g., gaming laptop"
-                value={keyword}
-                onChangeText={setKeyword}
-                style={{ borderWidth:1, borderColor:'#e5e7eb', borderRadius:8, padding:10, marginTop:4 }}
-              />
+        {expanded && (
+          <View style={styles.formContainer}>
+            <View style={styles.typeButtons}>
+              {(['keyword','price_threshold','store'] as AlertType[]).map(t => (
+                <TouchableOpacity
+                  key={t}
+                  onPress={() => setType(t)}
+                  style={[styles.typeButton, type===t && styles.typeButtonActive]}
+                >
+                  <Text style={styles.typeButtonText}>{t.replace('_',' ')}</Text>
+                </TouchableOpacity>
+              ))}
             </View>
-          )}
 
-          {type === 'price_threshold' && (
-            <View style={{ marginBottom: 8 }}>
-              <Text style={{ fontWeight:'600' }}>Max Price</Text>
-              <TextInput
-                keyboardType="numeric"
-                placeholder="500"
-                value={maxPrice}
-                onChangeText={setMaxPrice}
-                style={{ borderWidth:1, borderColor:'#e5e7eb', borderRadius:8, padding:10, marginTop:4 }}
-              />
-            </View>
-          )}
-
-          {type === 'store' && (
-            <View style={{ marginBottom: 8 }}>
-              <Text style={{ fontWeight:'600' }}>Store</Text>
-              <View style={{ borderWidth:1, borderColor:'#e5e7eb', borderRadius:8, marginTop:4 }}>
-                {stores.map(s => (
-                  <TouchableOpacity key={s.id} onPress={() => setStoreId(s.id)} style={{ padding:10, backgroundColor: s.id===storeId ? '#f1f5f9' : 'transparent' }}>
-                    <Text>{s.name}</Text>
-                  </TouchableOpacity>
-                ))}
+            {type !== 'store' && (
+              <View style={styles.inputGroup}>
+                <Text style={styles.label}>Keyword</Text>
+                <TextInput
+                  placeholder="e.g., gaming laptop"
+                  value={keyword}
+                  onChangeText={setKeyword}
+                  style={styles.input}
+                />
               </View>
+            )}
+
+            {type === 'price_threshold' && (
+              <View style={styles.inputGroup}>
+                <Text style={styles.label}>Max Price</Text>
+                <TextInput
+                  keyboardType="numeric"
+                  placeholder="500"
+                  value={maxPrice}
+                  onChangeText={setMaxPrice}
+                  style={styles.input}
+                />
+              </View>
+            )}
+
+            {type === 'store' && (
+              <View style={styles.inputGroup}>
+                <Text style={styles.label}>Store</Text>
+                <View style={styles.storeList}>
+                  {stores.map(s => (
+                    <TouchableOpacity key={s.id} onPress={() => setStoreId(s.id)} style={[styles.storeItem, s.id===storeId && styles.storeItemActive]}>
+                      <Text>{s.name}</Text>
+                    </TouchableOpacity>
+                  ))}
+                </View>
+              </View>
+            )}
+
+            <View style={styles.createRow}>
+              <TouchableOpacity onPress={onCreate} style={styles.createButton}>
+                <Text style={styles.createButtonText}>Create</Text>
+              </TouchableOpacity>
+              <Text style={styles.preview}>Preview: {JSON.stringify(rulesPreview)}</Text>
             </View>
-          )}
-
-          <View style={{ flexDirection:'row', alignItems:'center', gap:12 }}>
-            <TouchableOpacity onPress={onCreate} style={{ backgroundColor:'#111', paddingHorizontal:14, paddingVertical:10, borderRadius:10 }}>
-              <Text style={{ color:'#fff', fontWeight:'700' }}>Create</Text>
-            </TouchableOpacity>
-            <Text style={{ fontSize:12, opacity:0.6 }}>Preview: {JSON.stringify(rulesPreview)}</Text>
           </View>
-        </View>
-      )}
+        )}
 
-      <Text style={{ fontSize:16, fontWeight:'700', marginBottom: 8 }}>Your Alerts</Text>
-      {(alerts || []).length === 0 && <Text style={{ opacity:0.7 }}>No alerts yet.</Text>}
-      {(alerts || []).map((a:any) => (
-        <View key={a.id} style={{ padding:12, borderWidth:1, borderColor:'#f1f5f9', borderRadius:10, marginBottom:10 }}>
-          <View style={{ flexDirection:'row', justifyContent:'space-between', alignItems:'center' }}>
-            <Text style={{ fontWeight:'700', textTransform:'capitalize' }}>{String(a.type || '').replace('_',' ')}</Text>
-            <Switch value={!!a.is_active} onValueChange={(v)=>toggleActive(a.id, v)} />
+        <Text style={styles.alertsTitle}>Your Alerts</Text>
+        {(alerts || []).length === 0 && <Text style={styles.noAlerts}>No alerts yet.</Text>}
+        {(alerts || []).map((a:any) => (
+          <View key={a.id} style={styles.alertCard}>
+            <View style={styles.alertHeader}>
+              <Text style={styles.alertType}>{String(a.type || '').replace('_',' ')}</Text>
+              <Switch value={!!a.is_active} onValueChange={(v)=>toggleActive(a.id, v)} />
+            </View>
+            <Text style={styles.alertRules}>{JSON.stringify(a.rules || {})}</Text>
           </View>
-          <Text style={{ marginTop:6, opacity:0.8 }}>{JSON.stringify(a.rules || {})}</Text>
-        </View>
-      ))}
-    </ScrollView>
+        ))}
+      </ScrollView>
+    </SafeAreaView>
   );
 }
+
+const styles = StyleSheet.create({
+  container: { flex: 1, backgroundColor: '#f8fafc' },
+  loadingContainer: { flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: '#f8fafc' },
+  content: { padding: 20 },
+  expandButton: { flexDirection: 'row', justifyContent: 'space-between', marginBottom: 16, padding: 16, backgroundColor: '#FFFFFF', borderRadius: 16, shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.1, shadowRadius: 4, elevation: 3 },
+  title: { fontSize: 20, fontWeight: '800', color: '#1e293b' },
+  arrow: { fontSize: 18, color: '#6366f1', fontWeight: '700' },
+  formContainer: { padding: 20, backgroundColor: '#FFFFFF', borderRadius: 16, marginBottom: 20, shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.1, shadowRadius: 4, elevation: 3 },
+  typeButtons: { flexDirection: 'row', flexWrap: 'wrap', gap: 12, marginBottom: 20 },
+  typeButton: { paddingHorizontal: 16, paddingVertical: 10, borderRadius: 20, borderWidth: 1, borderColor: '#e2e8f0' },
+  typeButtonActive: { borderColor: '#6366f1', backgroundColor: '#6366f1' },
+  typeButtonText: { textTransform: 'capitalize', color: '#64748b', fontWeight: '600' },
+  inputGroup: { marginBottom: 20 },
+  label: { fontWeight: '700', color: '#1e293b', marginBottom: 8, fontSize: 16 },
+  input: { borderWidth: 1, borderColor: '#e2e8f0', borderRadius: 12, padding: 16, fontSize: 16, backgroundColor: '#f8fafc' },
+  storeList: { borderWidth: 1, borderColor: '#e2e8f0', borderRadius: 12, backgroundColor: '#f8fafc' },
+  storeItem: { padding: 16, borderBottomWidth: 1, borderBottomColor: '#e2e8f0' },
+  storeItemActive: { backgroundColor: '#6366f1' },
+  createRow: { flexDirection: 'row', alignItems: 'center', gap: 16 },
+  createButton: { backgroundColor: '#10b981', paddingHorizontal: 20, paddingVertical: 12, borderRadius: 12 },
+  createButtonText: { color: '#FFFFFF', fontWeight: '700', fontSize: 16 },
+  preview: { fontSize: 12, color: '#64748b', flex: 1 },
+  alertsTitle: { fontSize: 22, fontWeight: '800', color: '#1e293b', marginBottom: 20 },
+  noAlerts: { color: '#64748b', fontStyle: 'italic', textAlign: 'center', fontSize: 16 },
+  alertCard: { padding: 20, backgroundColor: '#FFFFFF', borderRadius: 16, marginBottom: 16, shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.1, shadowRadius: 4, elevation: 3 },
+  alertHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
+  alertType: { fontWeight: '700', textTransform: 'capitalize', color: '#1e293b', fontSize: 16 },
+  alertRules: { marginTop: 12, color: '#64748b', fontSize: 14 }
+});

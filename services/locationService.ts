@@ -69,7 +69,7 @@ class LocationService {
         city: address?.city || undefined,
         state: address?.region || undefined,
         country: address?.country || undefined,
-        address: `${address?.street || ''} ${address?.streetNumber || ''}`.trim() || undefined,
+        address: [address?.street, address?.streetNumber].filter(Boolean).join(' ') || undefined,
       };
 
       this.currentLocation = locationData;

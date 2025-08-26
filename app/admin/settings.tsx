@@ -61,7 +61,7 @@ export default function AdminSettings() {
         <Text style={styles.rowTitle}>{title}</Text>
         <Text style={styles.rowSub}>{sub}</Text>
       </View>
-      <View>{right}</View>
+      <View>{typeof right === 'string' ? <Text>{right}</Text> : right}</View>
     </View>
   );
 

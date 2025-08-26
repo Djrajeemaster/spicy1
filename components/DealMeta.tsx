@@ -83,22 +83,20 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     flexWrap: 'wrap',
-    gap: 6,
   },
   by: {
     color: '#64748b',
     fontWeight: '500',
     fontSize: 13,
+    marginRight: 6,
   },
   userBlock: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 6,
   },
   userRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 4,
   },
   avatar: {
     width: 20,
@@ -119,6 +117,7 @@ const styles = StyleSheet.create({
     color: '#2563eb',
     fontWeight: '700',
     fontSize: 13,
+    marginLeft: 4,
   },
 
   // Compact follow button (same height as username line)
@@ -129,7 +128,8 @@ const styles = StyleSheet.create({
     paddingHorizontal: 8,
     paddingVertical: 2,
     backgroundColor: '#fff',
-    alignSelf: 'center', // align with text baseline
+    alignSelf: 'center',
+    marginLeft: 6,
   },
   followTxt: {
     fontSize: 11,
