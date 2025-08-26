@@ -1,0 +1,37 @@
+{
+  "expo": {
+    "name": "SpicyDeals",
+    "slug": "bolt-expo-nativewind",
+    "icon": "./assets/icon.png",
+    "splash": {
+      "image": "./assets/splash.png",
+      "resizeMode": "contain",
+      "backgroundColor": "#030849"
+    },
+    "android": {
+      "package": "com.djrajeemix.boltexponativewind",
+      "adaptiveIcon": {
+        "foregroundImage": "./assets/adaptive-icon.png",
+        "backgroundColor": "#030849",
+        "monochromeImage": "./assets/adaptive-icon-monochrome.png"
+      }
+    },
+    "notification": {
+      "icon": "./assets/notification-icon.png",
+      "color": "#030849"
+    },
+    "web": {
+      "favicon": "./assets/icon.png"
+    },
+    "plugins": [
+      "expo-notifications",
+      "expo-font",
+      "expo-web-browser"
+    ],
+    "extra": {
+      "eas": {
+        "projectId": "013d336f-c10e-4da4-a206-8770181bd615"
+      }
+    }
+  }
+}

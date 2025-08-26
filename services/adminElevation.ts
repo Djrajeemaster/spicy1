@@ -1,0 +1,3 @@
+import { supabase } from '@/lib/supabase';
+export type Elevation = { token: string; valid_until: string };
+export async function elevate(ttlMinutes=10):Promise<Elevation>{const url=`${process.env.EXPO_PUBLIC_SUPABASE_URL}/functions/v1/admin-elevate`;const {data:session}=await supabase.auth.getSession();const jwt=session.session?.access_token;const res=await fetch(url,{method:'POST',headers:{'Content-Type':'application/json',...(jwt?{Authorization:`Bearer ${jwt}`}:{})},body:JSON.stringify({ttl_minutes:ttlMinutes})});if(!res.ok){const t=await res.text().catch(()=>'' );throw new Error(`elevate failed: ${res.status} ${t}`);}return res.json();}
