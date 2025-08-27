@@ -22,14 +22,6 @@ class UserService {
       if (error) throw error;
       return data as PublicUserProfile;
     }, 'UserService.getUserById');
-  } 
-  searchByUsernamePrefix(prefix: string, limit = 5) {
-    return safeAsync(async () => {
-      if (!prefix) return [];
-      const { data, error } = await supabase.from('users').select('id, username, avatar_url').ilike('username', `${prefix}%`).limit(limit);
-      if (error) throw error;
-      return data;
-    }, 'UserService.searchByUsernamePrefix');
   }
 }
 

@@ -1,166 +1,57 @@
 export type UserRole = 'guest' | 'user' | 'verified' | 'business' | 'moderator' | 'admin' | 'superadmin';
 
-export interface User {
-  id: string;
-  username: string;
-  email?: string;
-  role: UserRole;
-  isVerified: boolean;
-  reputation: number;
-  joinDate: string;
-  totalPosts: number;
-  status: 'active' | 'banned' | 'suspended';
-  businessInfo?: {
-    businessName: string;
-    businessType: string;
-    verified: boolean;
-  };
-}
-
-export interface UserPrivileges {
-  canPost: boolean;
-  canVote: boolean;
-  canComment: boolean;
-  canModerate: boolean;
-  canManageUsers: boolean;
-  canManageContent: boolean;
-  canAccessAdmin: boolean;
-  maxDailyPosts: number;
-  autoApprove: boolean;
-  canCreateCategories: boolean;
-  canManageBanners: boolean;
-  canViewAnalytics: boolean;
-}
-
-export const getRolePrivileges = (role: UserRole, reputation: number = 0): UserPrivileges => {
-  const basePrivileges: UserPrivileges = {
-    canPost: false,
-    canVote: false,
-    canComment: false,
-    canModerate: false,
-    canManageUsers: false,
-    canManageContent: false,
-    canAccessAdmin: false,
-    maxDailyPosts: 0,
-    autoApprove: false,
-    canCreateCategories: false,
-    canManageBanners: false,
-    canViewAnalytics: false,
-  };
-
+export const getRoleColor = (role: UserRole): string => {
   switch (role) {
-    case 'guest':
-      return {
-        ...basePrivileges,
-        canVote: false,
-        canComment: false,
-        canPost: false,
-      };
-
     case 'user':
-      return {
-        ...basePrivileges,
-        canPost: reputation >= 2.0,
-        canVote: true,
-        canComment: true,
-        maxDailyPosts: 3,
-        autoApprove: false,
-      };
-
+      return '#6366f1'; // Indigo
     case 'verified':
-      return {
-        ...basePrivileges,
-        canPost: true,
-        canVote: true,
-        canComment: true,
-        maxDailyPosts: 10,
-        autoApprove: reputation >= 4.0,
-      };
-
+      return '#10b981'; // Green
     case 'business':
-      return {
-        ...basePrivileges,
-        canPost: true,
-        canVote: true,
-        canComment: true,
-        maxDailyPosts: 15,
-        autoApprove: true,
-        canViewAnalytics: true,
-      };
-
+      return '#f59e0b'; // Amber
     case 'moderator':
-      return {
-        ...basePrivileges,
-        canPost: true,
-        canVote: true,
-        canComment: true,
-        canModerate: true,
-        canManageContent: true,
-        maxDailyPosts: 25,
-        autoApprove: true,
-        canViewAnalytics: true,
-      };
-
+      return '#8b5cf6'; // Violet
     case 'admin':
-      return {
-        ...basePrivileges,
-        canPost: true,
-        canVote: true,
-        canComment: true,
-        canModerate: true,
-        canManageUsers: true,
-        canManageContent: true,
-        canAccessAdmin: true,
-        canCreateCategories: true,
-        canManageBanners: true,
-        maxDailyPosts: 50,
-        autoApprove: true,
-        canViewAnalytics: true,
-      };
-
+      return '#ef4444'; // Red
     case 'superadmin':
-      return {
-        canPost: true,
-        canVote: true,
-        canComment: true,
-        canModerate: true,
-        canManageUsers: true,
-        canManageContent: true,
-        canAccessAdmin: true,
-        canCreateCategories: true,
-        canManageBanners: true,
-        maxDailyPosts: 999,
-        autoApprove: true,
-        canViewAnalytics: true,
-      };
-
+      return '#dc2626'; // Darker Red
     default:
-      return basePrivileges;
+      return '#1e293b'; // Slate
   }
 };
 
 export const getRoleDisplayName = (role: UserRole): string => {
-  const roleNames = {
-    guest: 'Guest',
-    user: 'User',
-    verified: 'Verified User',
-    business: 'Business',
-    moderator: 'Moderator',
-    admin: 'Admin',
-    superadmin: 'Super Admin',
-  };
-  return roleNames[role] || 'Unknown';
+  switch (role) {
+    case 'user': return 'User';
+    case 'verified': return 'Verified';
+    case 'business': return 'Business';
+    case 'moderator': return 'Moderator';
+    case 'admin': return 'Admin';
+    case 'superadmin': return 'Super Admin';
+    default: return 'Guest';
+  }
 };
 
-export const getRoleColor = (role: UserRole): string => {
-  const roleColors = {
-    guest: '#94a3b8',
-    user: '#6366f1',
-    verified: '#10b981',
-    business: '#f59e0b',
-    moderator: '#8b5cf6',
-    admin: '#ef4444',
-    superadmin: '#dc2626',
+export const getRolePrivileges = (role: UserRole, reputation: number) => {
+  const base = {
+    canPost: false,
+    canVote: false,
+    canComment: false,
+    canReport: false,
+    instantPublish: false,
   };
-  return roleColors[role] || '#94a3b8';
+
+  if (role === 'guest') return base;
+
+  base.canVote = true;
+  base.canComment = true;
+  base.canReport = true;
+
+  if (role === 'user' && reputation >= 1.0) base.canPost = true;
+
+  if (['verified', 'business', 'moderator', 'admin', 'superadmin'].includes(role)) {
+    base.canPost = true;
+    base.instantPublish = true;
+  }
+
+  return base;
 };

@@ -34,7 +34,9 @@ export default function RootLayout() {
           <PushInit />
           <FrameworkInit />
           <Stack screenOptions={{ headerShown: false }}>
-            <Stack.Screen name="+not-found" />
+            <Stack.Screen name="(tabs)" />
+            <Stack.Screen name="users/[username]" />
+            <Stack.Screen name="deal-details" />
           </Stack>
           <StatusBar style="auto" />
         </CurrencyProvider>

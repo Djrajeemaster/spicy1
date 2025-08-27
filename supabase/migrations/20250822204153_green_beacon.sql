@@ -355,3 +355,25 @@ CREATE TRIGGER update_comments_updated_at BEFORE UPDATE ON comments
 
 CREATE TRIGGER update_alerts_updated_at BEFORE UPDATE ON alerts
   FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
+
+-- Function to handle votes atomically
+CREATE OR REPLACE FUNCTION handle_vote(deal_id_param uuid, user_id_param uuid, vote_type_param text)
+RETURNS void AS $$
+DECLARE
+  existing_vote_type text;
+BEGIN
+  -- Check for an existing vote
+  SELECT vote_type INTO existing_vote_type FROM votes WHERE user_id = user_id_param AND deal_id = deal_id_param;
+
+  -- Upsert the vote
+  INSERT INTO votes (deal_id, user_id, vote_type)
+  VALUES (deal_id_param, user_id_param, vote_type_param)
+  ON CONFLICT (deal_id, user_id) DO UPDATE SET vote_type = vote_type_param;
+
+  -- Update vote counts on deals table
+  UPDATE deals SET
+    votes_up = votes_up + (CASE WHEN vote_type_param = 'up' AND (existing_vote_type IS NULL OR existing_vote_type = 'down') THEN 1 WHEN vote_type_param = 'down' AND existing_vote_type = 'up' THEN -1 ELSE 0 END),
+    votes_down = votes_down + (CASE WHEN vote_type_param = 'down' AND (existing_vote_type IS NULL OR existing_vote_type = 'up') THEN 1 WHEN vote_type_param = 'up' AND existing_vote_type = 'down' THEN -1 ELSE 0 END)
+  WHERE id = deal_id_param;
+END;
+$$ LANGUAGE plpgsql;

@@ -6,7 +6,8 @@ import {
   ScrollView, 
   TouchableOpacity,
   Alert,
-  ActivityIndicator
+  ActivityIndicator,
+  useWindowDimensions,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { MapPin, Navigation, Filter, Zap } from 'lucide-react-native';
@@ -21,6 +22,8 @@ import { locationService } from '@/services/locationService';
 export default function NearbyScreen() {
   const { user, profile } = useAuth();
   const isGuest = !user;
+  const { width } = useWindowDimensions();
+  const isDesktop = Platform.OS === 'web' && width >= 768;
   const [locationEnabled, setLocationEnabled] = useState(false);
   const [radius, setRadius] = useState(5); // miles
   const [nearbyDeals, setNearbyDeals] = useState([]);
@@ -43,7 +46,7 @@ export default function NearbyScreen() {
     setLoading(true);
     try {
       // Fetch all deals first
-      const { data: allDeals, error } = await dealService.getDeals({ limit: 100 }, user?.id);
+      const [error, allDeals] = await dealService.getDeals({ limit: 100 }, user?.id);
       
       if (error) {
         console.error('Error fetching deals:', error);
@@ -53,9 +56,9 @@ export default function NearbyScreen() {
 
       // Filter by proximity using location service
       const { data: filteredDeals, error: locationError } = await locationService.filterDealsByProximity(
-        allDeals.map(deal => ({
+        (allDeals || []).map(deal => ({
           ...deal,
-          id: parseInt(deal.id),
+          id: String(deal.id),
           price: parseFloat(deal.price.toString()),
           originalPrice: deal.original_price ? parseFloat(deal.original_price.toString()) : undefined,
           distance: 'N/A',
@@ -148,6 +151,8 @@ export default function NearbyScreen() {
 
     Alert.alert("Vote Recorded!", `Thanks for your ${voteType}vote!`);
   };
+
+  const numColumns = isDesktop ? (width > 1200 ? 4 : width > 900 ? 3 : 2) : 1;
 
   return (
     <View style={styles.container}>
@@ -251,26 +256,30 @@ export default function NearbyScreen() {
             </View>
           ) : (
             <ScrollView style={styles.dealsContainer} showsVerticalScrollIndicator={false}>
-            <View style={styles.statsHeader}>
-              <View style={styles.statsItem}>
-                <Zap size={16} color="#10b981" />
-                <Text style={styles.statsText}>
-                  {nearbyDeals.length} deals nearby
-                </Text>
+              <View style={styles.statsHeader}>
+                <View style={styles.statsItem}>
+                  <Zap size={16} color="#10b981" />
+                  <Text style={styles.statsText}>
+                    {nearbyDeals.length} deals nearby
+                  </Text>
+                </View>
+                <Text style={styles.sortText}>Sorted by distance</Text>
               </View>
-              <Text style={styles.sortText}>Sorted by distance</Text>
-            </View>
 
-            {nearbyDeals.map(deal => (
-              <DealCard
-                key={deal.id}
-                deal={deal}
-                isGuest={isGuest}
-                onVote={handleVote}
-                userRole={profile?.role}
-              />
-            ))}
-            
+              {numColumns > 1 ? (
+                <View style={styles.dealsGrid}>
+                  {nearbyDeals.map(deal => (
+                    <View key={deal.id} style={{ width: `${100 / numColumns}%`, padding: 8 }}>
+                      <DealCard key={deal.id} deal={deal} isGuest={isGuest} onVote={handleVote} userRole={profile?.role} />
+                    </View>
+                  ))}
+                </View>
+              ) : (
+                nearbyDeals.map(deal => (
+                  <DealCard key={deal.id} deal={deal} isGuest={isGuest} onVote={handleVote} userRole={profile?.role} />
+                ))
+              )}
+
             {nearbyDeals.length === 0 && locationEnabled && (
               <View style={styles.emptyState}>
                 <LinearGradient
@@ -442,6 +451,11 @@ const styles = StyleSheet.create({
   },
   dealsContainer: {
     flex: 1,
+  },
+  dealsGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    padding: 8,
   },
   statsHeader: {
     flexDirection: 'row',

@@ -6,7 +6,8 @@ import {
   StyleSheet,
   ScrollView,
   TouchableOpacity,
-  Alert
+  Alert,
+  useWindowDimensions,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { TrendingUp } from 'lucide-react-native';
@@ -20,6 +21,8 @@ export default function UpDealsScreen() {
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedCategory, setSelectedCategory] = useState('all');
   const [isGuest, setIsGuest] = useState(true);
+  const { width } = useWindowDimensions();
+  const isDesktop = Platform.OS === 'web' && width >= 768;
   const [showFilters, setShowFilters] = useState(false);
   const [locationEnabled, setLocationEnabled] = useState(false);
 
@@ -160,15 +163,22 @@ export default function UpDealsScreen() {
         onSelectCategory={setSelectedCategory}
       />
 
+      const numColumns = isDesktop ? (width > 1200 ? 4 : width > 900 ? 3 : 2) : 1;
+
       <ScrollView style={styles.dealsContainer} showsVerticalScrollIndicator={false}>
-        {trendingDeals.map(deal => (
-          <DealCard
-            key={deal.id}
-            deal={deal}
-            isGuest={isGuest}
-            onVote={handleVote}
-          />
-        ))}
+        {numColumns > 1 ? (
+          <View style={styles.dealsGrid}>
+            {trendingDeals.map(deal => (
+              <View key={deal.id} style={{ width: `${100 / numColumns}%`, padding: 8 }}>
+                <DealCard key={deal.id} deal={deal} isGuest={isGuest} onVote={handleVote} />
+              </View>
+            ))}
+          </View>
+        ) : (
+          trendingDeals.map(deal => (
+            <DealCard key={deal.id} deal={deal} isGuest={isGuest} onVote={handleVote} />
+          ))
+        )}
         <View style={styles.bottomPadding} />
       </ScrollView>
     </SafeAreaView>
@@ -205,6 +215,11 @@ const styles = StyleSheet.create({
   },
   dealsContainer: {
     flex: 1,
+  },
+  dealsGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    padding: 8,
   },
   bottomPadding: {
     height: 100,

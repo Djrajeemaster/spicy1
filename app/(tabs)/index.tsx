@@ -11,6 +11,7 @@ import {
   TextInput,
   ActivityIndicator,
   Switch,
+  useWindowDimensions,
   AppState,
 } from 'react-native';
 import { useFocusEffect } from '@react-navigation/native';
@@ -42,9 +43,8 @@ export default function HomeScreen() {
   const [filteredDeals, setFilteredDeals] = useState<any[]>([]);
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedCategories, setSelectedCategories] = useState<string[]>(['all']);
-  const [selectedStores, setSelectedStores] = useState<string[]>(['all']);
-  const [isDesktopView, setIsDesktopView] = useState(Platform.OS === 'web' && typeof window !== 'undefined' && window.innerWidth >= 1024);
-  const [windowWidth, setWindowWidth] = useState(Platform.OS === 'web' && typeof window !== 'undefined' ? window.innerWidth : 1024);
+  const { width } = useWindowDimensions();
+  const isDesktop = Platform.OS === 'web' && width >= 768;
 
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [loading, setLoading] = useState(true);
@@ -74,20 +74,6 @@ export default function HomeScreen() {
   // aliveRef prevents setState on unmounted component
   const aliveRef = useRef(true);
   useEffect(() => () => { aliveRef.current = false; }, []);
-
-  // Handle window resize for responsive layout
-  useEffect(() => {
-    if (Platform.OS === 'web') {
-      const handleResize = () => {
-        const newIsDesktop = window.innerWidth >= 1024;
-        setIsDesktopView(newIsDesktop);
-        setWindowWidth(window.innerWidth);
-      };
-      
-      window.addEventListener('resize', handleResize);
-      return () => window.removeEventListener('resize', handleResize);
-    }
-  }, []);
 
   // ----- Filters data (categories/stores) -----
   const loadFilterData = useCallback(async () => {
@@ -122,10 +108,10 @@ export default function HomeScreen() {
   const loadDeals = useCallback(async () => {
     try {
       setLoading(true);
-      const result = await dealService.getDeals({ sortBy, limit: 50 }, user?.id).catch(() => ({ data: [], error: 'Failed to load' }));
+      const [error, data] = await dealService.getDeals({ sortBy, limit: 50 }, user?.id);
       
-      if (result.data && result.data.length > 0) {
-        const mappedData = result.data.map((d: any) => ({
+      if (data && data.length > 0) {
+        const mappedData = data.map((d: any) => ({
           ...d,
           id: String(d.id),
           createdAt: d.created_at || new Date().toISOString(),
@@ -144,6 +130,10 @@ export default function HomeScreen() {
         }));
         setDeals(mappedData);
         setFilteredDeals(mappedData);
+      } else if (error) {
+        console.error('Failed to load deals:', error);
+        setDeals([]);
+        setFilteredDeals([]);
       } else {
         setDeals([]);
         setFilteredDeals([]);
@@ -273,6 +263,8 @@ export default function HomeScreen() {
     );
   }
 
+  const numColumns = isDesktop ? (width > 1500 ? 4 : width > 1024 ? 3 : 2) : 1;
+
   return (
     <SafeAreaView style={styles.container} edges={['top']}>
       <Header
@@ -310,18 +302,10 @@ export default function HomeScreen() {
           </View>
         ) : (
           <>
-            {isDesktopView ? (
+            {numColumns > 1 ? (
               <View style={styles.dealsGrid}>
                 {filteredDeals.map(deal => (
-                  <View key={deal.id} style={[styles.dealTile, {
-                    width: Platform.OS === 'web' ? (() => {
-                      if (windowWidth >= 1600) return '18.5%';
-                      if (windowWidth >= 1400) return '23%';
-                      if (windowWidth >= 1200) return '30.5%';
-                      if (windowWidth >= 1024) return '47%';
-                      return '100%';
-                    })() : '100%'
-                  }]}>
+                  <View key={deal.id} style={{ width: `${100 / numColumns}%`, padding: 8 }}>
                     <EnhancedDealCard
                       deal={deal}
                       isGuest={isGuest}
@@ -461,12 +445,10 @@ const styles = StyleSheet.create({
   dealsGrid: {
     flexDirection: 'row',
     flexWrap: 'wrap',
-    paddingHorizontal: 8,
-    justifyContent: 'flex-start',
+    padding: 8,
   },
   dealTile: {
-    paddingHorizontal: 6,
-    marginBottom: 12,
+    // This style is now handled inline with dynamic width and padding
   },
 });
 
