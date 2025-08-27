@@ -79,14 +79,14 @@ export function usePushNotifications() {
         const row: PushTokenRow = {
           token,
           user_id: user.id,
-          platform: Platform.OS as any,
-          device_id: Platform.OS + '-' + Math.random().toString(36).slice(2, 8), // replace with your own stable ID if needed
-          app_version: '1.0.0',
+          platform: Platform.OS,
+          device_id: Device.osInternalBuildId, // A more stable ID than random
+          app_version: Constants.expoConfig?.version ?? 'unknown',
           disabled: false,
         };
 
         await supabase
-          .from('push_tokens' as any)
+          .from('push_tokens')
           .upsert(row, { onConflict: 'token' }) // or 'user_id' if you prefer one-token-per-user
           .throwOnError();
       } catch (e) {

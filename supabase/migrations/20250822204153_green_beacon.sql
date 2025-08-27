@@ -85,6 +85,8 @@ CREATE TABLE IF NOT EXISTS deals (
   state text NOT NULL,
   country text DEFAULT 'India',
   is_online boolean DEFAULT true,
+  latitude numeric(9,6),
+  longitude numeric(9,6),
   start_date timestamptz,
   expiry_date timestamptz,
   status text DEFAULT 'live' CHECK (status IN ('draft', 'scheduled', 'live', 'expiring', 'expired', 'archived')),
@@ -308,6 +310,7 @@ CREATE INDEX IF NOT EXISTS idx_deals_created_at ON deals(created_at DESC);
 CREATE INDEX IF NOT EXISTS idx_deals_votes ON deals(votes_up DESC, votes_down);
 CREATE INDEX IF NOT EXISTS idx_deals_location ON deals(city, state);
 CREATE INDEX IF NOT EXISTS idx_deals_expiry ON deals(expiry_date);
+CREATE INDEX IF NOT EXISTS idx_deals_location_coords ON deals(latitude, longitude);
 
 CREATE INDEX IF NOT EXISTS idx_votes_deal ON votes(deal_id);
 CREATE INDEX IF NOT EXISTS idx_votes_user ON votes(user_id);

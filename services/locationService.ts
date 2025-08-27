@@ -122,9 +122,15 @@ class LocationService {
       }
 
       const filteredDeals = deals.map(deal => {
-        // For now, we'll use mock coordinates for deals since they're not in the DB
-        // In a real implementation, you'd store lat/lng in the deals table
-        const dealCoords = this.getMockDealCoordinates(deal.city);
+        if (!deal.latitude || !deal.longitude) {
+          return { ...deal, distanceValue: Infinity };
+        }
+
+        const dealCoords: LocationCoordinates = {
+          latitude: deal.latitude,
+          longitude: deal.longitude,
+        };
+
         const distance = this.calculateDistance(
           this.currentLocation!.coordinates,
           dealCoords
@@ -132,7 +138,7 @@ class LocationService {
 
         return {
           ...deal,
-          distance: `${distance} miles`,
+          distance: distance, // The UI can format this
           distanceValue: distance,
         };
       }).filter(deal => deal.distanceValue <= radiusMiles)
@@ -146,28 +152,6 @@ class LocationService {
         error: 'Failed to filter deals by location.' 
       };
     }
-  }
-
-  /**
-   * Mock function to get coordinates for a city.
-   * In a real implementation, you'd either store coordinates in the deals table
-   * or use a geocoding service to convert city names to coordinates.
-   */
-  private getMockDealCoordinates(city: string): LocationCoordinates {
-    const cityCoords: { [key: string]: LocationCoordinates } = {
-      'New York': { latitude: 40.7128, longitude: -74.0060 },
-      'Los Angeles': { latitude: 34.0522, longitude: -118.2437 },
-      'Chicago': { latitude: 41.8781, longitude: -87.6298 },
-      'Houston': { latitude: 29.7604, longitude: -95.3698 },
-      'Phoenix': { latitude: 33.4484, longitude: -112.0740 },
-      'Philadelphia': { latitude: 39.9526, longitude: -75.1652 },
-      'San Antonio': { latitude: 29.4241, longitude: -98.4936 },
-      'San Diego': { latitude: 32.7157, longitude: -117.1611 },
-      'Dallas': { latitude: 32.7767, longitude: -96.7970 },
-      'San Jose': { latitude: 37.3382, longitude: -121.8863 },
-    };
-
-    return cityCoords[city] || { latitude: 40.7128, longitude: -74.0060 }; // Default to NYC
   }
 
   private toRadians(degrees: number): number {

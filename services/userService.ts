@@ -1,50 +1,36 @@
-// services/userService.ts
 import { supabase } from '@/lib/supabase';
+import { safeAsync } from '@/utils/errorHandler';
 import { Database } from '@/types/database';
 
-type User = Database['public']['Tables']['users']['Row'];
+export type PublicUserProfile = Pick<
+  Database['public']['Tables']['users']['Row'],
+  'id' | 'username' | 'role' | 'reputation' | 'avatar_url' | 'join_date' | 'is_verified_business'
+>;
 
 class UserService {
-  async updateProfile(userId: string, updates: Database['public']['Tables']['users']['Update']) {
-    const { data, error } = await supabase
-      .from('users')
-      .update(updates)
-      .eq('id', userId)
-      .select()
-      .single();
-    return { data, error };
+  getUserByUsername(username: string) {
+    return safeAsync(async () => {
+      const { data, error } = await supabase.from('users').select('*').eq('username', username).single();
+      if (error) throw error;
+      return data as PublicUserProfile;
+    }, 'UserService.getUserByUsername');
   }
 
-  async searchByUsernamePrefix(prefix: string, limit = 8) {
-    if (!prefix) return { data: [] as User[], error: null };
-    const { data, error } = await supabase
-      .from('users')
-      .select('id, username, avatar_url')
-      .ilike('username', `${prefix}%`)
-      .order('username', { ascending: true })
-      .limit(limit);
-
-    return { data: (data || []) as User[], error };
-  }
-
-  async getAllUsers(opts?: { search?: string; limit?: number; offset?: number }) {
-    const { search, limit = 50, offset = 0 } = opts ?? {};
-
-    let query = supabase
-      .from('users')
-      .select('id, username, avatar_url, role, reputation, created_at', { count: 'exact' })
-      .order('created_at', { ascending: false })
-      .range(offset, offset + limit - 1);
-
-    if (search && search.trim()) {
-      query = query.ilike('username', `%${search.trim()}%`);
-    }
-
-    const { data, error, count } = await query;
-    return { data: (data || []) as User[], error, count: count ?? null };
+  getUserById(userId: string) {
+    return safeAsync(async () => {
+      const { data, error } = await supabase.from('users').select('*').eq('id', userId).single();
+      if (error) throw error;
+      return data as PublicUserProfile;
+    }, 'UserService.getUserById');
+  } 
+  searchByUsernamePrefix(prefix: string, limit = 5) {
+    return safeAsync(async () => {
+      if (!prefix) return [];
+      const { data, error } = await supabase.from('users').select('id, username, avatar_url').ilike('username', `${prefix}%`).limit(limit);
+      if (error) throw error;
+      return data;
+    }, 'UserService.searchByUsernamePrefix');
   }
 }
 
 export const userService = new UserService();
-export type { User };
-export default userService;

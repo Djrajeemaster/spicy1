@@ -1,342 +1,227 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   View,
   Text,
   StyleSheet,
   TextInput,
   TouchableOpacity,
-  Alert,
-  KeyboardAvoidingView,
+  ActivityIndicator,
   Platform,
-  ScrollView
+  Alert,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { ArrowLeft, Mail, Lock, Eye, EyeOff } from 'lucide-react-native';
-import { LinearGradient } from 'expo-linear-gradient';
 import { router } from 'expo-router';
+import { LinearGradient } from 'expo-linear-gradient';
+import { AtSign, Lock, LogIn, Sparkles } from 'lucide-react-native';
 import { useAuth } from '@/contexts/AuthProvider';
-import { sanitizeEmail } from '@/utils/sanitization';
-import { logger } from '@/utils/logger';
 
 export default function SignInScreen() {
+  const { signIn } = useAuth();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
-  const [showPassword, setShowPassword] = useState(false);
   const [loading, setLoading] = useState(false);
-  const { signIn } = useAuth();
+  const [error, setError] = useState<string | null>(null);
+
+  const [isDesktopWeb, setIsDesktopWeb] = useState(
+    Platform.OS === 'web' && typeof window !== 'undefined' && window.innerWidth >= 768
+  );
+
+  useEffect(() => {
+    if (Platform.OS !== 'web') return;
+    const handleResize = () => {
+      setIsDesktopWeb(window.innerWidth >= 768);
+    };
+    window.addEventListener('resize', handleResize);
+    return () => window.removeEventListener('resize', handleResize);
+  }, []);
 
   const handleSignIn = async () => {
-    // Validate inputs
-    const sanitizedEmail = sanitizeEmail(email.trim());
-    if (!sanitizedEmail) {
-      Alert.alert('Invalid Email', 'Please enter a valid email address.');
-      return;
-    }
-    
-    if (!password || password.length < 6) {
-      Alert.alert('Invalid Password', 'Password must be at least 6 characters long.');
-      return;
-    }
-    
+    if (loading) return;
     setLoading(true);
-    try {
-      logger.authEvent('sign_in_attempt', undefined, { email: sanitizedEmail });
-      const { error } = await signIn(sanitizedEmail, password);
-      
-      if (error) {
-        logger.authEvent('sign_in_failed', undefined, { 
-          email: sanitizedEmail, 
-          error: error.code || 'unknown' 
-        });
-        
-        // Determine alert buttons based on error type
-        const alertButtons = [{ text: 'OK' }];
-        
-        if (error.code === 'user_not_found') {
-          alertButtons.push({ 
-            text: 'Sign Up Instead', 
-            onPress: () => router.push('/sign-up') 
-          });
-        }
-        
-        if (error.code === 'account_banned' || error.code === 'account_suspended') {
-          alertButtons.push({ 
-            text: 'Contact Support', 
-            onPress: () => Alert.alert('Support', 'Please contact support at help@spicybeats.com') 
-          });
-        }
-        
-        Alert.alert(
-          getErrorTitle(error.code), 
-          error.message, 
-          alertButtons
-        );
-      } else {
-        logger.authEvent('sign_in_success', undefined, { email: sanitizedEmail });
-        Alert.alert(
-          'Welcome Back! 🎉',
-          'You have successfully signed in to SpicyBeats.',
-          [{ text: 'OK', onPress: () => router.replace('/') }]
-        );
-        router.replace('/');
-      }
-    } catch (error) {
-      logger.error('Unexpected sign in error', error);
-      Alert.alert('Connection Error', 'Unable to connect to the server. Please check your internet connection and try again.');
-    } finally {
-      setLoading(false);
-    }
-  };
+    setError(null);
 
-  const getErrorTitle = (errorCode: string): string => {
-    switch (errorCode) {
-      case 'user_not_found':
-        return 'Account Not Found';
-      case 'invalid_credentials':
-        return 'Incorrect Password';
-      case 'account_banned':
-      case 'account_suspended':
-        return 'Account Suspended';
-      case 'rate_limit':
-        return 'Too Many Attempts';
-      case 'email_not_confirmed':
-        return 'Email Not Verified';
-      default:
-        return 'Sign In Failed';
+    const { error: signInError } = await signIn(email, password);
+
+    if (signInError) {
+      setError(signInError.message);
+      if (Platform.OS !== 'web') {
+        Alert.alert('Sign In Failed', signInError.message);
+      }
+    } else {
+      // On success, redirect to the home page
+      router.replace('/(tabs)');
     }
+    setLoading(false);
   };
 
   return (
-    <SafeAreaView style={styles.container} edges={['top']}>
-      <KeyboardAvoidingView 
-        style={styles.keyboardView}
-        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-      >
-        <ScrollView style={styles.scrollView} showsVerticalScrollIndicator={false}>
-          <View style={styles.header}>
-            <TouchableOpacity 
-              style={styles.backButton} 
-              onPress={() => {
-                if (router.canGoBack()) {
-                  router.back();
-                } else {
-                  router.replace('/'); // Navigate to home if no back history
-                }
-              }}
-            >
-              <ArrowLeft size={24} color="#374151" />
-            </TouchableOpacity>
-            <Text style={styles.headerTitle}>Welcome Back</Text>
-            <Text style={styles.headerSubtitle}>Sign in to your SpicyBeats account</Text>
-          </View>
+    <SafeAreaView style={[styles.container, isDesktopWeb && styles.desktopRoot]}>
+      <View style={isDesktopWeb ? styles.desktopContainer : styles.mobileContainer}>
+        {isDesktopWeb && (
+          <LinearGradient colors={['#030849', '#1e40af']} style={styles.desktopBrandingPanel}>
+            <View style={styles.brandingContent}>
+              <Sparkles size={48} color="#fbbf24" />
+              <Text style={styles.desktopAppName}>SpicyBeats</Text>
+              <Text style={styles.desktopTagline}>Discover, Share, and Save on the Hottest Deals.</Text>
+            </View>
+          </LinearGradient>
+        )}
 
-          <View style={styles.form}>
-            <View style={styles.inputGroup}>
-              <Text style={styles.label}>Email</Text>
-              <View style={styles.inputContainer}>
-                <Mail size={20} color="#6366f1" style={styles.inputIcon} />
-                <TextInput
-                  style={styles.input}
-                  placeholder="Enter your email"
-                  value={email}
-                  onChangeText={setEmail}
-                  keyboardType="email-address"
-                  autoCapitalize="none"
-                  autoCorrect={false}
-                  placeholderTextColor="#94a3b8"
-                />
-              </View>
+        <View style={isDesktopWeb ? styles.desktopFormPanel : styles.mobileFormPanel}>
+          {!isDesktopWeb && <LinearGradient colors={['#030849', '#1e40af']} style={StyleSheet.absoluteFill} />}
+          
+          <View style={isDesktopWeb ? styles.desktopCard : styles.formContainer}>
+            <Text style={isDesktopWeb ? styles.desktopTitle : styles.title}>Welcome Back</Text>
+            <Text style={isDesktopWeb ? styles.desktopSubtitle : styles.subtitle}>
+              Sign in to your SpicyBeats account
+            </Text>
+
+            {error && <Text style={styles.errorText}>{error}</Text>}
+
+            <View style={isDesktopWeb ? styles.desktopInputGroup : styles.inputGroup}>
+              <AtSign color="#94a3b8" size={20} style={styles.icon} />
+              <TextInput
+                style={isDesktopWeb ? styles.desktopInput : styles.input}
+                placeholder="Email"
+                placeholderTextColor="#94a3b8"
+                value={email}
+                onChangeText={setEmail}
+                keyboardType="email-address"
+                autoCapitalize="none"
+              />
             </View>
 
-            <View style={styles.inputGroup}>
-              <Text style={styles.label}>Password</Text>
-              <View style={styles.inputContainer}>
-                <Lock size={20} color="#6366f1" style={styles.inputIcon} />
-                <TextInput
-                  style={styles.input}
-                  placeholder="Enter your password"
-                  value={password}
-                  onChangeText={setPassword}
-                  secureTextEntry={!showPassword}
-                  autoCapitalize="none"
-                  autoCorrect={false}
-                  placeholderTextColor="#94a3b8"
-                />
-                <TouchableOpacity
-                  style={styles.eyeButton}
-                  onPress={() => setShowPassword(!showPassword)}
-                >
-                  {showPassword ? (
-                    <EyeOff size={20} color="#94a3b8" />
-                  ) : (
-                    <Eye size={20} color="#94a3b8" />
-                  )}
-                </TouchableOpacity>
-              </View>
+            <View style={isDesktopWeb ? styles.desktopInputGroup : styles.inputGroup}>
+              <Lock color="#94a3b8" size={20} style={styles.icon} />
+              <TextInput
+                style={isDesktopWeb ? styles.desktopInput : styles.input}
+                placeholder="Password"
+                placeholderTextColor="#94a3b8"
+                value={password}
+                onChangeText={setPassword}
+                secureTextEntry
+                onSubmitEditing={handleSignIn}
+              />
             </View>
 
-            <TouchableOpacity 
-              style={styles.signInButtonWrapper}
-              onPress={handleSignIn}
-              disabled={loading}
-            >
-              <LinearGradient
-                colors={['#6366f1', '#4f46e5']}
-                style={styles.signInButton}
-              >
-                <Text style={styles.signInButtonText}>
-                  {loading ? 'Signing In...' : 'Sign In'}
-                </Text>
+            <View style={styles.actionsRow}>
+              <TouchableOpacity onPress={() => router.push('/forgot-password')}>
+                <Text style={isDesktopWeb ? styles.desktopLinkTextMuted : styles.linkText}>Forgot password?</Text>
+              </TouchableOpacity>
+            </View>
+
+            <TouchableOpacity style={styles.buttonWrapper} onPress={handleSignIn} disabled={loading}>
+              <LinearGradient colors={['#10b981', '#059669']} style={styles.button}>
+                {loading ? (
+                  <ActivityIndicator color="#FFFFFF" />
+                ) : (
+                  <>
+                    <LogIn size={20} color="#FFFFFF" />
+                    <Text style={styles.buttonText}>Sign In</Text>
+                  </>
+                )}
               </LinearGradient>
             </TouchableOpacity>
 
-            <View style={styles.divider}>
-              <View style={styles.dividerLine} />
-              <Text style={styles.dividerText}>or</Text>
-              <View style={styles.dividerLine} />
-            </View>
-
-            <TouchableOpacity 
-              style={styles.signUpLink}
-              onPress={() => router.push('/sign-up')}
-            >
-              <Text style={styles.signUpText}>
-                Don't have an account? <Text style={styles.signUpTextBold}>Sign Up</Text>
+            <TouchableOpacity onPress={() => router.push('/sign-up')}>
+              <Text style={isDesktopWeb ? styles.desktopLinkText : styles.linkText}>
+                Don't have an account? <Text style={{ fontWeight: 'bold' }}>Sign Up</Text>
               </Text>
             </TouchableOpacity>
           </View>
-        </ScrollView>
-      </KeyboardAvoidingView>
+        </View>
+      </View>
     </SafeAreaView>
   );
 }
 
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: '#f8fafc',
-  },
-  keyboardView: {
-    flex: 1,
-  },
-  scrollView: {
-    flex: 1,
-  },
-  header: {
-    paddingHorizontal: 20,
-    paddingTop: 20,
-    paddingBottom: 40,
-  },
-  backButton: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
-    backgroundColor: '#FFFFFF',
-    justifyContent: 'center',
-    alignItems: 'center',
-    marginBottom: 20,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
-    elevation: 2,
-  },
-  headerTitle: {
-    fontSize: 28,
-    fontWeight: '800',
-    color: '#1e293b',
-    marginBottom: 8,
-  },
-  headerSubtitle: {
-    fontSize: 16,
-    color: '#64748b',
-    fontWeight: '500',
-  },
-  form: {
-    paddingHorizontal: 20,
-  },
+  // --- Base ---
+  container: { flex: 1 },
+  mobileContainer: { flex: 1, justifyContent: 'center' },
+  mobileFormPanel: { flex: 1, justifyContent: 'center' },
+  formContainer: { paddingHorizontal: 24 },
+  
+  // --- Mobile Styles ---
+  title: { fontSize: 32, fontWeight: 'bold', color: '#FFFFFF', textAlign: 'center', marginBottom: 8, letterSpacing: -0.5 },
+  subtitle: { fontSize: 16, color: '#e2e8f0', textAlign: 'center', marginBottom: 32, fontWeight: '500' },
   inputGroup: {
-    marginBottom: 24,
-  },
-  label: {
-    fontSize: 15,
-    fontWeight: '700',
-    color: '#374151',
-    marginBottom: 8,
-  },
-  inputContainer: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#FFFFFF',
+    backgroundColor: 'rgba(255, 255, 255, 0.1)',
     borderRadius: 12,
-    borderWidth: 2,
-    borderColor: '#e2e8f0',
+    marginBottom: 16,
     paddingHorizontal: 16,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.05,
-    shadowRadius: 2,
-    elevation: 1,
   },
-  inputIcon: {
-    marginRight: 12,
-  },
+  icon: { marginRight: 12 },
   input: {
     flex: 1,
-    fontSize: 16,
-    color: '#1e293b',
-    paddingVertical: 16,
-    fontWeight: '500',
-  },
-  eyeButton: {
-    padding: 4,
-  },
-  signInButtonWrapper: {
-    borderRadius: 12,
-    overflow: 'hidden',
-    marginTop: 8,
-  },
-  signInButton: {
-    paddingVertical: 16,
-    alignItems: 'center',
-    shadowColor: '#6366f1',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.3,
-    shadowRadius: 8,
-    elevation: 8,
-  },
-  signInButtonText: {
+    height: 50,
     color: '#FFFFFF',
-    fontSize: 16,
-    fontWeight: '700',
+    fontSize: 16, fontWeight: '500'
   },
-  divider: {
+  linkText: { color: '#e2e8f0', textAlign: 'center' },
+
+  // --- Desktop Styles ---
+  desktopRoot: { backgroundColor: '#f8fafc' },
+  desktopContainer: { flex: 1, flexDirection: 'row' },
+  desktopBrandingPanel: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: 48,
+  },
+  brandingContent: { alignItems: 'center' },
+  desktopAppName: { fontSize: 48, fontWeight: '900', color: '#FFFFFF', marginTop: 16, letterSpacing: -1 },
+  desktopTagline: { fontSize: 18, color: 'rgba(255,255,255,0.8)', marginTop: 8, textAlign: 'center', maxWidth: 300 },
+  desktopFormPanel: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    backgroundColor: '#f8fafc',
+  },
+  desktopCard: {
+    width: '100%',
+    maxWidth: 400,
+    backgroundColor: '#FFFFFF',
+    padding: 32,
+    borderRadius: 16,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.1,
+    shadowRadius: 20,
+    elevation: 5,
+  },
+  desktopTitle: { fontSize: 28, fontWeight: 'bold', color: '#1e293b', textAlign: 'center', marginBottom: 8 },
+  desktopSubtitle: { fontSize: 16, color: '#64748b', textAlign: 'center', marginBottom: 24 },
+  desktopInputGroup: {
     flexDirection: 'row',
     alignItems: 'center',
-    marginVertical: 32,
+    backgroundColor: '#f8fafc',
+    borderRadius: 12,
+    marginBottom: 16,
+    paddingHorizontal: 16,
+    borderWidth: 1,
+    borderColor: '#e2e8f0',
   },
-  dividerLine: {
-    flex: 1,
-    height: 1,
-    backgroundColor: '#e2e8f0',
+  desktopInput: { flex: 1, height: 50, color: '#1e293b', fontSize: 16, fontWeight: '500' },
+  desktopLinkText: { color: '#64748b', textAlign: 'center' },
+  desktopLinkTextMuted: { color: '#6366f1', textAlign: 'left', fontWeight: '600' },
+
+  // --- Common Styles ---
+  errorText: { color: '#ef4444', textAlign: 'center', marginBottom: 16, fontWeight: '600' },
+  icon: { marginRight: 12 },
+  actionsRow: {
+    flexDirection: 'row',
+    justifyContent: 'flex-end',
+    marginBottom: 16,
   },
-  dividerText: {
-    fontSize: 14,
-    color: '#94a3b8',
-    marginHorizontal: 16,
-    fontWeight: '500',
-  },
-  signUpLink: {
+  buttonWrapper: { borderRadius: 12, overflow: 'hidden', marginBottom: 24 },
+  button: {
+    flexDirection: 'row',
     alignItems: 'center',
+    justifyContent: 'center',
     paddingVertical: 16,
   },
-  signUpText: {
-    fontSize: 15,
-    color: '#64748b',
-    fontWeight: '500',
-  },
-  signUpTextBold: {
-    color: '#6366f1',
-    fontWeight: '700',
-  },
+  buttonText: { color: '#FFFFFF', fontSize: 16, fontWeight: 'bold', marginLeft: 8 },
 });

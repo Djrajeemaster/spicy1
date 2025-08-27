@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { View, Text, TouchableOpacity, StyleSheet, Alert } from 'react-native';
 import MentionInput from './MentionInput';
+import { router } from 'expo-router';
 import { commentService, CommentNode } from '@/services/commentService';
 import { useAuth } from '@/contexts/AuthProvider';
 import { formatTimeAgo } from '@/utils/time';
@@ -40,10 +41,17 @@ function CommentItem({ node, dealId, onPosted, depth = 0 }: ThreadProps & { node
     onPosted();
   };
 
+  const username = (node as any).users?.username || 'user';
+  const handleUserPress = () => {
+    if (username && username !== 'user') {
+      router.push(`/user/${username}`);
+    }
+  };
+
   return (
     <View style={[styles.item, { marginLeft: depth * 14 }]}>
       <Text style={styles.meta}>
-        <Text style={styles.author}>{sanitizeUsername((node as any).users?.username || 'user')}</Text>
+        <Text style={styles.author} onPress={handleUserPress}>{sanitizeUsername(username)}</Text>
         <Text style={styles.timeAgo}> · {formatTimeAgo((node as any).created_at)}</Text>
       </Text>
       <Text style={styles.body}>{sanitizeText((node as any).content || '')}</Text>
