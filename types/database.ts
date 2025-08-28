@@ -16,6 +16,9 @@ export interface Database {
           location: string | null;
           created_at: string | null;
           updated_at: string | null;
+          is_banned: boolean | null;
+          ban_expiry: string | null;
+          suspend_expiry: string | null;
         };
         Insert: {
           id: string;
@@ -31,6 +34,9 @@ export interface Database {
           location?: string | null;
           created_at?: string | null;
           updated_at?: string | null;
+          is_banned?: boolean | null;
+          ban_expiry?: string | null;
+          suspend_expiry?: string | null;
         };
         Update: {
           id?: string;
@@ -46,6 +52,9 @@ export interface Database {
           location?: string | null;
           created_at?: string | null;
           updated_at?: string | null;
+          is_banned?: boolean | null;
+          ban_expiry?: string | null;
+          suspend_expiry?: string | null;
         };
       };
       deals: {

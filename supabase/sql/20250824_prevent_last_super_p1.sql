@@ -2,14 +2,14 @@
 create or replace function public.prevent_last_super_admin_p1()
 returns trigger language plpgsql as $$
 begin
-  if TG_OP = 'UPDATE' and OLD.role = 'super_admin' and NEW.role <> 'super_admin' then
-    if (select count(*) from public.users where role = 'super_admin' and id <> OLD.id) = 0 then
-      raise exception 'Cannot demote the last super_admin (p1)';
+  if TG_OP = 'UPDATE' and OLD.role = 'superadmin' and NEW.role <> 'superadmin' then
+    if (select count(*) from public.users where role = 'superadmin' and id <> OLD.id) = 0 then
+      raise exception 'Cannot demote the last superadmin (p1)';
     end if;
   end if;
-  if TG_OP = 'DELETE' and OLD.role = 'super_admin' then
-    if (select count(*) from public.users where role = 'super_admin' and id <> OLD.id) = 0 then
-      raise exception 'Cannot delete the last super_admin (p1)';
+  if TG_OP = 'DELETE' and OLD.role = 'superadmin' then
+    if (select count(*) from public.users where role = 'superadmin' and id <> OLD.id) = 0 then
+      raise exception 'Cannot delete the last superadmin (p1)';
     end if;
   end if;
   return case when TG_OP='DELETE' then OLD else NEW end;

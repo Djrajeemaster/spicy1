@@ -46,7 +46,40 @@ serve(async (req) => {
       token,
       valid_until: validUntil,
     });
-    if (error) return json({ error: 'db_error' }, 500);
+    
+    // If table doesn't exist, try to create it first
+    if (error && error.code === '42P01') {
+      console.log('Creating admin_elevation_sessions table...');
+      const { error: createError } = await ctx.supabase.rpc('exec_sql', {
+        sql: `
+          CREATE TABLE IF NOT EXISTS admin_elevation_sessions (
+            id uuid DEFAULT gen_random_uuid() PRIMARY KEY,
+            user_id uuid REFERENCES users(id) ON DELETE CASCADE NOT NULL,
+            token text NOT NULL UNIQUE,
+            valid_until timestamp with time zone NOT NULL,
+            created_at timestamp with time zone DEFAULT timezone('utc'::text, now()) NOT NULL
+          );
+          CREATE INDEX IF NOT EXISTS idx_admin_elevation_sessions_token ON admin_elevation_sessions(token);
+          ALTER TABLE admin_elevation_sessions ENABLE ROW LEVEL SECURITY;
+          CREATE POLICY IF NOT EXISTS "Users can manage their own elevation sessions" ON admin_elevation_sessions
+            FOR ALL USING (user_id = auth.uid());
+        `
+      });
+      
+      if (!createError) {
+        // Try insert again after creating table
+        const { error: retryError } = await ctx.supabase.from('admin_elevation_sessions').insert({
+          user_id: ctx.userId,
+          token,
+          valid_until: validUntil,
+        });
+        if (retryError) return json({ error: 'db_retry_error', details: retryError.message }, 500);
+      } else {
+        return json({ error: 'table_creation_failed', details: createError.message }, 500);
+      }
+    } else if (error) {
+      return json({ error: 'db_error', details: error.message }, 500);
+    }
 
     await audit(ctx, {
       action: 'admin.elevate',
