@@ -6,7 +6,7 @@ import { ArrowLeft, Store, User, Clock, Share2, ExternalLink, AlertTriangle, Thu
 import { LinearGradient } from 'expo-linear-gradient';
 import { UserBadge } from '@/components/UserBadge';
 import { UserRole, getRoleColor } from '@/types/user';
-
+import { reportService, ReportReason } from '@/services/reportService';
 import { dealService, DealWithRelations } from '@/services/dealService';
 import { useAuth } from '@/contexts/AuthProvider';
 import { useCurrency } from '@/contexts/CurrencyProvider';

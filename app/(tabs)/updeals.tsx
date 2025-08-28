@@ -1,5 +1,5 @@
 // app/(tabs)/updeals.tsx
-import React, { useState } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import {
   View,
   Text,
@@ -7,6 +7,7 @@ import {
   ScrollView,
   TouchableOpacity,
   Alert,
+  ActivityIndicator,
   useWindowDimensions,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -16,25 +17,62 @@ import { Header } from '@/components/Header';
 import { CategoryFilter } from '@/components/CategoryFilter';
 import { DealCard } from '@/components/DealCard';
 import { router } from 'expo-router';
+import { useAuth } from '@/contexts/AuthProvider';
+import { dealService, DealWithRelations } from '@/services/dealService';
+import { categoryService } from '@/services/categoryService';
+import { Database } from '@/types/database';
+
+type Category = Database['public']['Tables']['categories']['Row'];
 
 export default function UpDealsScreen() {
-  const [searchQuery, setSearchQuery] = useState('');
+  const { user } = useAuth();
+  const isGuest = !user;
+
   const [selectedCategory, setSelectedCategory] = useState('all');
-  const [isGuest, setIsGuest] = useState(true);
   const { width } = useWindowDimensions();
   const isDesktop = Platform.OS === 'web' && width >= 768;
   const [showFilters, setShowFilters] = useState(false);
   const [locationEnabled, setLocationEnabled] = useState(false);
+  const [loading, setLoading] = useState(true);
+  const [categories, setCategories] = useState<Category[]>([]);
+  const [trendingDeals, setTrendingDeals] = useState<DealWithRelations[]>([]);
 
-  const categories = [
-    { id: 'all', name: 'All' },
-    { id: 'electronics', name: 'Electronics' },
-    { id: 'food', name: 'Food & Dining' },
-    { id: 'clothing', name: 'Clothing' },
-    { id: 'home', name: 'Home & Garden' },
-    { id: 'automotive', name: 'Automotive' },
-    { id: 'services', name: 'Services' },
-  ];
+  const loadData = useCallback(async () => {
+    setLoading(true);
+    try {
+      const [dealsRes, categoriesRes] = await Promise.all([
+        dealService.getDeals({ sortBy: 'popular', limit: 20 }),
+        categoryService.getCategories()
+      ]);
+
+      if (dealsRes.data) {
+        const mappedDeals = (dealsRes.data as DealWithRelations[]).map((d: any) => ({
+          ...d,
+          id: String(d.id),
+          price: d.price,
+          original_price: d.original_price,
+          image: d.images?.[0] || 'https://images.pexels.com/photos/3394650/pexels-photo-3394650.jpeg',
+          votes: { up: d.votes_up || 0, down: d.votes_down || 0 },
+          comments: d.comment_count || 0,
+          postedBy: d.created_by_user?.username || 'Unknown',
+          created_at: d.created_at,
+        }));
+        setTrendingDeals(mappedDeals);
+      }
+
+      if (categoriesRes.data) {
+        setCategories([{ id: 'all' as any, name: 'All', emoji: '🔥', slug: 'all', is_active: true, deal_count: 0, created_at: '', updated_at: '' }, ...categoriesRes.data]);
+      }
+    } catch (error) {
+      console.error("Failed to load trending deals:", error);
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    loadData();
+  }, [loadData]);
 
   const handleVote = (dealId, voteType) => {
     if (isGuest) {
@@ -43,38 +81,13 @@ export default function UpDealsScreen() {
         "Sign in to vote on trending deals!",
         [
           { text: "Maybe Later", style: "cancel" },
-          { text: "Sign In", onPress: () => setIsGuest(!isGuest) }
+          { text: "Sign In", onPress: () => router.push('/sign-in') }
         ]
       );
       return;
     }
-
-    // Update vote count
-    setTrendingDeals(prevDeals =>
-      prevDeals.map(deal => {
-        if (deal.id === dealId) {
-          const newVotes = { ...deal.votes };
-          if (voteType === 'up') {
-            newVotes.up += 1;
-          } else {
-            newVotes.down += 1;
-          }
-          return { ...deal, votes: newVotes };
-        }
-        return deal;
-      })
-    );
-
-    Alert.alert(
-      "Vote Recorded!",
-      `Thanks for your ${voteType}vote on this trending deal!`,
-      [{ text: "Great!" }]
-    );
-  };
-
-  const handleAuth = () => {
-    setIsGuest(!isGuest);
-    Alert.alert(isGuest ? "Logged In" : "Logged Out", isGuest ? "Welcome back!" : "You have been logged out");
+    // Optimistic update can be added here, but for now, just call the service
+    dealService.voteDeal(String(dealId), user!.id, voteType).then(() => loadData());
   };
 
   const handleLocationToggle = () => {
@@ -85,61 +98,9 @@ export default function UpDealsScreen() {
     );
   };
 
-  const [trendingDeals, setTrendingDeals] = useState([
-    {
-      id: 4,
-      title: "Flash Sale: Gaming Laptop 40% Off",
-      description: "High-performance gaming laptop with RTX graphics. Limited quantity!",
-      price: "$899.99",
-      originalPrice: "$1,499.99",
-      category: "electronics",
-      location: "TechWorld Megastore",
-      distance: "3.2 miles",
-      image: "https://images.pexels.com/photos/18105/pexels-photo.jpg?auto=compress&cs=tinysrgb&w=400",
-      votes: { up: 87, down: 3 },
-      comments: 24,
-      isPinned: true,
-      status: 'approved',
-      postedBy: "GamerDeals",
-      createdAt: new Date(Date.now() - 1 * 60 * 60 * 1000).toISOString(), // Use ISO string
-      isVerified: true,
-      isSample: true, // Add this flag
-    },
-    {
-      id: 5,
-      title: "All-You-Can-Eat Sushi Weekend",
-      description: "Premium sushi buffet with fresh ingredients. Weekends only.",
-      price: "$29.99",
-      category: "food",
-      location: "Sakura Sushi House",
-      distance: "0.8 miles",
-      image: "https://images.pexels.com/photos/357756/pexels-photo-357756.jpeg?auto=compress&cs=tinysrgb&w=400",
-      votes: { up: 56, down: 2 },
-      comments: 18,
-      isPinned: false,
-      status: 'approved',
-      postedBy: "SushiLover99",
-      createdAt: new Date(Date.now() - 3 * 60 * 60 * 1000).toISOString(), // Use ISO string
-      isVerified: false,
-      isSample: true, // Add this flag
-    }
-  ]);
-
   return (
     <SafeAreaView style={styles.container} edges={['top']}>
-      <Header
-        isGuest={isGuest}
-        onAuthPress={handleAuth}
-        onPostPress={() => router.push('/post')}
-        onAlertsPress={() => router.push('/alerts')}
-        showSearch={true}
-        searchQuery={searchQuery}
-        onSearchChange={setSearchQuery}
-        onLocationToggle={handleLocationToggle}
-        locationEnabled={locationEnabled}
-        showFilters={showFilters}
-        onFiltersToggle={() => setShowFilters(!showFilters)}
-      />
+      <Header onPostPress={() => router.push('/post')} onAlertsPress={() => router.push('/alerts')} />
 
       <View style={styles.headerSection}>
         <LinearGradient
@@ -166,18 +127,24 @@ export default function UpDealsScreen() {
       const numColumns = isDesktop ? (width > 1200 ? 4 : width > 900 ? 3 : 2) : 1;
 
       <ScrollView style={styles.dealsContainer} showsVerticalScrollIndicator={false}>
-        {numColumns > 1 ? (
-          <View style={styles.dealsGrid}>
-            {trendingDeals.map(deal => (
-              <View key={deal.id} style={{ width: `${100 / numColumns}%`, padding: 8 }}>
-                <DealCard key={deal.id} deal={deal} isGuest={isGuest} onVote={handleVote} />
-              </View>
-            ))}
-          </View>
+        {loading ? (
+          <ActivityIndicator style={{ marginTop: 50 }} size="large" color="#f59e0b" />
         ) : (
-          trendingDeals.map(deal => (
-            <DealCard key={deal.id} deal={deal} isGuest={isGuest} onVote={handleVote} />
-          ))
+          <>
+            {numColumns > 1 ? (
+              <View style={styles.dealsGrid}>
+                {trendingDeals.map(deal => (
+                  <View key={deal.id} style={{ width: `${100 / numColumns}%`, padding: 8 }}>
+                    <DealCard deal={deal} isGuest={isGuest} onVote={handleVote} />
+                  </View>
+                ))}
+              </View>
+            ) : (
+              trendingDeals.map(deal => (
+                <DealCard key={deal.id} deal={deal} isGuest={isGuest} onVote={handleVote} />
+              ))
+            )}
+          </>
         )}
         <View style={styles.bottomPadding} />
       </ScrollView>

@@ -28,6 +28,7 @@ import {
   CircleCheck as CheckCircle,
   Circle as XCircle,
 
+  Search,
   Crown,
   Zap,
   Award,
@@ -289,7 +290,9 @@ useEffect(() => {
           <ArrowLeft size={24} color="#FFFFFF" />
         </TouchableOpacity>
         <Text style={styles.headerTitle}>Profile</Text>
-        <View style={styles.headerSpacer} />
+        <TouchableOpacity onPress={() => router.push('/(tabs)')} style={styles.searchBtn}>
+          <Search size={24} color="#FFFFFF" />
+        </TouchableOpacity>
       </View>
       <ScrollView showsVerticalScrollIndicator={false}>
         {/* Profile Header */}
@@ -857,6 +860,11 @@ const styles = StyleSheet.create({
     paddingTop: Platform.OS === 'ios' ? 44 : 24,
   },
   backBtn: {
+    padding: 8,
+    borderRadius: 8,
+    backgroundColor: 'rgba(255,255,255,0.2)',
+  },
+  searchBtn: {
     padding: 8,
     borderRadius: 8,
     backgroundColor: 'rgba(255,255,255,0.2)',

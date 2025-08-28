@@ -23,7 +23,6 @@ import { logger } from '@/utils/logger';
 interface HeaderProps {
   onPostPress?: () => void;
   onAlertsPress?: () => void;
-  showSearch?: boolean;
   searchQuery?: string;
   onSearchChange?: (query: string) => void;
   onLocationToggle?: () => void;
@@ -35,7 +34,6 @@ interface HeaderProps {
 export function Header({
   onPostPress,
   onAlertsPress,
-  showSearch = false,
   searchQuery = '',
   onSearchChange,
   onLocationToggle,
@@ -101,6 +99,8 @@ export function Header({
     [userRole, reputation]
   );
   
+  const showFullSearch = !!onSearchChange;
+
   const showAdminButton = useMemo(() => 
     profile && canAccessAdmin(profile.role), 
     [profile?.role]
@@ -175,7 +175,7 @@ export function Header({
 
           <View style={styles.rightSection}>
             {/* Desktop Web Search Bar */}
-            {isDesktopWeb && showSearch && (
+            {isDesktopWeb && showFullSearch && (
               <View style={styles.desktopSearchContainer}>
                 <View style={styles.desktopSearchBar}>
                   <Search size={20} color="#6366f1" style={styles.searchIcon} />
@@ -202,16 +202,14 @@ export function Header({
                   </LinearGradient>
                 </TouchableOpacity>
                 
-                <TouchableOpacity style={styles.desktopLocationButton} onPress={onLocationToggle}>
-                  <LinearGradient
-                    colors={locationEnabled ? ['#10b981', '#059669'] : ['#f1f5f9', '#e2e8f0']}
-                    style={styles.desktopLocationGradient}
-                  >
-                    <Navigation size={18} color={locationEnabled ? '#FFFFFF' : '#64748b'} />
-                  </LinearGradient>
-                </TouchableOpacity>
               </View>
             )}
+            {!showFullSearch && (
+              <TouchableOpacity style={styles.iconButton} onPress={() => router.push('/(tabs)')}>
+                <Search size={22} color="#FFFFFF" />
+              </TouchableOpacity>
+            )}
+
             {showAdminButton && (
               <TouchableOpacity style={styles.adminButton} onPress={handleAdminAccess}>
                 <LinearGradient colors={['#ef4444', '#dc2626']} style={styles.adminButtonGradient}>
@@ -276,7 +274,7 @@ export function Header({
 
 
         {/* Mobile/Tablet Search Bar */}
-        {!isDesktopWeb && showSearch && (
+        {!isDesktopWeb && showFullSearch && (
           <View style={styles.searchSection}>
             <View style={styles.searchContainer}>
               <View style={styles.searchBar}>
@@ -304,14 +302,6 @@ export function Header({
                 </LinearGradient>
               </TouchableOpacity>
 
-              <TouchableOpacity style={styles.locationButton} onPress={onLocationToggle}>
-                <LinearGradient
-                  colors={locationEnabled ? ['#10b981', '#059669'] : ['#f1f5f9', '#e2e8f0']}
-                  style={styles.locationGradient}
-                >
-                  <Navigation size={20} color={locationEnabled ? '#FFFFFF' : '#64748b'} />
-                </LinearGradient>
-              </TouchableOpacity>
             </View>
           </View>
         )}
@@ -412,6 +402,7 @@ const styles = StyleSheet.create({
   appName: { fontSize: 22, fontWeight: '800', color: '#FFFFFF', letterSpacing: -0.5 },
   rightSection: { flexDirection: 'row', alignItems: 'center' },
 
+  iconButton: { padding: 8, marginRight: 8 },
   adminButton: { borderRadius: 16, overflow: 'hidden', marginRight: 6 },
   adminButtonGradient: { paddingHorizontal: 12, paddingVertical: 6 },
   adminButtonText: { color: '#FFFFFF', fontSize: 12, fontWeight: '700' },

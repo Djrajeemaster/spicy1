@@ -113,6 +113,30 @@ class DealService {
       return data as DealWithRelations[];
     }, 'DealService.getRelatedDeals');
   }
+  // Add this function inside the DealService class
+  getDeals(options: { sortBy?: string; limit?: number } = {}, userId?: string) {
+    return safeAsync(async () => {
+      let query = supabase.from('deals').select(`
+        *,
+        store:stores(*),
+        category:categories(*),
+        created_by_user:users!deals_created_by_fkey(id, username, role, reputation)
+      `).eq('status', 'live');
+  
+      if (options.sortBy === 'popular') {
+        query = query.order('votes_up', { ascending: false });
+      } else {
+        query = query.order('created_at', { ascending: false });
+      }
+  
+      query = query.limit(options.limit || 50);
+  
+      const { data, error } = await query;
+      if (error) throw error;
+      return data as DealWithRelations[];
+    }, 'DealService.getDeals');
+  }
+  
 }
 
 export const dealService = new DealService();

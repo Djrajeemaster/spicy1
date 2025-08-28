@@ -1,32 +1,30 @@
-import { useState, useCallback, useEffect } from 'react';
 import { Alert, Platform } from 'react-native';
-import { UserRole } from '@/types/user';
 import { userService } from '@/services/userService';
+import { activityService } from '@/services/activityService';
 import { dealService, DealWithRelations } from '@/services/dealService';
-import { categoryService } from '@/services/categoryService';
+import { useState, useCallback, useEffect } from 'react';
 import { bannerService, Banner } from '@/services/bannerService';
+import { categoryService } from '@/services/categoryService';
 import { settingsService, SystemSetting } from '@/services/settingsService';
 import { Database } from '@/types/database';
-import { activityService } from '@/services/activityService';
 
 type UserProfile = Database['public']['Tables']['users']['Row'];
 type Category = Database['public']['Tables']['categories']['Row'];
 
 export interface AdminUser extends UserProfile {
-  // Additional computed fields for admin UI
+  // redacted
 }
 
 export interface AdminCategory extends Category {
-  // Additional computed fields for admin UI
+  // redacted
 }
 
 export interface AdminBanner extends Banner {
-  // Additional computed fields for admin UI
+  // redacted
 }
 
 export interface AdminDeal extends DealWithRelations {
-  flagged: boolean;
-  reportCount: number;
+  // redacted
 }
 
 export interface AdminStats {
@@ -37,20 +35,20 @@ export interface AdminStats {
 }
 
 export interface SystemSettings {
-  autoApproveVerifiedUsers: boolean;
-  requireModeration: boolean;
-  allowGuestPosting: boolean;
-  maxDailyPosts: number;
-  minReputationToPost: number;
+  auto_approve_verified?: boolean;
+  require_moderation_new_deals?: boolean;
+  allow_guest_posting?: boolean;
+  max_daily_posts_per_user?: number;
+  min_reputation_to_post?: number;
 }
 
 // Default system settings to ensure all properties are always defined
 const defaultSystemSettings: SystemSettings = {
-  autoApproveVerifiedUsers: true,
-  requireModeration: true,
-  allowGuestPosting: false,
-  maxDailyPosts: 5,
-  minReputationToPost: 2.0,
+  auto_approve_verified: false,
+  require_moderation_new_deals: true,
+  allow_guest_posting: false,
+  max_daily_posts_per_user: 5,
+  min_reputation_to_post: 0,
 };
 
 export const useAdminData = () => {
@@ -71,38 +69,48 @@ export const useAdminData = () => {
   useEffect(() => {
     const loadAdminData = async () => {
       setLoading(true);
+      console.log('🔄 Starting admin data load...');
+      
       try {
         // Fetch users
+        console.log('📊 Fetching users...');
         const { data: usersData, error: usersError } = await userService.getAllUsers();
         if (usersError) {
-          console.error('Error fetching users:', usersError);
+          console.error('❌ Error fetching users:', usersError);
         } else {
-          setUsers(usersData);
+          console.log('✅ Users fetched successfully:', usersData?.length || 0, 'users');
+          setUsers(usersData || []);
         }
 
-        // Fetch categories
-        const { data: categoriesData, error: categoriesError } = await categoryService.getCategories();
+        // Fetch categories (all categories for admin)
+        console.log('📊 Fetching categories...');
+        const { data: categoriesData, error: categoriesError } = await categoryService.getAllCategories();
         if (categoriesError) {
-          console.error('Error fetching categories:', categoriesError);
+          console.error('❌ Error fetching categories:', categoriesError);
         } else {
-          setCategories(categoriesData);
+          console.log('✅ Categories fetched successfully:', categoriesData?.length || 0, 'categories');
+          setCategories(categoriesData || []);
         }
 
         // Fetch banners
+        console.log('📊 Fetching banners...');
         const { data: bannersData, error: bannersError } = await bannerService.getBanners();
         if (bannersError) {
-          console.error('Error fetching banners:', bannersError);
+          console.error('❌ Error fetching banners:', bannersError);
         } else {
-          setBanners(bannersData);
+          console.log('✅ Banners fetched successfully:', bannersData?.length || 0, 'banners');
+          setBanners(bannersData || []);
         }
 
         // Fetch pending deals
+        console.log('📊 Fetching pending deals...');
         const { data: dealsData, error: dealsError } = await dealService.getPendingDeals();
         if (dealsError) {
-          console.error('Error fetching pending deals:', dealsError);
+          console.error('❌ Error fetching pending deals:', dealsError);
         } else {
+          console.log('✅ Pending deals fetched successfully:', dealsData?.length || 0, 'deals');
           // Transform deals to include flagged status and report count
-          const transformedDeals = dealsData.map(deal => ({
+          const transformedDeals = (dealsData || []).map(deal => ({
             ...deal,
             flagged: false, // TODO: Implement report checking
             reportCount: 0, // TODO: Implement report counting
@@ -110,28 +118,35 @@ export const useAdminData = () => {
           setPendingDeals(transformedDeals);
         }
 
-        // Fetch admin stats
-        const { data: statsData, error: statsError } = await dealService.getAdminStats();
-        if (statsError) {
-          console.error('Error fetching admin stats:', statsError);
-        } else {
-          setAdminStats(statsData);
-        }
+        // Calculate and set admin stats
+        const calculatedStats = {
+          totalUsers: usersData?.length || 0,
+          activeDeals: 0, // Will be calculated separately if needed
+          pendingReviews: dealsData?.length || 0,
+          dailyActiveUsers: Math.floor((usersData?.length || 0) * 0.3), // mock
+        };
+
+        console.log('📊 Calculated stats:', calculatedStats);
+        setAdminStats(calculatedStats);
 
         // Fetch system settings
+        console.log('📊 Fetching system settings...');
         const { data: settingsData, error: settingsError } = await settingsService.getSettings();
         if (settingsError) {
-          console.error('Error fetching settings:', settingsError);
+          console.error('❌ Error fetching settings:', settingsError);
         } else {
+          console.log('✅ Settings fetched successfully:', settingsData?.length || 0, 'settings');
           // Transform settings array to object and merge with defaults
-          const settingsObj = settingsData.reduce((acc, setting) => {
+          const settingsObj = (settingsData || []).reduce((acc, setting) => {
             acc[setting.key] = setting.value;
             return acc;
           }, {} as any);
           setSystemSettings({ ...defaultSystemSettings, ...settingsObj });
         }
+
+        console.log('✅ Admin data load completed successfully');
       } catch (error) {
-        console.error('Unexpected error loading admin data:', error);
+        console.error('❌ Unexpected error loading admin data:', error);
       } finally {
         setLoading(false);
       }
@@ -376,4 +391,4 @@ export const useAdminData = () => {
     addNewBanner,
     updateSetting,
   };
-};
+};          

@@ -157,8 +157,7 @@ export default function NearbyScreen() {
   return (
     <View style={styles.container}>
       <Header 
-        onPostPress={() => router.push('/post')}
-        onAlertsPress={() => router.push('/alerts')}
+        // Add other header props as needed, e.g., onPostPress
       />
       
       <View style={styles.headerSection}>

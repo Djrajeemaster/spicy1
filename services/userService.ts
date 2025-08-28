@@ -1,28 +1,57 @@
 import { supabase } from '@/lib/supabase';
-import { safeAsync } from '@/utils/errorHandler';
 import { Database } from '@/types/database';
 
-export type PublicUserProfile = Pick<
-  Database['public']['Tables']['users']['Row'],
-  'id' | 'username' | 'role' | 'reputation' | 'avatar_url' | 'join_date' | 'is_verified_business'
->;
+type UserProfile = Database['public']['Tables']['users']['Row'];
 
 class UserService {
-  getUserByUsername(username: string) {
-    return safeAsync(async () => {
-      const { data, error } = await supabase.from('users').select('*').eq('username', username).single();
+  async getAllUsers(): Promise<{ data: UserProfile[]; error: any }> {
+    try {
+      const { data, error } = await supabase
+        .from('users')
+        .select('*')
+        .order('created_at', { ascending: false });
+      
       if (error) throw error;
-      return data as PublicUserProfile;
-    }, 'UserService.getUserByUsername');
+      return { data: data || [], error: null };
+    } catch (error) {
+      console.error('Error fetching all users:', error);
+      return { data: [], error };
+    }
   }
 
-  getUserById(userId: string) {
-    return safeAsync(async () => {
-      const { data, error } = await supabase.from('users').select('*').eq('id', userId).single();
+  async updateUserStatus(userId: string, status: string, adminId: string): Promise<{ data: UserProfile | null; error: any }> {
+    try {
+      const { data, error } = await supabase
+        .from('users')
+        .update({ 
+          status,
+          updated_at: new Date().toISOString()
+        })
+        .eq('id', userId)
+        .select()
+        .single();
+      
       if (error) throw error;
-      return data as PublicUserProfile;
-    }, 'UserService.getUserById');
+      return { data, error: null };
+    } catch (error) {
+      console.error('Error updating user status:', error);
+      return { data: null, error };
+    }
   }
+
+  async searchByUsernamePrefix(prefix: string, limit = 8) {
+    if (!prefix) return { data: [] as UserProfile[], error: null };
+    const { data, error } = await supabase
+      .from('users')
+      .select('id, username, avatar_url')
+      .ilike('username', `${prefix}%`)
+      .order('username', { ascending: true })
+      .limit(limit);
+
+    return { data: (data || []) as UserProfile[], error };
+  }
+
+  // ... any other existing methods
 }
 
 export const userService = new UserService();

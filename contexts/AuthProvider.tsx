@@ -1,7 +1,6 @@
 import React, { createContext, useContext, useEffect, useState, ReactNode } from 'react';
 import { Session, User } from '@supabase/supabase-js';
 import { supabase } from '@/lib/supabase';
-import { userService } from '@/services/userService';
 import { logger } from '@/utils/logger';
 
 export interface AuthContextType {
@@ -9,8 +8,8 @@ export interface AuthContextType {
   user: User | null;
   profile: any | null; // Replace 'any' with your UserProfile type
   loading: boolean;
-  signIn: (email, password) => Promise<{ error: Error | null }>;
-  signUp: (email, password, metadata) => Promise<{ error: Error | null }>;
+  signIn: (email: string, password: string) => Promise<{ error: Error | null }>;
+  signUp: (email: string, password: string, metadata: any) => Promise<{ error: Error | null }>;
   signOut: () => Promise<void>;
   signInWithGoogle: () => Promise<{ error: Error | null }>;
 }
@@ -23,7 +22,44 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
   const [profile, setProfile] = useState<any | null>(null);
   const [loading, setLoading] = useState(true);
 
+  // Helper function to fetch user profile
+  const fetchUserProfile = async (userId: string) => {
+    try {
+      const { data, error } = await supabase
+        .from('users')
+        .select('*')
+        .eq('id', userId)
+        .maybeSingle();
+
+      if (error) {
+        logger.error('Failed to fetch user profile', { userId, error });
+        return null;
+      }
+
+      return data;
+    } catch (err) {
+      logger.error('Unexpected error fetching user profile', { userId, error: err });
+      return null;
+    }
+  };
+
   useEffect(() => {
+    // Get initial session
+    supabase.auth.getSession().then(async ({ data: { session } }) => {
+      setSession(session);
+      const currentUser = session?.user ?? null;
+      setUser(currentUser);
+
+      if (session?.user) {
+        const userProfile = await fetchUserProfile(session.user.id);
+        setProfile(userProfile);
+      } else {
+        setProfile(null);
+      }
+      setLoading(false);
+    });
+
+    // Listen for auth changes
     const { data: { subscription } } = supabase.auth.onAuthStateChange(
       async (_event, session) => {
         setSession(session);
@@ -31,23 +67,19 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
         setUser(currentUser);
 
         if (session?.user) {
-          const [error, userProfile] = await userService.getUserById(session.user.id);
-          if (error) {
-            logger.error('Failed to fetch user profile on auth change', { userId: session.user.id, error });
-            setProfile(null);
-          } else {
-            setProfile(userProfile);
-          }
+          const userProfile = await fetchUserProfile(session.user.id);
+          setProfile(userProfile);
         } else {
           setProfile(null);
         }
         setLoading(false);
       }
     );
+
     return () => subscription.unsubscribe();
   }, []);
 
-  const signIn = async (email, password) => {
+  const signIn = async (email: string, password: string) => {
     logger.authEvent('signin_attempt', undefined, { email });
     const { error } = await supabase.auth.signInWithPassword({ email, password });
     if (error) {
@@ -59,7 +91,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     return { error };
   };
 
-  const signUp = async (email, password, metadata) => {
+  const signUp = async (email: string, password: string, metadata: any) => {
     logger.authEvent('signup_attempt', undefined, { email, username: metadata?.username });
     const { error } = await supabase.auth.signUp({
       email,

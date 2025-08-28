@@ -270,7 +270,6 @@ export default function HomeScreen() {
       <Header
         onPostPress={navigateToPost}
         onAlertsPress={() => router.push('/alerts')}
-        showSearch={true}
         searchQuery={searchQuery}
         onSearchChange={setSearchQuery}
         onLocationToggle={handleLocationToggle}

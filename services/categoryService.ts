@@ -12,13 +12,25 @@ class CategoryService {
         .from('categories')
         .select('*')
         .eq('is_active', true)
-        .order('name');
-
+        .order('name', { ascending: true });
       if (error) throw error;
-
       return { data: data || [], error: null };
     } catch (error) {
       console.error('Error fetching categories:', error);
+      return { data: [], error };
+    }
+  }
+
+  async getAllCategories(): Promise<{ data: Category[]; error: any }> {
+    try {
+      const { data, error } = await supabase
+        .from('categories')
+        .select('*')
+        .order('name', { ascending: true });
+      if (error) throw error;
+      return { data: data || [], error: null };
+    } catch (error) {
+      console.error('Error fetching all categories:', error);
       return { data: [], error };
     }
   }
@@ -30,9 +42,7 @@ class CategoryService {
         .select('*')
         .eq('id', id)
         .single();
-
       if (error) throw error;
-
       return { data, error: null };
     } catch (error) {
       console.error('Error fetching category:', error);
@@ -47,9 +57,7 @@ class CategoryService {
         .insert(categoryData)
         .select()
         .single();
-
       if (error) throw error;
-
       return { data, error: null };
     } catch (error) {
       console.error('Error creating category:', error);
@@ -65,9 +73,7 @@ class CategoryService {
         .eq('id', id)
         .select()
         .single();
-
       if (error) throw error;
-
       return { data, error: null };
     } catch (error) {
       console.error('Error updating category:', error);
@@ -81,9 +87,7 @@ class CategoryService {
         .from('categories')
         .delete()
         .eq('id', id);
-
       if (error) throw error;
-
       return { error: null };
     } catch (error) {
       console.error('Error deleting category:', error);
