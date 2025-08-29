@@ -1,8 +1,8 @@
 import React from 'react';
 import { View, Text, StyleSheet, ScrollView, TouchableOpacity } from 'react-native';
-import { Users, Flag, Settings, ChartBar as BarChart3, Tag, Megaphone, AlertTriangle } from 'lucide-react-native';
+import { Users, Flag, Settings, BarChart3, Tag, Megaphone, AlertTriangle, Eye, MessageSquare, Shield } from 'lucide-react-native';
 
-export type AdminTab = 'dashboard' | 'users' | 'deals' | 'banners' | 'categories' | 'settings' | 'reports';
+export type AdminTab = 'dashboard' | 'users' | 'deals' | 'banners' | 'categories' | 'moderation' | 'analytics' | 'communication' | 'audit' | 'settings' | 'reports';
 
 interface AdminTabNavigationProps {
   activeTab: AdminTab;
@@ -13,6 +13,10 @@ const tabs = [
   { id: 'dashboard' as AdminTab, name: 'Dashboard', icon: BarChart3 },
   { id: 'users' as AdminTab, name: 'Users', icon: Users },
   { id: 'deals' as AdminTab, name: 'Deals', icon: Flag },
+  { id: 'moderation' as AdminTab, name: 'Moderation', icon: Eye },
+  { id: 'analytics' as AdminTab, name: 'Analytics', icon: BarChart3 },
+  { id: 'communication' as AdminTab, name: 'Communication', icon: MessageSquare },
+  { id: 'audit' as AdminTab, name: 'Audit Log', icon: Shield },
   { id: 'banners' as AdminTab, name: 'Banners', icon: Megaphone },
   { id: 'categories' as AdminTab, name: 'Categories', icon: Tag },
   { id: 'settings' as AdminTab, name: 'Settings', icon: Settings },
@@ -53,29 +57,44 @@ const styles = StyleSheet.create({
     backgroundColor: '#FFFFFF',
     borderBottomWidth: 1,
     borderBottomColor: '#e2e8f0',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
+    elevation: 3,
   },
   tabContainer: {
     flexDirection: 'row',
-    paddingHorizontal: 20,
+    paddingHorizontal: 16,
     paddingVertical: 8,
+    gap: 8,
   },
   tab: {
     flexDirection: 'row',
     alignItems: 'center',
-    paddingHorizontal: 16,
     paddingVertical: 12,
-    borderRadius: 20,
-    marginRight: 8,
-    minHeight: 48,
+    paddingHorizontal: 16,
+    borderRadius: 25,
+    backgroundColor: '#f8fafc',
+    borderWidth: 1,
+    borderColor: '#e2e8f0',
+    gap: 8,
+    minWidth: 100,
+    justifyContent: 'center',
   },
   tabActive: {
-    backgroundColor: '#1f2937',
+    backgroundColor: '#6366f1',
+    borderColor: '#6366f1',
+    shadowColor: '#6366f1',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.3,
+    shadowRadius: 4,
+    elevation: 3,
   },
   tabText: {
     fontSize: 14,
     fontWeight: '600',
     color: '#64748b',
-    marginLeft: 6,
   },
   tabTextActive: {
     color: '#FFFFFF',

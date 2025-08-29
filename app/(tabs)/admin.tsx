@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { View, Text, StyleSheet, ScrollView, ActivityIndicator, TouchableOpacity } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, ActivityIndicator, TouchableOpacity, Alert } from 'react-native';
 import { AdminHeader } from '@/components/admin/AdminHeader';
 import { AdminTabNavigation, AdminTab } from '@/components/admin/AdminTabNavigation';
 import { useAdminData } from '@/hooks/useAdminData';
@@ -11,6 +11,12 @@ import { SystemSettingsManagement } from '@/components/admin/SystemSettingsManag
 import ReportManagement from '@/components/admin/ReportManagement';
 import { useAuth } from '@/contexts/AuthProvider';
 import { router } from 'expo-router';
+
+// Import the new feature components (convert to real data)
+import AdminAnalytics from '../admin/analytics';
+import AdminModeration from '../admin/moderation';
+import AdminCommunication from '../admin/communication';
+import AdminAuditLog from '../admin/audit-log';
 
 export default function AdminScreen() {
   const [activeTab, setActiveTab] = useState<AdminTab>('dashboard');
@@ -48,7 +54,7 @@ export default function AdminScreen() {
       case 'dashboard':
         return (
           <View style={styles.contentSection}>
-            <Text style={styles.sectionTitle}>Dashboard Overview</Text>
+            <Text style={styles.sectionTitle}>Admin Dashboard</Text>
             <View style={styles.statsGrid}>
               <View style={styles.statCard}>
                 <Text style={styles.statNumber}>{adminStats.totalUsers}</Text>
@@ -67,13 +73,6 @@ export default function AdminScreen() {
                 <Text style={styles.statLabel}>Daily Active Users</Text>
               </View>
             </View>
-            
-            <TouchableOpacity 
-              style={styles.testButton}
-              onPress={() => router.push('/test-enhancements')}
-            >
-              <Text style={styles.testButtonText}>🧪 Test New Features</Text>
-            </TouchableOpacity>
           </View>
         );
       case 'users':
@@ -84,6 +83,14 @@ export default function AdminScreen() {
         />;
       case 'deals':
         return <DealManagement deals={pendingDeals} onDealAction={(dealId, action) => handleDealAction(dealId, action, profile?.id || '')} />;
+      case 'moderation':
+        return <AdminModeration />;
+      case 'analytics':
+        return <AdminAnalytics />;
+      case 'communication':
+        return <AdminCommunication />;
+      case 'audit':
+        return <AdminAuditLog />;
       case 'banners':
         return <BannerManagement banners={banners} onToggleBanner={toggleBanner} onAddNewBanner={() => router.push('/add-banner')} />;
       case 'categories':
@@ -101,10 +108,10 @@ export default function AdminScreen() {
     <View style={styles.container}>
       <AdminHeader currentUserRole={currentUserRole} />
       <AdminTabNavigation activeTab={activeTab} onTabChange={setActiveTab} />
-      <View style={styles.content} showsVerticalScrollIndicator={false}>
+      <ScrollView style={styles.content} showsVerticalScrollIndicator={false}>
         {renderContent()}
         <View style={styles.bottomPadding} />
-      </View>
+      </ScrollView>
     </View>
   );
 }
@@ -123,18 +130,5 @@ const styles = StyleSheet.create({
   },
   statNumber: { fontSize: 28, fontWeight: '800', color: '#1e293b', marginBottom: 4 },
   statLabel: { fontSize: 14, color: '#64748b', textAlign: 'center' },
-  testButton: {
-    backgroundColor: '#6366f1',
-    marginHorizontal: 20,
-    marginTop: 20,
-    padding: 16,
-    borderRadius: 12,
-    alignItems: 'center',
-  },
-  testButtonText: {
-    color: '#FFFFFF',
-    fontSize: 16,
-    fontWeight: '700',
-  },
   bottomPadding: { height: 100 },
 });

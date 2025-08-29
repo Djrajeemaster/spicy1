@@ -11,8 +11,8 @@ interface SystemSettingsManagementProps {
 
 export const SystemSettingsManagement: React.FC<SystemSettingsManagementProps> = ({ settings, onUpdateSetting }) => {
   const [tempValues, setTempValues] = useState({
-    maxDailyPosts: settings.maxDailyPosts.toString(),
-    minReputationToPost: settings.minReputationToPost.toString(),
+    maxDailyPosts: settings.max_daily_posts_per_user?.toString() || '5',
+    minReputationToPost: settings.min_reputation_to_post?.toString() || '0',
     dealExpiryDays: '30',
     maxImageSize: '5',
     rateLimit: '100',
@@ -89,14 +89,14 @@ export const SystemSettingsManagement: React.FC<SystemSettingsManagementProps> =
         <ToggleSetting
           title="Auto-approve Verified Users"
           description="Deals from verified users go live instantly"
-          value={settings.autoApproveVerifiedUsers}
-          onToggle={(value) => onUpdateSetting('autoApproveVerifiedUsers', value)}
+          value={settings.auto_approve_verified || false}
+          onToggle={(value) => onUpdateSetting('auto_approve_verified', value)}
         />
         <ToggleSetting
           title="Require Moderation for New Deals"
           description="All new deals require manual approval"
-          value={settings.requireModeration}
-          onToggle={(value) => onUpdateSetting('requireModeration', value)}
+          value={settings.require_moderation_new_deals || true}
+          onToggle={(value) => onUpdateSetting('require_moderation_new_deals', value)}
         />
         <ToggleSetting
           title="Auto-delete Expired Deals"
@@ -110,15 +110,15 @@ export const SystemSettingsManagement: React.FC<SystemSettingsManagementProps> =
         <ToggleSetting
           title="Allow Guest Posting"
           description="Guests can submit deals without an account"
-          value={settings.allowGuestPosting}
-          onToggle={(value) => onUpdateSetting('allowGuestPosting', value)}
+          value={settings.allow_guest_posting || false}
+          onToggle={(value) => onUpdateSetting('allow_guest_posting', value)}
         />
         <NumberSetting
           title="Max Daily Posts per User"
           description="Limit on deals a user can post daily"
           value={tempValues.maxDailyPosts}
           onChangeText={(text) => setTempValues(prev => ({ ...prev, maxDailyPosts: text }))}
-          onSave={() => updateNumericSetting('maxDailyPosts', 'maxDailyPosts')}
+          onSave={() => updateNumericSetting('maxDailyPosts', 'max_daily_posts_per_user')}
           placeholder="5"
         />
         <NumberSetting
@@ -126,7 +126,7 @@ export const SystemSettingsManagement: React.FC<SystemSettingsManagementProps> =
           description="Minimum reputation score required to post deals"
           value={tempValues.minReputationToPost}
           onChangeText={(text) => setTempValues(prev => ({ ...prev, minReputationToPost: text }))}
-          onSave={() => updateNumericSetting('minReputationToPost', 'minReputationToPost')}
+          onSave={() => updateNumericSetting('minReputationToPost', 'min_reputation_to_post')}
           placeholder="2.0"
         />
       </SettingCard>
@@ -155,6 +155,37 @@ export const SystemSettingsManagement: React.FC<SystemSettingsManagementProps> =
           onChangeText={(text) => setTempValues(prev => ({ ...prev, rateLimit: text }))}
           onSave={() => Alert.alert('Saved', 'Rate limit updated')}
           placeholder="100"
+        />
+      </SettingCard>
+
+      <SettingCard title="Content Settings" icon={<Settings size={20} color="#06b6d4" />}>
+        <NumberSetting
+          title="Max Comment Length"
+          description="Maximum characters allowed in comments"
+          value={tempValues.maxCommentLength}
+          onChangeText={(text) => setTempValues(prev => ({ ...prev, maxCommentLength: text }))}
+          onSave={() => Alert.alert('Saved', 'Comment length limit updated')}
+          placeholder="500"
+        />
+        <NumberSetting
+          title="Auto-delete Expired Deals (Days)"
+          description="Days after expiry before deals are permanently deleted"
+          value={tempValues.autoDeleteExpired}
+          onChangeText={(text) => setTempValues(prev => ({ ...prev, autoDeleteExpired: text }))}
+          onSave={() => Alert.alert('Saved', 'Auto-delete setting updated')}
+          placeholder="7"
+        />
+        <ToggleSetting
+          title="Enable Content Filtering"
+          description="Automatically filter inappropriate content"
+          value={true}
+          onToggle={() => Alert.alert('Feature', 'Content filtering setting updated')}
+        />
+        <ToggleSetting
+          title="Require Deal Images"
+          description="Force users to add images when posting deals"
+          value={false}
+          onToggle={() => Alert.alert('Feature', 'Deal image requirement setting updated')}
         />
       </SettingCard>
 

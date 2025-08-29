@@ -216,6 +216,53 @@ export interface Database {
           updated_at?: string | null;
         };
       };
+      user_reports: {
+        Row: {
+          id: string;
+          reporter_id: string;
+          reported_user_id: string;
+          reported_content_id: string | null;
+          content_type: string | null;
+          reason: string;
+          description: string | null;
+          status: string;
+          admin_notes: string | null;
+          resolved_by: string | null;
+          resolved_at: string | null;
+          created_at: string | null;
+          updated_at: string | null;
+        };
+        Insert: {
+          id?: string;
+          reporter_id: string;
+          reported_user_id: string;
+          reported_content_id?: string | null;
+          content_type?: string | null;
+          reason: string;
+          description?: string | null;
+          status?: string;
+          admin_notes?: string | null;
+          resolved_by?: string | null;
+          resolved_at?: string | null;
+          created_at?: string | null;
+          updated_at?: string | null;
+        };
+        Update: {
+          id?: string;
+          reporter_id?: string;
+          reported_user_id?: string;
+          reported_content_id?: string | null;
+          content_type?: string | null;
+          reason?: string;
+          description?: string | null;
+          status?: string;
+          admin_notes?: string | null;
+          resolved_by?: string | null;
+          resolved_at?: string | null;
+          created_at?: string | null;
+          updated_at?: string | null;
+        };
+      };
     };
   };
 }

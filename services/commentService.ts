@@ -56,6 +56,40 @@ class CommentService {
   }
 
   /**
+   * Flag a comment as inappropriate
+   */
+  flagComment(commentId: string, userId: string, reason?: string) {
+    return safeAsync(async () => {
+      // Increment the flag count
+      const { error: updateError } = await supabase
+        .from('comments')
+        .update({
+          flag_count: supabase.sql`flag_count + 1`,
+          flagged_by: userId,
+          flagged_at: new Date().toISOString()
+        })
+        .eq('id', commentId);
+
+      if (updateError) throw updateError;
+
+      // Optionally log the flag reason in user_reports table
+      if (reason) {
+        await supabase
+          .from('user_reports')
+          .insert({
+            reporter_id: userId,
+            reported_content_id: commentId,
+            content_type: 'comment',
+            reason: reason,
+            description: `Comment flagged: ${reason}`
+          });
+      }
+
+      return { success: true };
+    }, 'CommentService.flagComment');
+  }
+
+  /**
    * Helper function to build a tree from a flat list of comments.
    */
   private buildCommentTree(comments: CommentWithUser[]): CommentNode[] {
