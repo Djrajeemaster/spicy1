@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, Alert, Share, Image } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, Alert, Share, Image, useWindowDimensions } from 'react-native';
 import { Heart, Share2, Bookmark, Clock, TrendingUp, Star, MapPin, Eye } from 'lucide-react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useTheme } from '@/contexts/ThemeProvider';
@@ -32,8 +32,13 @@ interface EnhancedDealCardProps {
 
 export function EnhancedDealCard({ deal, isGuest, onVote, userRole, userId }: EnhancedDealCardProps) {
   const { colors } = useTheme();
+  const { width } = useWindowDimensions();
   const [isSaved, setIsSaved] = useState(false);
   const [isLiked, setIsLiked] = useState(false);
+  
+  // Responsive design
+  const isMobile = width < 768;
+  const isTablet = width >= 768 && width < 1024;
 
   const handleSave = async () => {
     if (isGuest || !userId) {
@@ -130,6 +135,64 @@ export function EnhancedDealCard({ deal, isGuest, onVote, userRole, userId }: En
   const discountPercentage = deal.original_price && deal.price 
     ? Math.round((1 - deal.price / deal.original_price) * 100) 
     : 0;
+
+  // Mobile compact horizontal layout
+  if (isMobile) {
+    return (
+      <TouchableOpacity 
+        style={[styles.mobileContainer, { backgroundColor: colors.surface }]}
+        onPress={() => router.push(`/deal-details?id=${deal.id}&title=${encodeURIComponent(deal.title)}&price=${deal.price}`)}
+        activeOpacity={0.95}
+      >
+        {/* Left: Compact Image */}
+        <View style={styles.mobileImageContainer}>
+          <Image 
+            source={{ uri: deal.images?.[0] || 'https://placehold.co/100x80/e2e8f0/64748b?text=No+Image' }}
+            style={styles.mobileImage}
+          />
+          {discountPercentage > 0 && (
+            <View style={styles.mobileDiscountBadge}>
+              <Text style={styles.mobileDiscountText}>{discountPercentage}%</Text>
+            </View>
+          )}
+        </View>
+
+        {/* Right: Content */}
+        <View style={styles.mobileContent}>
+          <Text style={styles.mobileTitle} numberOfLines={2}>{deal.title}</Text>
+          
+          <View style={styles.mobilePriceRow}>
+            <Text style={styles.mobileCurrentPrice}>{formatPrice(deal.price)}</Text>
+            {deal.original_price && (
+              <Text style={styles.mobileOriginalPrice}>{formatPrice(deal.original_price)}</Text>
+            )}
+          </View>
+
+          <View style={styles.mobileMetaRow}>
+            <View style={styles.mobileStats}>
+              <Heart size={12} color="#ef4444" />
+              <Text style={styles.mobileStatText}>{deal.votes_up || 0}</Text>
+              {deal.city && (
+                <>
+                  <MapPin size={12} color="#64748b" style={{ marginLeft: 8 }} />
+                  <Text style={styles.mobileLocationText}>{deal.city}</Text>
+                </>
+              )}
+            </View>
+            <Text style={styles.mobileTimeAgo}>{formatTimeAgo(deal.created_at)}</Text>
+          </View>
+
+          {getStatusPill() && (
+            <View style={styles.mobileStatusContainer}>
+              {getStatusPill()}
+            </View>
+          )}
+        </View>
+      </TouchableOpacity>
+    );
+  }
+
+  // Desktop/Tablet: Original large layout
 
   return (
     <TouchableOpacity 
@@ -391,5 +454,102 @@ const styles = StyleSheet.create({
     color: '#FFFFFF',
     fontSize: 16,
     fontWeight: '700',
+  },
+  
+  // Mobile Compact Styles
+  mobileContainer: {
+    flexDirection: 'row',
+    backgroundColor: '#FFFFFF',
+    borderRadius: 12,
+    marginHorizontal: 16,
+    marginVertical: 6,
+    padding: 12,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.08,
+    shadowRadius: 8,
+    elevation: 4,
+  },
+  mobileImageContainer: {
+    position: 'relative',
+    marginRight: 12,
+  },
+  mobileImage: {
+    width: 80,
+    height: 60,
+    borderRadius: 8,
+    backgroundColor: '#f1f5f9',
+  },
+  mobileDiscountBadge: {
+    position: 'absolute',
+    top: -4,
+    right: -4,
+    backgroundColor: '#ef4444',
+    borderRadius: 8,
+    paddingHorizontal: 4,
+    paddingVertical: 2,
+    minWidth: 24,
+    alignItems: 'center',
+  },
+  mobileDiscountText: {
+    color: '#FFFFFF',
+    fontSize: 10,
+    fontWeight: '700',
+  },
+  mobileContent: {
+    flex: 1,
+    justifyContent: 'space-between',
+  },
+  mobileTitle: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#1e293b',
+    lineHeight: 18,
+  },
+  mobilePriceRow: {
+    flexDirection: 'row',
+    alignItems: 'baseline',
+    marginTop: 4,
+  },
+  mobileCurrentPrice: {
+    fontSize: 16,
+    fontWeight: '800',
+    color: '#10b981',
+  },
+  mobileOriginalPrice: {
+    fontSize: 12,
+    color: '#94a3b8',
+    textDecorationLine: 'line-through',
+    marginLeft: 6,
+  },
+  mobileMetaRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginTop: 6,
+  },
+  mobileStats: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  mobileStatText: {
+    fontSize: 11,
+    fontWeight: '500',
+    color: '#64748b',
+    marginLeft: 3,
+  },
+  mobileLocationText: {
+    fontSize: 11,
+    fontWeight: '500',
+    color: '#64748b',
+    marginLeft: 3,
+  },
+  mobileTimeAgo: {
+    fontSize: 10,
+    color: '#94a3b8',
+  },
+  mobileStatusContainer: {
+    marginTop: 4,
+    alignSelf: 'flex-start',
   },
 });

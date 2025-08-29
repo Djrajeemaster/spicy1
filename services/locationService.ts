@@ -1,4 +1,5 @@
 import * as Location from 'expo-location';
+import { Platform } from 'react-native';
 
 export interface LocationCoordinates {
   latitude: number;
@@ -60,17 +61,28 @@ class LocationService {
         longitude: location.coords.longitude,
       };
 
-      // Get reverse geocoding for address details
-      const reverseGeocode = await Location.reverseGeocodeAsync(coordinates);
-      const address = reverseGeocode[0];
-
-      const locationData: LocationData = {
+      let locationData: LocationData = {
         coordinates,
-        city: address?.city || undefined,
-        state: address?.region || undefined,
-        country: address?.country || undefined,
-        address: [address?.street, address?.streetNumber].filter(Boolean).join(' ') || undefined,
       };
+
+      // Only use reverse geocoding on native platforms (SDK 49+ removed it for web)
+      if (Platform.OS !== 'web') {
+        try {
+          // Get reverse geocoding for address details
+          const reverseGeocode = await Location.reverseGeocodeAsync(coordinates);
+          const address = reverseGeocode[0];
+
+          locationData = {
+            coordinates,
+            city: address?.city || undefined,
+            state: address?.region || undefined,
+            country: address?.country || undefined,
+            address: [address?.street, address?.streetNumber].filter(Boolean).join(' ') || undefined,
+          };
+        } catch (geocodeError) {
+          console.warn('Reverse geocoding failed, using coordinates only:', geocodeError);
+        }
+      }
 
       this.currentLocation = locationData;
       return { data: locationData };

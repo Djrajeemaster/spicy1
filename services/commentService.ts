@@ -19,7 +19,10 @@ class CommentService {
     return safeAsync(async () => {
       const { data, error } = await supabase
         .from('comments')
-        .select('*, users(username, avatar_url)')
+        .select(`
+          *,
+          users!comments_user_id_fkey(username, avatar_url)
+        `)
         .eq('deal_id', dealId)
         .eq('status', 'active')
         .order('created_at', { ascending: true });

@@ -1,12 +1,12 @@
-import React, { useState, useEffect, useCallback } from 'react';
-import { View, Text, StyleSheet, ScrollView, Image, TouchableOpacity, ActivityIndicator, Platform, useWindowDimensions, Linking, Share, Alert, ImageBackground } from 'react-native';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
+import { View, Text, StyleSheet, ScrollView, Image, TouchableOpacity, ActivityIndicator, Platform, useWindowDimensions, Linking, Share, Alert, ImageBackground, Animated, Dimensions } from 'react-native';
 import { useLocalSearchParams, router } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { ArrowLeft, Store, User, Clock, Share2, ExternalLink, AlertTriangle, ThumbsUp, ThumbsDown, Bookmark } from 'lucide-react-native';
+import { ArrowLeft, Store, User, Clock, Share2, ExternalLink, AlertTriangle, ThumbsUp, ThumbsDown, Bookmark, Heart, Eye, TrendingUp, Star, MapPin, Calendar, Tag, Zap } from 'lucide-react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { UserBadge } from '@/components/UserBadge';
 import { UserRole, getRoleColor } from '@/types/user';
-import { reportService, ReportReason } from '@/services/reportService';
+import { reportService } from '@/services/reportService';
 import { dealService, DealWithRelations } from '@/services/dealService';
 import { useAuth } from '@/contexts/AuthProvider';
 import { useCurrency } from '@/contexts/CurrencyProvider';
@@ -24,6 +24,12 @@ export default function DealDetailsScreen() {
   const { user } = useAuth();
   const { formatPrice } = useCurrency();
 
+  // Animation refs
+  const fadeAnim = useRef(new Animated.Value(0)).current;
+  const slideAnim = useRef(new Animated.Value(50)).current;
+  const scaleAnim = useRef(new Animated.Value(0.9)).current;
+  const scrollY = useRef(new Animated.Value(0)).current;
+
   const [deal, setDeal] = useState<DealWithRelations | null>(null);
   const [comments, setComments] = useState<CommentNode[]>([]);
   const [relatedDeals, setRelatedDeals] = useState<DealWithRelations[]>([]);
@@ -31,6 +37,8 @@ export default function DealDetailsScreen() {
   const [selectedImage, setSelectedImage] = useState<string | null>(null);
   const [userVote, setUserVote] = useState<'up' | 'down' | null>(null);
   const [voteCounts, setVoteCounts] = useState({ up: 0, down: 0 });
+  const [isSaved, setIsSaved] = useState(false);
+  const [viewCount, setViewCount] = useState(0);
 
   const loadData = useCallback(async () => {
     if (!id) return;
@@ -44,13 +52,33 @@ export default function DealDetailsScreen() {
       setUserVote(dealData.user_vote || null);
       setVoteCounts({ up: dealData.votes_up || 0, down: dealData.votes_down || 0 });
       setSelectedImage(dealData.images?.[0] || 'https://placehold.co/600x400');
+      setViewCount(dealData.view_count || 0);
+      
+      // Animate content when loaded
+      Animated.parallel([
+        Animated.timing(fadeAnim, {
+          toValue: 1,
+          duration: 600,
+          useNativeDriver: Platform.OS !== 'web', // Disable on web
+        }),
+        Animated.timing(slideAnim, {
+          toValue: 0,
+          duration: 500,
+          useNativeDriver: Platform.OS !== 'web', // Disable on web
+        }),
+        Animated.timing(scaleAnim, {
+          toValue: 1,
+          duration: 400,
+          useNativeDriver: Platform.OS !== 'web', // Disable on web
+        }),
+      ]).start();
     }
 
     const [commentsError, commentsData] = await commentService.getComments(id);
     if (!commentsError) setComments(commentsData || []);
     
     setLoading(false);
-  }, [id, user?.id]);
+  }, [id, user?.id, fadeAnim, slideAnim, scaleAnim]);
 
   useEffect(() => { loadData(); }, [loadData]);
 
@@ -87,6 +115,52 @@ export default function DealDetailsScreen() {
     await Share.share({ message: `Check out this deal: ${deal.title}`, url: `https://spicybeats.com/deal-details?id=${deal.id}` });
   };
 
+  const handleSave = async () => {
+    if (!user) {
+      Alert.alert('Sign In Required', 'Please sign in to save deals');
+      return;
+    }
+    setIsSaved(!isSaved);
+    // TODO: Implement save functionality
+  };
+
+  // Enhanced status badges
+  const getStatusBadges = () => {
+    if (!deal) return [];
+    
+    const badges = [];
+    const discount = deal.original_price ? Math.round((1 - deal.price / deal.original_price) * 100) : 0;
+    
+    if (discount > 50) {
+      badges.push(
+        <LinearGradient key="hot" colors={['#ef4444', '#dc2626']} style={styles.statusBadge}>
+          <Zap size={12} color="#FFFFFF" />
+          <Text style={styles.statusBadgeText}>HOT DEAL</Text>
+        </LinearGradient>
+      );
+    }
+    
+    if (voteCounts.up > 10) {
+      badges.push(
+        <LinearGradient key="trending" colors={['#f59e0b', '#d97706']} style={styles.statusBadge}>
+          <TrendingUp size={12} color="#FFFFFF" />
+          <Text style={styles.statusBadgeText}>TRENDING</Text>
+        </LinearGradient>
+      );
+    }
+    
+    if (viewCount > 100) {
+      badges.push(
+        <LinearGradient key="popular" colors={['#8b5cf6', '#7c3aed']} style={styles.statusBadge}>
+          <Star size={12} color="#FFFFFF" />
+          <Text style={styles.statusBadgeText}>POPULAR</Text>
+        </LinearGradient>
+      );
+    }
+    
+    return badges;
+  };
+
   if (loading) return <DealDetailsSkeleton />;
 
   if (!deal) {
@@ -107,41 +181,115 @@ export default function DealDetailsScreen() {
       <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.thumbnailContainer}>
         {deal.images.map((img, index) => (
           <TouchableOpacity key={index} onPress={() => setSelectedImage(img)}>
-            <Image source={{ uri: img }} style={[styles.thumbnail, selectedImage === img && styles.thumbnailSelected]} />
+            <Image source={{ uri: img }} style={[
+              styles.thumbnail, 
+              selectedImage === img && styles.thumbnailSelected
+            ]} />
           </TouchableOpacity>
         ))}
       </ScrollView>
     );
   };
 
-  const ActionCard = () => (
-    <View style={[styles.actionCard, isDesktop && styles.desktopActionCard]}>
-      {isDesktop && <Image source={{ uri: selectedImage || 'https://placehold.co/600x400' }} style={styles.desktopCardImage} />}
+  const EnhancedActionCard = () => (
+    <Animated.View style={[
+      styles.enhancedActionCard, 
+      isDesktop && styles.desktopActionCard,
+      { 
+        opacity: fadeAnim,
+        transform: [{ translateY: slideAnim }, { scale: scaleAnim }]
+      }
+    ]}>
+      {isDesktop && (
+        <Image 
+          source={{ uri: selectedImage || 'https://placehold.co/600x400' }} 
+          style={styles.desktopCardImage as any} 
+        />
+      )}
       {isDesktop && renderThumbnails()}
+      
+      {/* Status Badges */}
+      <View style={styles.badgeContainer}>
+        {getStatusBadges()}
+      </View>
+
+      {/* Enhanced Stats Row */}
+      <View style={styles.statsRow}>
+        <View style={styles.statItem}>
+          <Heart size={16} color="#ef4444" />
+          <Text style={styles.statValue}>{voteCounts.up}</Text>
+          <Text style={styles.statLabel}>Likes</Text>
+        </View>
+        <View style={styles.statItem}>
+          <Eye size={16} color="#6366f1" />
+          <Text style={styles.statValue}>{viewCount}</Text>
+          <Text style={styles.statLabel}>Views</Text>
+        </View>
+        <View style={styles.statItem}>
+          <TrendingUp size={16} color="#10b981" />
+          <Text style={styles.statValue}>{discount}%</Text>
+          <Text style={styles.statLabel}>Saved</Text>
+        </View>
+      </View>
+
+      {/* Enhanced Price Section */}
       <View style={styles.priceSection}>
         <Text style={styles.price}>{formatPrice(deal.price)}</Text>
-        {deal.original_price && <Text style={styles.originalPrice}>{formatPrice(deal.original_price)}</Text>}
-        {discount > 0 && <View style={styles.discountBadge}><Text style={styles.discountText}>{discount}%</Text></View>}
+        {deal.original_price && (
+          <Text style={styles.originalPrice}>{formatPrice(deal.original_price)}</Text>
+        )}
+        {discount > 0 && (
+          <LinearGradient colors={['#ef4444', '#dc2626']} style={styles.discountBadge}>
+            <Text style={styles.discountText}>{discount}% OFF</Text>
+          </LinearGradient>
+        )}
       </View>
-      <TouchableOpacity style={styles.ctaButton} onPress={() => deal.deal_url && Linking.openURL(deal.deal_url)}>
-        <LinearGradient colors={['#10b981', '#059669']} style={styles.ctaGradient}>
-          <ExternalLink size={20} color="#FFFFFF" />
-          <Text style={styles.ctaButtonText}>Get Deal</Text>
+
+      {/* Enhanced CTA Button */}
+      <TouchableOpacity 
+        style={styles.enhancedCTAButton} 
+        onPress={() => deal.deal_url && Linking.openURL(deal.deal_url)}
+      >
+        <LinearGradient colors={['#10b981', '#059669', '#047857']} style={styles.enhancedCTAGradient}>
+          <Zap size={20} color="#FFFFFF" />
+          <Text style={styles.enhancedCTAText}>Get This Deal</Text>
         </LinearGradient>
       </TouchableOpacity>
-      <View style={styles.secondaryActions}>
-        <TouchableOpacity style={styles.voteButton} onPress={() => handleVote('up')}>
-          <ThumbsUp size={20} color={userVote === 'up' ? '#6366f1' : '#64748b'} fill={userVote === 'up' ? '#eef2ff' : 'none'} />
-          <Text style={[styles.voteCount, userVote === 'up' && styles.voteCountActive]}>{voteCounts.up}</Text>
+
+      {/* Quick Actions */}
+      <View style={styles.quickActions}>
+        <TouchableOpacity 
+          style={[styles.quickActionButton, userVote === 'up' && { backgroundColor: '#eef2ff' }]} 
+          onPress={() => handleVote('up')}
+        >
+          <ThumbsUp 
+            size={16} 
+            color={userVote === 'up' ? '#6366f1' : '#64748b'} 
+            fill={userVote === 'up' ? '#6366f1' : 'none'} 
+          />
+          <Text style={[styles.quickActionText, userVote === 'up' && { color: '#6366f1' }]}>
+            {voteCounts.up}
+          </Text>
         </TouchableOpacity>
-        <TouchableOpacity style={styles.voteButton} onPress={() => handleVote('down')}>
-          <ThumbsDown size={20} color={userVote === 'down' ? '#ef4444' : '#64748b'} />
-          <Text style={styles.voteCount}>{voteCounts.down}</Text>
+        
+        <TouchableOpacity 
+          style={[styles.quickActionButton, isSaved && { backgroundColor: '#fef3c7' }]} 
+          onPress={handleSave}
+        >
+          <Bookmark 
+            size={16} 
+            color={isSaved ? '#f59e0b' : '#64748b'} 
+            fill={isSaved ? '#f59e0b' : 'none'}
+          />
+          <Text style={[styles.quickActionText, isSaved && { color: '#f59e0b' }]}>Save</Text>
         </TouchableOpacity>
-        <TouchableOpacity style={styles.iconButton}><Bookmark size={20} color="#64748b" /></TouchableOpacity>
-        <TouchableOpacity style={styles.iconButton} onPress={handleShare}><Share2 size={20} color="#64748b" /></TouchableOpacity>
+        
+        <TouchableOpacity style={styles.quickActionButton} onPress={handleShare}>
+          <Share2 size={16} color="#64748b" />
+          <Text style={styles.quickActionText}>Share</Text>
+        </TouchableOpacity>
       </View>
-    </View>
+    </Animated.View>
   );
 
   return (
@@ -187,18 +335,18 @@ export default function DealDetailsScreen() {
                   </Text>
                   {deal.created_by_user?.role && <View style={{ marginLeft: 8 }}><UserBadge role={deal.created_by_user.role as UserRole} size="small" /></View>}
                 </TouchableOpacity>
-                <View style={styles.metaItem}><Clock size={14} color="#64748b" /><Text style={styles.metaText}>{formatTimeAgo(deal.created_at)}</Text></View>
+                <View style={styles.metaItem}><Clock size={14} color="#64748b" /><Text style={styles.metaText}>{formatTimeAgo(deal.created_at || '')}</Text></View>
                 {deal.store && <View style={styles.metaItem}><Store size={14} color="#64748b" /><Text style={styles.metaText}>{deal.store.name}</Text></View>}
               </View>
 
               {!isDesktop && renderThumbnails()}
-              {!isDesktop && <ActionCard />}
+              {!isDesktop && <EnhancedActionCard />}
 
               <View style={styles.descriptionSection}><Text style={styles.sectionTitle}>Description</Text><Text style={styles.descriptionText}>{deal.description}</Text></View>
               <View style={styles.commentsSection}><Text style={styles.sectionTitle}>Comments ({comments.length})</Text><CommentThread dealId={id!} nodes={comments} onPosted={loadData} /></View>
             </View>
 
-            {isDesktop && <View style={styles.desktopActionColumn}><ActionCard /></View>}
+            {isDesktop && <View style={styles.desktopActionColumn}><EnhancedActionCard /></View>}
           </View>
 
           {relatedDeals.length > 0 && (
@@ -314,9 +462,117 @@ const styles = StyleSheet.create({
   desktopBackText: { marginLeft: 8, fontSize: 14, fontWeight: '600', color: '#475569' },
   desktopCardLayout: { flexDirection: 'row', flex: 1 },
   desktopDetailsColumn: { flex: 3, paddingRight: 24 },
-  desktopActionColumn: { flex: 2, position: 'sticky', top: 16 },
+  desktopActionColumn: { flex: 2, position: 'relative', top: 16 },
   desktopActionCard: { backgroundColor: '#FFFFFF', marginTop: 0 },
   desktopCardImage: { width: '100%', height: 200, borderRadius: 16, backgroundColor: '#e2e8f0', marginBottom: 20 },
   categoryTextDesktop: { fontSize: 14, fontWeight: 'bold', color: '#6366f1', marginBottom: 8, textTransform: 'uppercase' },
   titleDesktop: { fontSize: 28, fontWeight: 'bold', color: '#1e293b', marginBottom: 16, lineHeight: 36 },
+  
+  // Enhanced UI Styles
+  statusBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 12,
+    marginRight: 8,
+    marginBottom: 4,
+  },
+  statusBadgeText: {
+    color: '#FFFFFF',
+    fontSize: 10,
+    fontWeight: '700',
+    marginLeft: 4,
+  },
+  enhancedActionCard: {
+    backgroundColor: '#FFFFFF',
+    borderRadius: 20,
+    padding: 24,
+    marginBottom: 24,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 8 },
+    shadowOpacity: 0.15,
+    shadowRadius: 24,
+    elevation: 12,
+    borderWidth: 1,
+    borderColor: '#f1f5f9',
+  },
+  statsRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-around',
+    alignItems: 'center',
+    backgroundColor: '#f8fafc',
+    borderRadius: 16,
+    padding: 16,
+    marginBottom: 20,
+  },
+  statItem: {
+    alignItems: 'center',
+  },
+  statValue: {
+    fontSize: 18,
+    fontWeight: '800',
+    color: '#1e293b',
+    marginTop: 4,
+  },
+  statLabel: {
+    fontSize: 12,
+    color: '#64748b',
+    fontWeight: '500',
+  },
+  enhancedCTAButton: {
+    borderRadius: 16,
+    overflow: 'hidden',
+    marginBottom: 20,
+    shadowColor: '#10b981',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.3,
+    shadowRadius: 12,
+    elevation: 8,
+  },
+  enhancedCTAGradient: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 18,
+    paddingHorizontal: 24,
+  },
+  enhancedCTAText: {
+    color: '#FFFFFF',
+    fontSize: 18,
+    fontWeight: '800',
+    marginLeft: 12,
+    letterSpacing: 0.5,
+  },
+  quickActions: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingTop: 16,
+    borderTopWidth: 1,
+    borderTopColor: '#f1f5f9',
+  },
+  quickActionButton: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 12,
+    marginHorizontal: 4,
+    borderRadius: 12,
+    backgroundColor: '#f8fafc',
+    borderWidth: 1,
+    borderColor: '#e2e8f0',
+  },
+  quickActionText: {
+    marginLeft: 6,
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#475569',
+  },
+  badgeContainer: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    marginBottom: 16,
+  },
 });

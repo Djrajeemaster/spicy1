@@ -1,4 +1,3 @@
-// src/hooks/usePushNotifications.ts
 import { useEffect, useRef } from 'react';
 import { Platform } from 'react-native';
 import * as Notifications from 'expo-notifications';
@@ -18,8 +17,6 @@ type PushTokenRow = {
   last_seen_at?: string;
 };
 
-// ⚠️ Keep Notifications.setNotificationHandler in app/_layout.tsx, not here.
-
 async function ensureAndroidChannel() {
   if (Platform.OS !== 'android') return;
   await Notifications.setNotificationChannelAsync('default', {
@@ -34,7 +31,13 @@ async function getExpoPushToken(): Promise<string | null> {
   // Real devices only for remote push
   if (!Device.isDevice) return null;
 
-  // Android remote push requires a Dev Build (Expo Go won’t work on SDK 53+)
+  // Skip push notifications on web for now (requires VAPID key setup)
+  if (Platform.OS === 'web') {
+    console.info('Web push notifications disabled - requires VAPID key configuration');
+    return null;
+  }
+
+  // Android remote push requires a Dev Build (Expo Go won't work on SDK 53+)
   if (Platform.OS === 'android' && Constants.appOwnership === 'expo') {
     console.warn('Android remote push requires a development build (not Expo Go).');
   }
@@ -56,7 +59,7 @@ async function getExpoPushToken(): Promise<string | null> {
     return null;
   }
 
-  // ✅ Pass projectId here
+  // Pass projectId here
   const token = (await Notifications.getExpoPushTokenAsync({ projectId })).data;
   return token;
 }
@@ -79,22 +82,22 @@ export function usePushNotifications() {
         const row: PushTokenRow = {
           token,
           user_id: user.id,
-          platform: Platform.OS,
-          device_id: Device.osInternalBuildId, // A more stable ID than random
+          platform: Platform.OS as 'ios' | 'android' | 'web',
+          device_id: Device.osInternalBuildId,
           app_version: Constants.expoConfig?.version ?? 'unknown',
           disabled: false,
         };
 
         await supabase
           .from('push_tokens')
-          .upsert(row, { onConflict: 'token' }) // or 'user_id' if you prefer one-token-per-user
+          .upsert(row as any, { onConflict: 'token' })
           .throwOnError();
       } catch (e) {
         console.error('Push init error:', e);
       }
     })();
 
-    // Handle taps
+    // Handle notification taps
     if (!subRef.current) {
       subRef.current = Notifications.addNotificationResponseReceivedListener((response) => {
         try {

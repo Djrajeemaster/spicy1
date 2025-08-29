@@ -165,17 +165,18 @@ export function Header({
         end={{ x: 1, y: 1 }}
         style={styles.gradient}
       >
-        <View style={styles.mainRow}>
-          <View style={styles.leftSection}>
+        <View style={[styles.mainRow, isDesktopWeb && showFullSearch && styles.mainRowDesktop]}>
+          <View style={[styles.leftSection, isDesktopWeb && styles.leftSectionDesktop]}>
             <TouchableOpacity onPress={() => router.push('/')} style={styles.logoContainer}>
               <LinearGradient colors={['#fbbf24', '#f59e0b', '#d97706']} style={styles.logo}>
                 <Sparkles size={18} color="#FFFFFF" />
               </LinearGradient>
-              <Text style={styles.appName}>SpicyBeats</Text>
+              {/* Show full text only on desktop, just icon on mobile */}
+              {isDesktopWeb && <Text style={styles.appName}>SpicyBeats</Text>}
             </TouchableOpacity>
           </View>
 
-          <View style={styles.rightSection}>
+          <View style={[styles.rightSection, isDesktopWeb && styles.rightSectionDesktop]}>
             {/* Desktop Web Search Bar */}
             {isDesktopWeb && showFullSearch && (
               <View style={styles.desktopSearchContainer}>
@@ -415,10 +416,25 @@ const styles = StyleSheet.create({
   container: { backgroundColor: '#030849', zIndex: 9999, position: 'relative' },
   gradient: { paddingTop: Platform.OS === 'ios' ? 0 : 8 },
   mainRow: {
-    flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
-    paddingHorizontal: 20, paddingVertical: 16,
+    flexDirection: 'row', 
+    alignItems: 'center', 
+    justifyContent: 'space-between', // Default mobile: space-between
+    paddingHorizontal: 12, // Reduced padding for mobile to fit more elements
+    paddingVertical: 16,
   },
-  leftSection: { flexDirection: 'row', alignItems: 'center' },
+  mainRowDesktop: {
+    justifyContent: 'flex-start', // Desktop with search: flex-start for flex distribution
+    paddingHorizontal: 16, // Slightly more padding on desktop
+  },
+  leftSection: { 
+    flexDirection: 'row', 
+    alignItems: 'center',
+    // Mobile default - no flex constraints
+  },
+  leftSectionDesktop: {
+    flex: 1, // Fixed flex for logo area on desktop
+    minWidth: 200, // Ensure logo has minimum space
+  },
   logoContainer: { flexDirection: 'row', alignItems: 'center' },
   logo: {
     width: 36, height: 36, borderRadius: 10, marginRight: 12,
@@ -426,19 +442,28 @@ const styles = StyleSheet.create({
     shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.25, shadowRadius: 4, elevation: 5,
   },
   appName: { fontSize: 22, fontWeight: '800', color: '#FFFFFF', letterSpacing: -0.5 },
-  rightSection: { flexDirection: 'row', alignItems: 'center' },
+  rightSection: { 
+    flexDirection: 'row', 
+    alignItems: 'center',
+    // Mobile default - no flex constraints but ensure elements don't get cut off
+    justifyContent: 'flex-end',
+  },
+  rightSectionDesktop: {
+    flex: 3, // Give more flex space to the right section for search on desktop
+    justifyContent: 'flex-end', // Align items to the right when no search
+  },
 
-  iconButton: { padding: 8, marginRight: 8 },
-  adminButton: { borderRadius: 16, overflow: 'hidden', marginRight: 6 },
+  iconButton: { padding: 8, marginRight: 6 }, // Reduced margin for mobile space
+  adminButton: { borderRadius: 16, overflow: 'hidden', marginRight: 4 }, // Reduced margin
   adminButtonGradient: { paddingHorizontal: 12, paddingVertical: 6 },
   adminButtonText: { color: '#FFFFFF', fontSize: 12, fontWeight: '700' },
 
-  postButton: { borderRadius: 16, overflow: 'hidden', marginRight: 6 },
+  postButton: { borderRadius: 16, overflow: 'hidden', marginRight: 4 }, // Reduced margin
   postButtonGradient: { paddingHorizontal: 16, paddingVertical: 8 },
   postButtonText: { color: '#FFFFFF', fontSize: 14, fontWeight: '700' },
   disabledButton: { opacity: 0.6 },
 
-  alertButton: { marginRight: 8 },
+  alertButton: { marginRight: 6 }, // Reduced margin for mobile space
   alertIconContainer: { position: 'relative', padding: 8 },
   alertBadge: {
     position: 'absolute', top: 2, right: 2, backgroundColor: '#ef4444',
@@ -453,7 +478,7 @@ const styles = StyleSheet.create({
 
 
 
-  userButton: { flexDirection: 'row', alignItems: 'center' },
+  userButton: { flexDirection: 'row', alignItems: 'center', marginLeft: 4 }, // Small margin to separate from alerts
   avatar: {
     width: 36, height: 36, borderRadius: 18, justifyContent: 'center', alignItems: 'center',
     marginRight: 8, shadowColor: '#000', shadowOffset: { width: 0, height: 2 },
@@ -502,9 +527,9 @@ const styles = StyleSheet.create({
   desktopSearchContainer: {
     flexDirection: 'row',
     alignItems: 'center',
-    flex: 4, // Balanced flex to share space with other elements
-    maxWidth: 1200,
-    marginHorizontal: 16,
+    flex: 1, // Take full available flex space in rightSection
+    marginHorizontal: 0, // Remove margins to fill space completely
+    minWidth: 600, // Increased minimum width for better desktop experience
   },
   desktopSearchBar: {
     flex: 1,
@@ -517,8 +542,8 @@ const styles = StyleSheet.create({
     marginRight: 8,
     borderWidth: 1,
     borderColor: 'rgba(255, 255, 255, 0.3)',
-    minWidth: 400, // Larger minimum with reduced other margins
-    maxWidth: '65%', // Slightly larger max width
+    minWidth: 500, // Increased minimum width from 400 to 500
+    // Removed maxWidth to fill available space
   },
   desktopSearchInput: {
     flex: 1,

@@ -18,7 +18,8 @@
     },
     "notification": {
       "icon": "./assets/notification-icon.png",
-      "color": "#030849"
+      "color": "#030849",
+      "vapidPublicKey": "BKd8VR-BW8C1KN7LfcK8W0Z8Y9Q2L1J3X5K0P4N2M6H7F8G9J0L1N3P5Q7R9T2V4"
     },
     "web": {
       "favicon": "./assets/icon.png"

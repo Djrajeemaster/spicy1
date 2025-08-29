@@ -422,7 +422,7 @@ export default function PostDealScreen() {
 
       {/* web confirm modal */}
       {isWeb && confirmState.open && (
-        <View style={styles.modalBackdrop} pointerEvents="box-none">
+        <View style={[styles.modalBackdrop, { pointerEvents: 'box-none' }]}>
           <View style={styles.modalCard}>
             <Text style={styles.modalTitle}>{confirmState.title}</Text>
             <Text style={styles.modalBody}>{confirmState.message}</Text>
