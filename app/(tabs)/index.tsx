@@ -20,14 +20,14 @@ import { MapPin, Zap, TrendingUp, DollarSign, Percent } from 'lucide-react-nativ
 import { LinearGradient } from 'expo-linear-gradient';
 import { Header } from '@/components/Header';
 import { DealCard } from '@/components/DealCard';
-import { EnhancedDealCard } from '@/components/EnhancedDealCard';
+import { EnhancedDealCardV2 } from '@/components/EnhancedDealCardV2';
 import { UserRole } from '@/types/user';
 import { useAuth } from '@/contexts/AuthProvider';
 import { dealService } from '@/services/dealService';
 import { categoryService } from '@/services/categoryService';
 import { storeService } from '@/services/storeService';
 import { locationService } from '@/services/locationService';
-import { bannerService } from '@/services/bannerService';
+import { bannerService, type Banner } from '@/services/bannerService';
 import { router } from 'expo-router';
 import { Database } from '@/types/database';
 
@@ -74,7 +74,7 @@ export default function HomeScreen() {
 
   const [availableCategories, setAvailableCategories] = useState<Category[]>([]);
   const [availableStores, setAvailableStores] = useState<Store[]>([]);
-  const [banners, setBanners] = useState<any[]>([]);
+  const [banners, setBanners] = useState<Banner[]>([]);
   const [dataLoading, setDataLoading] = useState(true);
 
   // Dropdown states for desktop
@@ -101,7 +101,7 @@ export default function HomeScreen() {
 
       setAvailableCategories([{ id: 'all' as any, name: 'All', emoji: '🔥' } as any, ...(categoriesRes.data || [])]);
       setAvailableStores([{ id: 'all' as any, name: 'All' } as any, ...(storesRes.data || [])]);
-      setBanners((bannersRes.data || []).filter((b: any) => b.is_active));
+      setBanners((bannersRes.data || []).filter((b: Banner) => b.is_active));
     } catch (err) {
       console.error('Error loading filter data:', err);
       setAvailableCategories([{ id: 'all' as any, name: 'All', emoji: '🔥' } as any]);
@@ -385,7 +385,7 @@ export default function HomeScreen() {
     );
   }
 
-  const numColumns = isDesktop ? (width > 1500 ? 4 : width > 1024 ? 3 : 2) : 1;
+  const numColumns = isDesktop ? (width > 1600 ? 5 : width > 1200 ? 4 : 3) : 1;
 
   return (
     <SafeAreaView style={styles.container} edges={['top']}>
@@ -400,6 +400,97 @@ export default function HomeScreen() {
         onFiltersToggle={() => setShowFilters(!showFilters)}
         filtersActive={hasActiveFilters()}
       />
+
+      {/* Sub-header with functional filters for Desktop */}
+      {isDesktop && (
+        <View style={styles.subHeader}>
+          <View style={styles.subHeaderContent}>
+            <View style={styles.subHeaderLeft}>
+              <Text style={styles.subHeaderTitle}>Category:</Text>
+              <TouchableOpacity 
+                style={styles.subHeaderDropdown}
+                onPress={() => setOpenDropdown(openDropdown === 'categories' ? null : 'categories')}
+              >
+                <Text style={styles.subHeaderValue}>
+                  {selectedCategories.includes('all') || selectedCategories.length === 0 
+                    ? '🔥 All Categories' 
+                    : `🔥 ${availableCategories.find(c => c.id === selectedCategories[0])?.name || 'Selected'}`
+                  }
+                </Text>
+                <Text style={styles.dropdownArrowSmall}>▼</Text>
+              </TouchableOpacity>
+            </View>
+            
+            <View style={styles.subHeaderMiddle}>
+              <Text style={styles.subHeaderTitle}>Store:</Text>
+              <TouchableOpacity 
+                style={styles.subHeaderDropdown}
+                onPress={() => setOpenDropdown(openDropdown === 'stores' ? null : 'stores')}
+              >
+                <Text style={styles.subHeaderValue}>
+                  {selectedStores.includes('all') || selectedStores.length === 0 
+                    ? '🏪 All Stores' 
+                    : `🏪 ${availableStores.find(s => s.id === selectedStores[0])?.name || 'Selected'}`
+                  }
+                </Text>
+                <Text style={styles.dropdownArrowSmall}>▼</Text>
+              </TouchableOpacity>
+            </View>
+            
+            <View style={styles.subHeaderMiddle}>
+              <Text style={styles.subHeaderTitle}>Location:</Text>
+              <TouchableOpacity style={styles.subHeaderDropdown}>
+                <Text style={styles.subHeaderValue}>📍 All Locations</Text>
+                <Text style={styles.dropdownArrowSmall}>▼</Text>
+              </TouchableOpacity>
+            </View>
+            
+            <View style={styles.subHeaderRight}>
+              <View style={styles.sortPillsDisplay}>
+                <TouchableOpacity 
+                  style={[styles.sortPillSmall, sortBy === 'newest' && styles.sortPillActive]}
+                  onPress={() => setSortBy('newest')}
+                >
+                  <Text style={[styles.sortPillInactiveText, sortBy === 'newest' && styles.sortPillActiveText]}>🔥 Hot</Text>
+                </TouchableOpacity>
+                <TouchableOpacity 
+                  style={[styles.sortPillSmall, sortBy === 'popular' && styles.sortPillActive]}
+                  onPress={() => setSortBy('popular')}
+                >
+                  <Text style={[styles.sortPillInactiveText, sortBy === 'popular' && styles.sortPillActiveText]}>⭐ Popular</Text>
+                </TouchableOpacity>
+                <TouchableOpacity 
+                  style={[styles.sortPillSmall, sortBy === 'newest' && styles.sortPillActive]}
+                  onPress={() => setSortBy('newest')}
+                >
+                  <Text style={[styles.sortPillInactiveText, sortBy === 'newest' && styles.sortPillActiveText]}>📄 Newest</Text>
+                </TouchableOpacity>
+                <TouchableOpacity 
+                  style={[styles.sortPillSmall, (sortBy === 'price_low' || sortBy === 'price_high') && styles.sortPillActive]}
+                  onPress={() => setSortBy('price_low')}
+                >
+                  <Text style={[styles.sortPillInactiveText, (sortBy === 'price_low' || sortBy === 'price_high') && styles.sortPillActiveText]}>💰 Price</Text>
+                </TouchableOpacity>
+                <TouchableOpacity 
+                  style={[styles.sortPillSmall, sortBy === 'expiring' && styles.sortPillActive]}
+                  onPress={() => setSortBy('expiring')}
+                >
+                  <Text style={[styles.sortPillInactiveText, sortBy === 'expiring' && styles.sortPillActiveText]}>⏰ Expiring</Text>
+                </TouchableOpacity>
+              </View>
+            </View>
+          </View>
+        </View>
+      )}
+
+      {/* Sub-header Dropdown Backdrop */}
+      {openDropdown && isDesktop && (
+        <TouchableOpacity 
+          style={styles.subHeaderDropdownBackdrop}
+          onPress={() => setOpenDropdown(null)}
+          activeOpacity={1}
+        />
+      )}
 
       {/* Filter Backdrop for Desktop */}
       {showFilters && isDesktop && (
@@ -807,7 +898,6 @@ export default function HomeScreen() {
         showsVerticalScrollIndicator={false}
       >
 
-
         {loading ? (
           <View style={styles.loadingContainer}>
             <ActivityIndicator size="large" color="#6366f1" />
@@ -815,11 +905,88 @@ export default function HomeScreen() {
           </View>
         ) : (
           <>
+            {/* Banners Section */}
+            {banners.length > 0 && (
+              <View style={styles.bannersContainer}>
+                {banners.map((banner: Banner) => (
+                  <LinearGradient
+                    key={banner.id}
+                    colors={['#667eea', '#764ba2']}
+                    style={[
+                      styles.bannerCard,
+                      isDesktop && styles.desktopBannerCard
+                    ]}
+                  >
+                    <View style={[
+                      styles.bannerContent,
+                      isDesktop && styles.desktopBannerContent
+                    ]}>
+                      <View style={styles.bannerText}>
+                        <Text style={[
+                          styles.bannerTitle,
+                          isDesktop && styles.desktopBannerTitle
+                        ]}>
+                          {banner.title}
+                        </Text>
+                        <Text style={[
+                          styles.bannerSubtitle,
+                          isDesktop && styles.desktopBannerSubtitle
+                        ]}>
+                          {banner.description}
+                        </Text>
+                        {isDesktop && (
+                          <TouchableOpacity style={styles.bannerCta}>
+                            <Text style={styles.bannerCtaText}>Learn More</Text>
+                          </TouchableOpacity>
+                        )}
+                      </View>
+                      {isDesktop && (
+                        <Text style={styles.bannerEmoji}>🎯</Text>
+                      )}
+                    </View>
+                  </LinearGradient>
+                ))}
+              </View>
+            )}
+
+            {/* Stats Header Section for Desktop */}
+            {isDesktop && (
+              <View style={styles.statsHeader}>
+                <View style={styles.statsContainer}>
+                  <View style={styles.statItem}>
+                    <Text style={styles.statNumber}>{filteredDeals.length.toLocaleString()}</Text>
+                    <Text style={styles.statLabel}>active deals</Text>
+                  </View>
+                  <View style={styles.statDivider} />
+                  <View style={styles.statItem}>
+                    <Text style={styles.statNumber}>{Math.floor(filteredDeals.length * 0.07)}</Text>
+                    <Text style={styles.statLabel}>trending now</Text>
+                  </View>
+                  <View style={styles.statDivider} />
+                  <View style={styles.statItem}>
+                    <Text style={styles.statNumber}>{Math.floor(filteredDeals.length * 0.01)}</Text>
+                    <Text style={styles.statLabel}>expiring soon</Text>
+                  </View>
+                </View>
+                <View style={styles.viewToggle}>
+                  <TouchableOpacity style={styles.viewButton}>
+                    <Text style={styles.viewButtonText}>🔲 Grid</Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity style={[styles.viewButton, styles.viewButtonInactive]}>
+                    <Text style={[styles.viewButtonText, styles.viewButtonTextInactive]}>📄 List</Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity style={[styles.viewButton, styles.viewButtonInactive]}>
+                    <Text style={[styles.viewButtonText, styles.viewButtonTextInactive]}>📦 Compact</Text>
+                  </TouchableOpacity>
+                </View>
+              </View>
+            )}
+
             {numColumns > 1 ? (
               <View style={styles.dealsGrid}>
                 {filteredDeals.map(deal => (
-                  <View key={deal.id} style={{ width: `${100 / numColumns}%`, padding: 8 }}>
-                    <EnhancedDealCard
+                  <View key={deal.id} style={{ width: `${100 / numColumns}%`, padding: 4 }}>
+                    <EnhancedDealCardV2
                       deal={deal}
                       isGuest={isGuest}
                       onVote={handleVote}
@@ -831,7 +998,7 @@ export default function HomeScreen() {
               </View>
             ) : (
               filteredDeals.map(deal => (
-                <EnhancedDealCard
+                <EnhancedDealCardV2
                   key={deal.id}
                   deal={deal}
                   isGuest={isGuest}
@@ -863,6 +1030,72 @@ export default function HomeScreen() {
 
         <View style={styles.bottomPadding} />
       </ScrollView>
+
+      {/* Floating dropdowns for sub-header - rendered on top */}
+      {isDesktop && openDropdown === 'categories' && (
+        <View style={styles.floatingDropdownContainer}>
+          <View style={[styles.subHeaderDropdownMenu, { left: 20, top: 102 }]}>
+            <ScrollView style={{ maxHeight: 150 }} nestedScrollEnabled>
+              <TouchableOpacity
+                style={styles.subHeaderDropdownItem}
+                onPress={() => {
+                  setSelectedCategories(['all']);
+                  setOpenDropdown(null);
+                }}
+              >
+                <Text style={styles.subHeaderDropdownText}>🔥 All Categories</Text>
+              </TouchableOpacity>
+              {availableCategories.filter(cat => cat.id !== 'all').map(category => (
+                <TouchableOpacity
+                  key={category.id}
+                  style={styles.subHeaderDropdownItem}
+                  onPress={() => {
+                    setSelectedCategories([category.id]);
+                    setOpenDropdown(null);
+                  }}
+                >
+                  <Text style={styles.subHeaderDropdownText}>
+                    {category.emoji} {category.name}
+                  </Text>
+                </TouchableOpacity>
+              ))}
+            </ScrollView>
+          </View>
+        </View>
+      )}
+
+      {isDesktop && openDropdown === 'stores' && (
+        <View style={styles.floatingDropdownContainer}>
+          <View style={[styles.subHeaderDropdownMenu, { left: 200, top: 102 }]}>
+            <ScrollView style={{ maxHeight: 150 }} nestedScrollEnabled>
+              <TouchableOpacity
+                style={styles.subHeaderDropdownItem}
+                onPress={() => {
+                  setSelectedStores(['all']);
+                  setOpenDropdown(null);
+                }}
+              >
+                <Text style={styles.subHeaderDropdownText}>🏪 All Stores</Text>
+              </TouchableOpacity>
+              {availableStores.filter(store => store.id !== 'all').map(store => (
+                <TouchableOpacity
+                  key={store.id}
+                  style={styles.subHeaderDropdownItem}
+                  onPress={() => {
+                    setSelectedStores([store.id]);
+                    setOpenDropdown(null);
+                  }}
+                >
+                  <Text style={styles.subHeaderDropdownText}>
+                    🏪 {store.name}
+                  </Text>
+                </TouchableOpacity>
+              ))}
+            </ScrollView>
+          </View>
+        </View>
+      )}
+
     </SafeAreaView>
   );
 }
@@ -874,7 +1107,7 @@ const styles = StyleSheet.create({
   filterSection: { backgroundColor: '#FFFFFF', borderBottomWidth: 1, borderBottomColor: '#e2e8f0', maxHeight: '70%' },
   filterSectionDesktop: {
     position: 'absolute',
-    top: 60,
+    top: 45,
     right: 20,
     width: 360,
     maxHeight: 700,
@@ -909,11 +1142,11 @@ const styles = StyleSheet.create({
   },
   filterScrollView: { flex: 1 },
   filterContent: { paddingBottom: 100 },
-  sortContainer: { paddingHorizontal: 20, paddingTop: 8 },
-  sortLabel: { fontSize: 15, fontWeight: '700', color: '#475569', marginBottom: 12 },
+  sortContainer: { paddingHorizontal: 20, paddingTop: 4 },
+  sortLabel: { fontSize: 15, fontWeight: '700', color: '#475569', marginBottom: 8 },
   sortOptions: { flexDirection: 'row', paddingHorizontal: 4, paddingRight: 20 },
   sortOptionWrapper: { marginRight: 12 },
-  sortOption: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 16, paddingVertical: 10, borderRadius: 20, minWidth: 100 },
+  sortOption: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 16, paddingVertical: 8, borderRadius: 20, minWidth: 100 },
   sortOptionInactive: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -929,8 +1162,8 @@ const styles = StyleSheet.create({
   sortEmojiInactive: { fontSize: 14, marginRight: 6, opacity: 0.7 },
   sortOptionText: { fontSize: 14, fontWeight: '600', color: '#64748b' },
   sortOptionTextActive: { fontSize: 14, fontWeight: '700', color: '#FFFFFF' },
-  advancedFilters: { paddingHorizontal: 20, marginTop: 20 },
-  filterLabel: { fontSize: 15, fontWeight: '700', color: '#475569', marginBottom: 10, marginTop: 15 },
+  advancedFilters: { paddingHorizontal: 20, marginTop: 12 },
+  filterLabel: { fontSize: 15, fontWeight: '700', color: '#475569', marginBottom: 8, marginTop: 12 },
   priceInputs: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
   inputWithIcon: {
     flexDirection: 'row',
@@ -968,8 +1201,17 @@ const styles = StyleSheet.create({
   storeOptionTextActive: { fontSize: 14, fontWeight: '700', color: '#FFFFFF' },
   dealsContainer: { flex: 1 },
   statsHeader: {
-    flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center',
-    paddingHorizontal: 20, paddingVertical: 16, backgroundColor: '#FFFFFF', marginBottom: 8,
+    flexDirection: 'row', 
+    justifyContent: 'space-between', 
+    alignItems: 'center',
+    paddingHorizontal: 24, 
+    paddingVertical: 16, 
+    backgroundColor: '#f8fafc', 
+    marginHorizontal: 16,
+    marginBottom: 16,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: '#e2e8f0',
   },
   statsItem: { flexDirection: 'row', alignItems: 'center' },
   statsText: { fontSize: 14, fontWeight: '600', color: '#64748b', marginLeft: 6 },
@@ -985,18 +1227,88 @@ const styles = StyleSheet.create({
   clearSearchButton: { backgroundColor: '#6366f1', paddingHorizontal: 24, paddingVertical: 12, borderRadius: 20 },
   clearSearchText: { color: '#FFFFFF', fontSize: 14, fontWeight: '700' },
   bannersContainer: { marginHorizontal: 16, marginBottom: 8 },
-  bannerCard: { marginBottom: 12, borderRadius: 16, overflow: 'hidden' },
+  bannerCard: { 
+    marginBottom: 12, 
+    borderRadius: 16, 
+    overflow: 'hidden',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.15,
+    shadowRadius: 8,
+    elevation: 5,
+  },
   bannerGradient: { padding: 20 },
-  bannerContent: { alignItems: 'center' },
-  bannerTitle: { fontSize: 18, fontWeight: '800', color: '#FFFFFF', marginBottom: 8, textAlign: 'center' },
+  bannerContent: { 
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    padding: 16,
+  },
+  bannerText: {
+    flex: 1,
+  },
+  bannerTitle: { 
+    fontSize: 18, 
+    fontWeight: '800', 
+    color: '#FFFFFF', 
+    marginBottom: 8, 
+    textAlign: 'center' 
+  },
   bannerDescription: { fontSize: 14, color: 'rgba(255,255,255,0.9)', textAlign: 'center', lineHeight: 20 },
+  bannerSubtitle: {
+    color: 'rgba(255, 255, 255, 0.9)',
+    fontSize: 14,
+    marginBottom: 12,
+    lineHeight: 18,
+  },
+  bannerCta: {
+    backgroundColor: 'rgba(255, 255, 255, 0.2)',
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+    borderRadius: 20,
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.3)',
+    alignSelf: 'flex-start',
+  },
+  bannerCtaText: {
+    color: '#fff',
+    fontSize: 14,
+    fontWeight: '600',
+  },
+  bannerEmoji: {
+    fontSize: 32,
+    marginLeft: 16,
+  },
+  
+  // Desktop-specific banner styles
+  desktopBannerCard: {
+    marginHorizontal: 16,
+    borderRadius: 20,
+    shadowOffset: { width: 0, height: 8 },
+    shadowOpacity: 0.2,
+    shadowRadius: 16,
+    elevation: 8,
+  },
+  desktopBannerContent: {
+    padding: 24,
+  },
+  desktopBannerTitle: {
+    fontSize: 22,
+    fontWeight: '800',
+    marginBottom: 6,
+  },
+  desktopBannerSubtitle: {
+    fontSize: 16,
+    lineHeight: 22,
+    marginBottom: 16,
+  },
   bottomPadding: { height: 100 },
   
   // Web tile layout
   dealsGrid: {
     flexDirection: 'row',
     flexWrap: 'wrap',
-    padding: 8,
+    padding: 4,
   },
   dealTile: {
     // This style is now handled inline with dynamic width and padding
@@ -1099,6 +1411,200 @@ const styles = StyleSheet.create({
   dropdownItemTextActive: {
     color: '#6366f1',
     fontWeight: '600',
+  },
+  
+  // Stats section styles
+  statsContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  statItem: {
+    alignItems: 'center',
+  },
+  statNumber: {
+    fontSize: 18,
+    fontWeight: '700',
+    color: '#1e293b',
+  },
+  statLabel: {
+    fontSize: 12,
+    color: '#64748b',
+    marginTop: 2,
+  },
+  statDivider: {
+    width: 1,
+    height: 20,
+    backgroundColor: '#d1d5db',
+    marginHorizontal: 16,
+  },
+  viewToggle: {
+    flexDirection: 'row',
+    backgroundColor: '#ffffff',
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: '#e2e8f0',
+    overflow: 'hidden',
+  },
+  viewButton: {
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    backgroundColor: '#6366f1',
+  },
+  viewButtonInactive: {
+    backgroundColor: '#ffffff',
+  },
+  viewButtonText: {
+    fontSize: 12,
+    fontWeight: '600',
+    color: '#ffffff',
+  },
+  viewButtonTextInactive: {
+    color: '#64748b',
+  },
+  
+  // Sub-header styles
+  subHeader: {
+    backgroundColor: '#4f46e5',
+    paddingVertical: 6,
+    paddingHorizontal: 20,
+    borderBottomWidth: 1,
+    borderBottomColor: 'rgba(255, 255, 255, 0.1)',
+    minHeight: 42,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.05,
+    shadowRadius: 2,
+    elevation: 50,
+    zIndex: 50,
+    position: 'relative',
+  },
+  subHeaderContent: {
+    flexDirection: 'row',
+    justifyContent: 'center',
+    alignItems: 'center',
+    flexWrap: 'wrap',
+    gap: 24,
+  },
+  subHeaderLeft: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    position: 'relative',
+    zIndex: 9999,
+  },
+  subHeaderMiddle: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    position: 'relative',
+    zIndex: 9998,
+  },
+  subHeaderRight: {
+    flex: 1,
+    alignItems: 'flex-end',
+  },
+  subHeaderTitle: {
+    color: 'rgba(255, 255, 255, 0.8)',
+    fontSize: 12,
+    fontWeight: '500',
+  },
+  subHeaderValue: {
+    color: '#ffffff',
+    fontSize: 13,
+    fontWeight: '600',
+  },
+  sortPillsDisplay: {
+    flexDirection: 'row',
+    gap: 6,
+  },
+  sortPillSmall: {
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 12,
+    backgroundColor: 'rgba(255, 255, 255, 0.15)',
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.2)',
+  },
+  sortPillActive: {
+    backgroundColor: '#ffffff',
+    borderColor: '#ffffff',
+  },
+  sortPillActiveText: {
+    color: '#6366f1',
+    fontSize: 11,
+    fontWeight: '600',
+  },
+  sortPillInactiveText: {
+    color: 'rgba(255, 255, 255, 0.8)',
+    fontSize: 11,
+    fontWeight: '500',
+  },
+  
+  // Sub-header dropdown styles
+  subHeaderDropdown: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    position: 'relative',
+    zIndex: 99999,
+  },
+  dropdownArrowSmall: {
+    color: 'rgba(255, 255, 255, 0.7)',
+    fontSize: 10,
+    marginLeft: 4,
+  },
+  subHeaderDropdownMenu: {
+    position: 'absolute',
+    top: '100%',
+    left: 0,
+    backgroundColor: '#ffffff',
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: '#e2e8f0',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.1,
+    shadowRadius: 8,
+    elevation: 99999,
+    zIndex: 99999,
+    minWidth: 160,
+    marginTop: 4,
+    maxHeight: 200,
+  },
+  subHeaderDropdownItem: {
+    paddingHorizontal: 16,
+    paddingVertical: 10,
+    borderBottomWidth: 1,
+    borderBottomColor: '#f8fafc',
+  },
+  subHeaderDropdownText: {
+    fontSize: 14,
+    fontWeight: '500',
+    color: '#374151',
+  },
+  
+  // Sub-header backdrop
+  subHeaderDropdownBackdrop: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    backgroundColor: 'transparent',
+    zIndex: 50000,
+    elevation: 50000,
+  },
+  
+  // Floating dropdown container
+  floatingDropdownContainer: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    zIndex: 99999,
+    elevation: 99999,
+    pointerEvents: 'box-none',
   },
 });
 

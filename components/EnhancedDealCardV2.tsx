@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, Alert, Share, Image, useWindowDimensions, Platform, Animated } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, Alert, Share, Image, useWindowDimensions, Platform } from 'react-native';
 import { Heart, Share2, Bookmark, Clock, TrendingUp, Star, MapPin, Eye } from 'lucide-react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useTheme } from '@/contexts/ThemeProvider';
@@ -22,7 +22,7 @@ interface Deal {
   expiry_date?: string;
 }
 
-interface EnhancedDealCardProps {
+interface EnhancedDealCardV2Props {
   deal: Deal;
   isGuest: boolean;
   onVote: (dealId: number, voteType: 'up' | 'down') => void;
@@ -30,7 +30,7 @@ interface EnhancedDealCardProps {
   userId?: string;
 }
 
-export function EnhancedDealCard({ deal, isGuest, onVote, userRole, userId }: EnhancedDealCardProps) {
+export function EnhancedDealCardV2({ deal, isGuest, onVote, userRole, userId }: EnhancedDealCardV2Props) {
   const { colors } = useTheme();
   const { width } = useWindowDimensions();
   const [isSaved, setIsSaved] = useState(false);
@@ -38,7 +38,6 @@ export function EnhancedDealCard({ deal, isGuest, onVote, userRole, userId }: En
   
   // Responsive design
   const isMobile = width < 768;
-  const isTablet = width >= 768 && width < 1024;
   const isDesktop = Platform.OS === 'web' && width >= 768;
 
   const handleSave = async () => {
@@ -66,7 +65,6 @@ export function EnhancedDealCard({ deal, isGuest, onVote, userRole, userId }: En
       Alert.alert('Sign In Required', 'Please sign in to like deals');
       return;
     }
-
     setIsLiked(!isLiked);
   };
 
@@ -93,12 +91,11 @@ export function EnhancedDealCard({ deal, isGuest, onVote, userRole, userId }: En
     const netVotes = deal.votes_up || 0;
     const views = deal.view_count || 0;
     
-    // Priority order: Expiring > Hot > Trending > Promoted
     if (isExpiringSoon) {
       return (
         <View style={[styles.statusPill, styles.expiringPill]}>
-          <Clock size={12} color="#FFFFFF" />
-          <Text style={styles.pillText}>Expiring Soon</Text>
+          <Clock size={10} color="#FFFFFF" />
+          <Text style={styles.pillText}>EXPIRING</Text>
         </View>
       );
     }
@@ -106,8 +103,8 @@ export function EnhancedDealCard({ deal, isGuest, onVote, userRole, userId }: En
     if (netVotes >= 10 && views >= 50) {
       return (
         <View style={[styles.statusPill, styles.hotPill]}>
-          <TrendingUp size={12} color="#FFFFFF" />
-          <Text style={styles.pillText}>Hot Deal</Text>
+          <TrendingUp size={10} color="#FFFFFF" />
+          <Text style={styles.pillText}>HOT</Text>
         </View>
       );
     }
@@ -115,8 +112,8 @@ export function EnhancedDealCard({ deal, isGuest, onVote, userRole, userId }: En
     if (netVotes >= 5 || views >= 25) {
       return (
         <View style={[styles.statusPill, styles.trendingPill]}>
-          <Star size={12} color="#FFFFFF" />
-          <Text style={styles.pillText}>Trending</Text>
+          <Star size={10} color="#FFFFFF" />
+          <Text style={styles.pillText}>TRENDING</Text>
         </View>
       );
     }
@@ -124,7 +121,7 @@ export function EnhancedDealCard({ deal, isGuest, onVote, userRole, userId }: En
     if (deal.isPinned) {
       return (
         <View style={[styles.statusPill, styles.promotedPill]}>
-          <Text style={styles.pillText}>Promoted</Text>
+          <Text style={styles.pillText}>PROMOTED</Text>
         </View>
       );
     }
@@ -137,7 +134,7 @@ export function EnhancedDealCard({ deal, isGuest, onVote, userRole, userId }: En
     ? Math.round((1 - deal.price / deal.original_price) * 100) 
     : 0;
 
-  // Mobile compact horizontal layout
+  // Mobile compact layout
   if (isMobile) {
     return (
       <TouchableOpacity 
@@ -145,7 +142,6 @@ export function EnhancedDealCard({ deal, isGuest, onVote, userRole, userId }: En
         onPress={() => router.push(`/deal-details?id=${deal.id}&title=${encodeURIComponent(deal.title)}&price=${deal.price}`)}
         activeOpacity={0.95}
       >
-        {/* Left: Compact Image */}
         <View style={styles.mobileImageContainer}>
           <Image 
             source={{ uri: deal.images?.[0] || 'https://placehold.co/100x80/e2e8f0/64748b?text=No+Image' }}
@@ -158,7 +154,6 @@ export function EnhancedDealCard({ deal, isGuest, onVote, userRole, userId }: En
           )}
         </View>
 
-        {/* Right: Content */}
         <View style={styles.mobileContent}>
           <Text style={styles.mobileTitle} numberOfLines={2}>{deal.title}</Text>
           
@@ -193,114 +188,93 @@ export function EnhancedDealCard({ deal, isGuest, onVote, userRole, userId }: En
     );
   }
 
-  // Desktop/Tablet: Enhanced layout with new styling
-
+  // Desktop: Enhanced compact layout
   return (
     <TouchableOpacity 
-      style={[
-        isDesktop ? styles.desktopContainer : styles.container, 
-        { backgroundColor: colors.surface }
-      ]}
+      style={[styles.container, { backgroundColor: colors.surface }]}
       onPress={() => router.push(`/deal-details?id=${deal.id}&title=${encodeURIComponent(deal.title)}&price=${deal.price}`)}
       activeOpacity={0.95}
     >
-      {/* Hero Image with Enhanced Overlay */}
-      <View style={isDesktop ? styles.desktopImageContainer : styles.imageContainer}>
+      {/* Enhanced Image Container */}
+      <View style={styles.imageContainer}>
         <Image 
-          source={{ uri: deal.images?.[0] || 'https://placehold.co/400x200/e2e8f0/64748b?text=No+Image' }}
-          style={isDesktop ? styles.desktopImage : styles.image}
+          source={{ uri: deal.images?.[0] || 'https://placehold.co/400x160/e2e8f0/64748b?text=No+Image' }}
+          style={styles.image}
         />
-        <LinearGradient 
-          colors={['transparent', 'rgba(0,0,0,0.4)', 'rgba(0,0,0,0.7)']} 
-          style={styles.imageOverlay}
-        />
+        <View style={styles.imageOverlay} />
         
-        {/* Enhanced Floating badges */}
-        <View style={isDesktop ? styles.desktopBadgeContainer : styles.badgeContainer}>
-          {discountPercentage > 0 ? (
-            <LinearGradient 
-              colors={['#ef4444', '#dc2626']} 
-              style={[styles.discountBadge, isDesktop && styles.desktopDiscountBadge]}
-            >
-              <Text style={[styles.discountText, isDesktop && styles.desktopDiscountText]}>
-                {discountPercentage}% OFF
-              </Text>
-            </LinearGradient>
-          ) : null}
-          {getStatusPill() || null}
+        {/* Enhanced Badges */}
+        <View style={styles.badgeContainer}>
+          {discountPercentage > 0 && (
+            <View style={styles.discountBadge}>
+              <Text style={styles.discountText}>{discountPercentage}% OFF</Text>
+            </View>
+          )}
+          {getStatusPill()}
         </View>
 
-        {/* Enhanced Price overlay */}
-        <View style={isDesktop ? styles.desktopPriceOverlay : styles.priceOverlay}>
-          <Text style={[styles.currentPrice, isDesktop && styles.desktopCurrentPrice]}>
-            {formatPrice(deal.price)}
-          </Text>
-          {deal.original_price ? (
-            <Text style={[styles.originalPrice, isDesktop && styles.desktopOriginalPrice]}>
-              {formatPrice(deal.original_price)}
-            </Text>
-          ) : null}
+        {/* Enhanced Price Overlay */}
+        <View style={styles.priceOverlay}>
+          <Text style={styles.currentPrice}>{formatPrice(deal.price)}</Text>
+          {deal.original_price && (
+            <Text style={styles.originalPrice}>{formatPrice(deal.original_price)}</Text>
+          )}
         </View>
       </View>
 
       {/* Enhanced Content */}
-      <View style={[styles.content, isDesktop && styles.desktopContent]}>
-        <Text 
-          style={[styles.title, { color: colors.text }, isDesktop && styles.desktopTitle]} 
-          numberOfLines={2}
-        >
+      <View style={styles.content}>
+        <Text style={[styles.title, { color: colors.text }]} numberOfLines={2}>
           {deal.title}
         </Text>
         
-        <View style={[styles.metaRow, isDesktop && styles.desktopMetaRow]}>
-          <View style={[styles.locationContainer, isDesktop && styles.desktopLocationContainer]}>
-            <MapPin size={isDesktop ? 12 : 14} color="#6366f1" />
-            <Text style={[styles.location, { color: colors.textSecondary }, isDesktop && styles.desktopLocation]}>
+        <View style={styles.metaRow}>
+          <View style={styles.locationContainer}>
+            <MapPin size={10} color="#6366f1" />
+            <Text style={[styles.location, { color: colors.textSecondary }]}>
               {deal.city || 'Online'}
             </Text>
           </View>
-          <View style={[styles.timeContainer, isDesktop && styles.desktopTimeContainer]}>
-            <Text style={[styles.timeAgo, { color: colors.textSecondary }, isDesktop && styles.desktopTimeAgo]}>
+          <View style={styles.timeContainer}>
+            <Text style={[styles.timeAgo, { color: colors.textSecondary }]}>
               {formatTimeAgo(deal.created_at)}
             </Text>
           </View>
         </View>
 
-        {/* Enhanced Stats row */}
-        <View style={[styles.statsRow, isDesktop && styles.desktopStatsRow]}>
+        {/* Enhanced Stats Row */}
+        <View style={styles.statsRow}>
           <View style={styles.leftStats}>
-            <View style={[styles.stat, isDesktop && styles.desktopStat]}>
-              <Eye size={isDesktop ? 12 : 14} color="#6366f1" />
-              <Text style={[styles.statText, isDesktop && styles.desktopStatText]}>
-                {deal.view_count || 0}
-              </Text>
+            <View style={styles.stat}>
+              <Eye size={10} color="#6366f1" />
+              <Text style={styles.statText}>{deal.view_count || 0}</Text>
             </View>
-            <View style={[styles.stat, isDesktop && styles.desktopStat]}>
-              <Heart size={isDesktop ? 12 : 14} color="#ef4444" />
-              <Text style={[styles.statText, isDesktop && styles.desktopStatText]}>
-                {deal.votes_up || 0}
-              </Text>
+            <View style={styles.stat}>
+              <Heart size={10} color="#ef4444" />
+              <Text style={styles.statText}>{deal.votes_up || 0}</Text>
             </View>
           </View>
+          
+          {timeRemaining && (
+            <View style={styles.timeRemaining}>
+              <Clock size={8} color="#f59e0b" />
+              <Text style={styles.timeRemainingText}>{timeRemaining}</Text>
+            </View>
+          )}
         </View>
       </View>
 
-      {/* Enhanced Get Deal Button */}
-      <View style={[styles.actionContainer, { borderTopColor: colors.border }, isDesktop && styles.desktopActionContainer]}>
+      {/* Enhanced Action Button */}
+      <View style={[styles.actionContainer, { borderTopColor: colors.border }]}>
         <TouchableOpacity 
-          style={[styles.getDealButton, isDesktop && styles.desktopGetDealButton]}
+          style={styles.getDealButton}
           onPress={(e) => { 
             e.stopPropagation(); 
             router.push(`/deal-details?id=${deal.id}&title=${encodeURIComponent(deal.title)}&price=${deal.price}`); 
           }}
         >
-          <LinearGradient 
-            colors={['#6366f1', '#4f46e5']} 
-            style={[styles.getDealGradient, isDesktop && styles.desktopGetDealGradient]}
-          >
-            <Text style={[styles.getDealText, isDesktop && styles.desktopGetDealText]}>
-              View Deal
-            </Text>
+          <LinearGradient colors={['#6366f1', '#4f46e5']} style={styles.getDealGradient}>
+            <Text style={styles.getDealText}>View Deal</Text>
           </LinearGradient>
         </TouchableOpacity>
       </View>
@@ -310,7 +284,7 @@ export function EnhancedDealCard({ deal, isGuest, onVote, userRole, userId }: En
 
 const styles = StyleSheet.create({
   // Enhanced Desktop Container
-  desktopContainer: {
+  container: {
     backgroundColor: '#FFFFFF',
     borderRadius: 20,
     overflow: 'hidden',
@@ -321,276 +295,216 @@ const styles = StyleSheet.create({
     elevation: 12,
     borderWidth: 1,
     borderColor: 'rgba(255, 255, 255, 0.6)',
+    height: 320, // Fixed compact height
     transform: [{ scale: 1 }],
-    height: 340,
+    ...Platform.select({
+      web: {
+        transition: 'all 0.4s cubic-bezier(0.25, 0.46, 0.45, 0.94)',
+        '&:hover': {
+          transform: 'translateY(-8px) scale(1.02)',
+          boxShadow: '0 20px 60px rgba(0,0,0,0.15), 0 8px 24px rgba(99, 102, 241, 0.1)',
+          borderColor: 'rgba(99, 102, 241, 0.3)',
+        }
+      }
+    })
   },
   
-  container: {
-    borderRadius: 20,
-    overflow: 'hidden',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.15,
-    shadowRadius: 12,
-    elevation: 8,
-  },
-  
-  // Enhanced Desktop Image Styles
-  desktopImageContainer: {
-    height: 160,
-    position: 'relative',
-    borderRadius: 20,
-    overflow: 'hidden',
-  },
-  
-  desktopImage: {
-    width: '100%',
-    height: '100%',
-    resizeMode: 'cover',
-  },
-  
+  // Enhanced Image Styles
   imageContainer: {
-    height: 180,
+    height: 140, // Compact height
     position: 'relative',
+    borderRadius: 20,
+    overflow: 'hidden',
   },
+  
   image: {
     width: '100%',
     height: '100%',
     resizeMode: 'cover',
   },
+  
   imageOverlay: {
     position: 'absolute',
     top: 0,
     left: 0,
     right: 0,
     bottom: 0,
+    backgroundColor: 'rgba(0,0,0,0.3)',
   },
   
-  // Enhanced Desktop Badge Styles
-  desktopBadgeContainer: {
+  // Enhanced Badge Styles
+  badgeContainer: {
     position: 'absolute',
-    top: 12,
-    left: 12,
+    top: 8,
+    left: 8,
     flexDirection: 'column',
-    gap: 6,
+    gap: 4,
     zIndex: 3,
   },
   
-  badgeContainer: {
-    position: 'absolute',
-    top: 16,
-    left: 16,
-    flexDirection: 'row',
-    gap: 8,
-  },
-  
-  desktopDiscountBadge: {
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    borderRadius: 16,
+  discountBadge: {
+    backgroundColor: '#ef4444',
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 12,
     shadowColor: '#ef4444',
-    shadowOffset: { width: 0, height: 4 },
+    shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.4,
     shadowRadius: 8,
     elevation: 8,
   },
   
-  desktopDiscountText: {
-    fontSize: 11,
-    fontWeight: '800',
-    color: '#FFFFFF',
-  },
-  image: {
-    width: '100%',
-    height: '100%',
-    resizeMode: 'cover',
-  },
-  imageOverlay: {
-    position: 'absolute',
-    bottom: 0,
-    left: 0,
-    right: 0,
-    height: 80,
-  },
-  badgeContainer: {
-    position: 'absolute',
-    top: 12,
-    right: 12,
-    flexDirection: 'column',
-  },
-  discountBadge: {
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    borderRadius: 16,
-    marginBottom: 6,
-  },
   discountText: {
-    color: '#FFFFFF',
-    fontSize: 12,
-    fontWeight: '800',
-  },
-  badge: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-    borderRadius: 12,
-    marginBottom: 6,
-  },
-  badgeText: {
-    color: '#FFFFFF',
     fontSize: 10,
-    fontWeight: '700',
-  },
-  priceOverlay: {
-    position: 'absolute',
-    bottom: 12,
-    left: 16,
-    flexDirection: 'row',
-    alignItems: 'center',
-  },
-  currentPrice: {
-    color: '#FFFFFF',
-    fontSize: 24,
     fontWeight: '800',
-    textShadowColor: 'rgba(0,0,0,0.5)',
+    color: '#FFFFFF',
+    textShadowColor: 'rgba(0,0,0,0.3)',
     textShadowOffset: { width: 0, height: 1 },
     textShadowRadius: 2,
   },
-  originalPrice: {
+  
+  statusPill: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 6,
+    paddingVertical: 3,
+    borderRadius: 10,
+    gap: 2,
+  },
+  
+  hotPill: {
+    backgroundColor: '#ef4444',
+  },
+  
+  trendingPill: {
+    backgroundColor: '#f59e0b',
+  },
+  
+  expiringPill: {
+    backgroundColor: '#dc2626',
+  },
+  
+  promotedPill: {
+    backgroundColor: '#6366f1',
+  },
+  
+  pillText: {
     color: '#FFFFFF',
-    fontSize: 16,
-    textDecorationLine: 'line-through',
-    opacity: 0.8,
-    marginLeft: 8,
-  },
-  content: {
-    padding: 16,
-  },
-  title: {
-    fontSize: 18,
+    fontSize: 8,
     fontWeight: '700',
-    lineHeight: 24,
-    marginBottom: 8,
   },
+  
+  // Enhanced Price Overlay
+  priceOverlay: {
+    position: 'absolute',
+    bottom: 8,
+    right: 8,
+    backgroundColor: 'rgba(0,0,0,0.7)',
+    paddingHorizontal: 8,
+    paddingVertical: 6,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.3)',
+  },
+  
+  currentPrice: {
+    color: '#10b981',
+    fontSize: 16,
+    fontWeight: '900',
+    textShadowColor: 'rgba(0,0,0,0.7)',
+    textShadowOffset: { width: 0, height: 1 },
+    textShadowRadius: 2,
+  },
+  
+  originalPrice: {
+    color: 'rgba(255,255,255,0.8)',
+    fontSize: 11,
+    textDecorationLine: 'line-through',
+    textShadowColor: 'rgba(0,0,0,0.7)',
+    textShadowOffset: { width: 0, height: 1 },
+    textShadowRadius: 2,
+  },
+  
+  // Enhanced Content Styles
+  content: {
+    padding: 12,
+    flex: 1,
+    justifyContent: 'space-between',
+  },
+  
+  title: {
+    fontSize: 14,
+    fontWeight: '700',
+    color: '#1e293b',
+    marginBottom: 8,
+    lineHeight: 18,
+    height: 36, // Fixed height for consistency
+  },
+  
   metaRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    marginBottom: 12,
+    marginBottom: 8,
   },
+  
   locationContainer: {
     flexDirection: 'row',
     alignItems: 'center',
-  },
-  location: {
-    fontSize: 14,
-    fontWeight: '500',
-    marginLeft: 4,
-  },
-  timeAgo: {
-    fontSize: 12,
-    fontWeight: '500',
-  },
-  statsRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-  },
-  leftStats: {
-    flexDirection: 'row',
-    alignItems: 'center',
-  },
-  stat: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginRight: 16,
-  },
-  statText: {
-    fontSize: 12,
-    fontWeight: '600',
-    color: '#64748b',
-    marginLeft: 4,
-  },
-  statusPill: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-    borderRadius: 12,
-  },
-  hotPill: {
-    backgroundColor: '#ef4444',
-  },
-  trendingPill: {
-    backgroundColor: '#f59e0b',
-  },
-  expiringPill: {
-    backgroundColor: '#dc2626',
-  },
-  promotedPill: {
-    backgroundColor: '#6366f1',
-  },
-  pillText: {
-    color: '#FFFFFF',
-    fontSize: 10,
-    fontWeight: '700',
-    marginLeft: 4,
-  },
-  actionContainer: {
-    paddingHorizontal: 16,
-    paddingVertical: 12,
-    borderTopWidth: 1,
-  },
-  getDealButton: {
-    borderRadius: 12,
-    overflow: 'hidden',
-  },
-  getDealGradient: {
-    paddingVertical: 12,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  getDealText: {
-    color: '#FFFFFF',
-    fontSize: 16,
-    fontWeight: '700',
-  },
-  
-  // Mobile Compact Styles
-  mobileContainer: {
-    flexDirection: 'row',
-    backgroundColor: '#FFFFFF',
-    borderRadius: 12,
-    marginHorizontal: 16,
-    marginVertical: 6,
-    padding: 12,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.08,
-    shadowRadius: 8,
-    elevation: 4,
-  },
-  
-  // Desktop Compact Styles
-  compactLocationContainer: {
     backgroundColor: 'rgba(99, 102, 241, 0.1)',
     paddingHorizontal: 6,
     paddingVertical: 3,
     borderRadius: 6,
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 4,
+    gap: 3,
   },
   
-  compactStat: {
+  location: {
+    fontSize: 10,
+    fontWeight: '600',
+    color: '#6366f1',
+  },
+  
+  timeContainer: {
+    backgroundColor: 'rgba(148, 163, 184, 0.1)',
+    paddingHorizontal: 6,
+    paddingVertical: 3,
+    borderRadius: 6,
+  },
+  
+  timeAgo: {
+    fontSize: 9,
+    fontWeight: '500',
+    color: '#94a3b8',
+  },
+  
+  statsRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingTop: 8,
+    borderTopWidth: 1,
+    borderTopColor: 'rgba(226, 232, 240, 0.8)',
+  },
+  
+  leftStats: {
+    flexDirection: 'row',
+    gap: 8,
+  },
+  
+  stat: {
+    flexDirection: 'row',
+    alignItems: 'center',
     backgroundColor: 'rgba(100, 116, 139, 0.1)',
     paddingHorizontal: 6,
     paddingVertical: 3,
     borderRadius: 6,
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginRight: 8,
+    gap: 3,
+  },
+  
+  statText: {
+    fontSize: 9,
+    fontWeight: '600',
+    color: '#64748b',
   },
   
   timeRemaining: {
@@ -604,9 +518,48 @@ const styles = StyleSheet.create({
   },
   
   timeRemainingText: {
-    fontSize: 10,
+    fontSize: 8,
     fontWeight: '600',
     color: '#f59e0b',
+  },
+  
+  // Enhanced Action Button
+  actionContainer: {
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderTopWidth: 1,
+  },
+  
+  getDealButton: {
+    borderRadius: 10,
+    overflow: 'hidden',
+  },
+  
+  getDealGradient: {
+    paddingVertical: 8,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  
+  getDealText: {
+    color: '#FFFFFF',
+    fontSize: 12,
+    fontWeight: '700',
+  },
+  
+  // Mobile Styles (unchanged)
+  mobileContainer: {
+    flexDirection: 'row',
+    backgroundColor: '#FFFFFF',
+    borderRadius: 12,
+    marginHorizontal: 16,
+    marginVertical: 6,
+    padding: 12,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.08,
+    shadowRadius: 8,
+    elevation: 4,
   },
   mobileImageContainer: {
     position: 'relative',
