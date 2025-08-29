@@ -21,6 +21,7 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { Header } from '@/components/Header';
 import { DealCard } from '@/components/DealCard';
 import { EnhancedDealCardV2 } from '@/components/EnhancedDealCardV2';
+import DealListCard from '@/components/DealListCard';
 import { UserRole } from '@/types/user';
 import { useAuth } from '@/contexts/AuthProvider';
 import { dealService } from '@/services/dealService';
@@ -65,6 +66,35 @@ export default function HomeScreen() {
   const [locationEnabled, setLocationEnabled] = useState(false);
   const [userLocation, setUserLocation] = useState<any>(null);
 
+  // Check if location is already available on component mount
+  useEffect(() => {
+    const checkExistingLocation = async () => {
+      try {
+        // First check if we have cached location
+        const cachedLocation = locationService.getCachedLocation();
+        if (cachedLocation) {
+          setUserLocation(cachedLocation);
+          setLocationEnabled(true);
+          console.log('Found cached location:', cachedLocation);
+          return;
+        }
+
+        // If no cached location, try to get current location silently
+        // This will only work if permissions were previously granted
+        const { data: location, error } = await locationService.getCurrentLocation();
+        if (location && !error) {
+          setUserLocation(location);
+          setLocationEnabled(true);
+          console.log('Retrieved current location:', location);
+        }
+      } catch (error) {
+        // Silently fail - user will need to manually enable location
+        console.log('No existing location available');
+      }
+    };
+    checkExistingLocation();
+  }, []);
+
   const [minPrice, setMinPrice] = useState('');
   const [maxPrice, setMaxPrice] = useState('');
   const [minDiscount, setMinDiscount] = useState('');
@@ -78,7 +108,10 @@ export default function HomeScreen() {
   const [dataLoading, setDataLoading] = useState(true);
 
   // Dropdown states for desktop
-  const [openDropdown, setOpenDropdown] = useState<'sort' | 'categories' | 'stores' | null>(null);
+  const [openDropdown, setOpenDropdown] = useState<'sort' | 'categories' | 'stores' | 'location' | null>(null);
+  
+  // View toggle state for desktop (only grid and list)
+  const [viewMode, setViewMode] = useState<'grid' | 'list'>('grid');
 
   const { user, profile } = useAuth();
   const isGuest = !user;
@@ -165,89 +198,131 @@ export default function HomeScreen() {
 
   // Apply filters whenever search query or filter options change
   useEffect(() => {
-    let filtered = [...deals];
+    const filterDeals = async () => {
+      let filtered = [...deals];
 
-    // Apply search query filter
-    if (searchQuery.trim()) {
-      const query = searchQuery.toLowerCase();
-      filtered = filtered.filter(deal => 
-        deal.title.toLowerCase().includes(query) ||
-        deal.description?.toLowerCase().includes(query) ||
-        deal.store?.name?.toLowerCase().includes(query) ||
-        deal.category?.name?.toLowerCase().includes(query)
-      );
-    }
-
-    // Apply category filter
-    if (!selectedCategories.includes('all')) {
-      filtered = filtered.filter(deal => 
-        selectedCategories.includes(deal.category?.id?.toString() || '')
-      );
-    }
-
-    // Apply store filter
-    if (!selectedStores.includes('all')) {
-      filtered = filtered.filter(deal => 
-        selectedStores.includes(deal.store?.id?.toString() || '')
-      );
-    }
-
-    // Apply price range filter
-    if (minPrice.trim()) {
-      const min = parseFloat(minPrice);
-      if (!isNaN(min)) {
-        filtered = filtered.filter(deal => deal.price >= min);
+      // Apply search query filter
+      if (searchQuery.trim()) {
+        const query = searchQuery.toLowerCase();
+        filtered = filtered.filter(deal => 
+          deal.title.toLowerCase().includes(query) ||
+          deal.description?.toLowerCase().includes(query) ||
+          deal.store?.name?.toLowerCase().includes(query) ||
+          deal.category?.name?.toLowerCase().includes(query)
+        );
       }
-    }
-    
-    if (maxPrice.trim()) {
-      const max = parseFloat(maxPrice);
-      if (!isNaN(max)) {
-        filtered = filtered.filter(deal => deal.price <= max);
+
+      // Apply category filter
+      if (!selectedCategories.includes('all')) {
+        filtered = filtered.filter(deal => 
+          selectedCategories.includes(deal.category?.id?.toString() || '')
+        );
       }
-    }
 
-    // Apply minimum discount filter
-    if (minDiscount.trim()) {
-      const minDiscountValue = parseFloat(minDiscount);
-      if (!isNaN(minDiscountValue)) {
-        filtered = filtered.filter(deal => {
-          if (deal.originalPrice && deal.price) {
-            const discount = ((deal.originalPrice - deal.price) / deal.originalPrice) * 100;
-            return discount >= minDiscountValue;
-          }
-          return false;
-        });
+      // Apply store filter
+      if (!selectedStores.includes('all')) {
+        filtered = filtered.filter(deal => 
+          selectedStores.includes(deal.store?.id?.toString() || '')
+        );
       }
-    }
 
-    // Apply location filter
-    if (locationEnabled && userLocation && selectedRadius) {
-      // Location filtering logic would go here
-      // For now, we'll keep all deals as location filtering requires more complex logic
-    }
-
-    // Apply sorting to filtered results
-    filtered.sort((a, b) => {
-      switch (sortBy) {
-        case 'popular':
-          return (b.votes_up || 0) - (a.votes_up || 0);
-        case 'price_low':
-          return a.price - b.price;
-        case 'price_high':
-          return b.price - a.price;
-        case 'expiring':
-          // Sort by expiration date (earliest expiring first)
-          const aExpiry = a.expires_at ? new Date(a.expires_at).getTime() : Infinity;
-          const bExpiry = b.expires_at ? new Date(b.expires_at).getTime() : Infinity;
-          return aExpiry - bExpiry;
-        case 'newest':
-        default:
-          return new Date(b.created_at).getTime() - new Date(a.created_at).getTime();
+      // Apply price range filter
+      if (minPrice.trim()) {
+        const min = parseFloat(minPrice);
+        if (!isNaN(min)) {
+          filtered = filtered.filter(deal => deal.price >= min);
+        }
       }
-    });
+      
+      if (maxPrice.trim()) {
+        const max = parseFloat(maxPrice);
+        if (!isNaN(max)) {
+          filtered = filtered.filter(deal => deal.price <= max);
+        }
+      }
 
-    setFilteredDeals(filtered);
+      // Apply minimum discount filter
+      if (minDiscount.trim()) {
+        const minDiscountValue = parseFloat(minDiscount);
+        if (!isNaN(minDiscountValue)) {
+          filtered = filtered.filter(deal => {
+            if (deal.originalPrice && deal.price) {
+              const discount = ((deal.originalPrice - deal.price) / deal.originalPrice) * 100;
+              return discount >= minDiscountValue;
+            }
+            return false;
+          });
+        }
+      }
+
+      // Apply location filter with async processing
+      if (locationEnabled && userLocation && selectedRadius) {
+        const userCoords = {
+          latitude: userLocation.coordinates.latitude,
+          longitude: userLocation.coordinates.longitude
+        };
+
+        const locationFilteredDeals = await Promise.all(
+          filtered.map(async (deal) => {
+            if (!deal.city || !deal.state) {
+              return null; // Exclude deals without location info
+            }
+
+            try {
+              // Get coordinates for the deal's location using geocoding
+              const { data: dealLocation, error } = await locationService.geocodeAddress(
+                `${deal.city}, ${deal.state}${deal.country ? ', ' + deal.country : ''}`
+              );
+
+              if (error || !dealLocation) {
+                return null; // Exclude if we can't geocode the location
+              }
+
+              // Calculate distance between user and deal location
+              const distance = locationService.calculateDistance(
+                userCoords,
+                dealLocation.coordinates
+              );
+
+              // Convert miles to kilometers (locationService returns miles)
+              const distanceInKm = distance * 1.60934;
+
+              // Return deal if within selected radius, null otherwise
+              return distanceInKm <= selectedRadius ? deal : null;
+            } catch (error) {
+              console.error('Error processing location for deal:', deal.id, error);
+              return null;
+            }
+          })
+        );
+
+        // Filter out null values
+        filtered = locationFilteredDeals.filter(deal => deal !== null);
+      }
+
+      // Apply sorting to filtered results
+      filtered.sort((a, b) => {
+        switch (sortBy) {
+          case 'popular':
+            return (b.votes_up || 0) - (a.votes_up || 0);
+          case 'price_low':
+            return a.price - b.price;
+          case 'price_high':
+            return b.price - a.price;
+          case 'expiring':
+            if (!a.expiry_date && !b.expiry_date) return 0;
+            if (!a.expiry_date) return 1;
+            if (!b.expiry_date) return -1;
+            return new Date(a.expiry_date).getTime() - new Date(b.expiry_date).getTime();
+          default: // 'newest'
+            return new Date(b.created_at || 0).getTime() - new Date(a.created_at || 0).getTime();
+        }
+      });
+
+      setFilteredDeals(filtered);
+    };
+
+    filterDeals();
   }, [deals, searchQuery, selectedCategories, selectedStores, minPrice, maxPrice, minDiscount, locationEnabled, userLocation, selectedRadius, sortBy]);
 
   // Refresh deals when screen comes into focus
@@ -361,7 +436,23 @@ export default function HomeScreen() {
               }
               setUserLocation(location);
               setLocationEnabled(true);
-              Alert.alert("Location Enabled", `Now showing deals near ${location?.city || 'you'}!`);
+              
+              // Show success message
+              Alert.alert(
+                "Location Enabled", 
+                `Now showing deals near ${location?.city || 'you'}! Select a radius to filter deals.`,
+                [
+                  {
+                    text: "OK",
+                    onPress: () => {
+                      // Auto-open location dropdown on desktop
+                      if (isDesktop) {
+                        setOpenDropdown('location');
+                      }
+                    }
+                  }
+                ]
+              );
             }
           }
         ]
@@ -369,6 +460,7 @@ export default function HomeScreen() {
     } else {
       setLocationEnabled(false);
       setUserLocation(null);
+      setSelectedRadius(null); // Reset radius when disabling location
       Alert.alert("Location Disabled", "Location services turned off.");
     }
   };
@@ -385,7 +477,12 @@ export default function HomeScreen() {
     );
   }
 
-  const numColumns = isDesktop ? (width > 1600 ? 5 : width > 1200 ? 4 : 3) : 1;
+  // Calculate number of columns based on view mode and screen size
+  const numColumns = isDesktop ? (
+    viewMode === 'list' ? 1 : 
+    // grid mode uses compact layout (more columns)
+    (width > 1600 ? 6 : width > 1200 ? 5 : 4)
+  ) : 1;
 
   return (
     <SafeAreaView style={styles.container} edges={['top']}>
@@ -439,8 +536,27 @@ export default function HomeScreen() {
             
             <View style={styles.subHeaderMiddle}>
               <Text style={styles.subHeaderTitle}>Location:</Text>
-              <TouchableOpacity style={styles.subHeaderDropdown}>
-                <Text style={styles.subHeaderValue}>📍 All Locations</Text>
+              <TouchableOpacity 
+                style={styles.subHeaderDropdown}
+                onPress={async () => {
+                  console.log('Location dropdown clicked. locationEnabled:', locationEnabled, 'userLocation:', userLocation);
+                  // If location is not enabled, request permission first
+                  if (!locationEnabled) {
+                    await handleLocationToggle();
+                    return;
+                  }
+                  // If location is enabled, show dropdown
+                  setOpenDropdown(openDropdown === 'location' ? null : 'location');
+                }}
+              >
+                <Text style={styles.subHeaderValue}>
+                  {!locationEnabled 
+                    ? '📍 Enable Location' 
+                    : selectedRadius === null 
+                      ? '📍 All Locations' 
+                      : `📍 Within ${selectedRadius}km`
+                  }
+                </Text>
                 <Text style={styles.dropdownArrowSmall}>▼</Text>
               </TouchableOpacity>
             </View>
@@ -954,36 +1070,65 @@ export default function HomeScreen() {
               <View style={styles.statsHeader}>
                 <View style={styles.statsContainer}>
                   <View style={styles.statItem}>
-                    <Text style={styles.statNumber}>{filteredDeals.length.toLocaleString()}</Text>
-                    <Text style={styles.statLabel}>active deals</Text>
+                    <Text style={styles.statText}>
+                      🔥 {filteredDeals.length.toLocaleString()} active deals
+                    </Text>
                   </View>
                   <View style={styles.statDivider} />
                   <View style={styles.statItem}>
-                    <Text style={styles.statNumber}>{Math.floor(filteredDeals.length * 0.07)}</Text>
-                    <Text style={styles.statLabel}>trending now</Text>
+                    <Text style={styles.statText}>
+                      🔥 {filteredDeals.filter(deal => {
+                        const hoursAgo = (Date.now() - new Date(deal.created_at).getTime()) / (1000 * 60 * 60);
+                        return hoursAgo <= 24 && (deal.votes_up || 0) > 5;
+                      }).length} trending now
+                    </Text>
                   </View>
                   <View style={styles.statDivider} />
                   <View style={styles.statItem}>
-                    <Text style={styles.statNumber}>{Math.floor(filteredDeals.length * 0.01)}</Text>
-                    <Text style={styles.statLabel}>expiring soon</Text>
+                    <Text style={styles.statText}>
+                      ⚡ {filteredDeals.filter(deal => {
+                        if (!deal.expires_at) return false;
+                        const expiresIn = new Date(deal.expires_at).getTime() - Date.now();
+                        const hoursLeft = expiresIn / (1000 * 60 * 60);
+                        return hoursLeft > 0 && hoursLeft <= 24;
+                      }).length} expiring soon
+                    </Text>
                   </View>
                 </View>
                 <View style={styles.viewToggle}>
-                  <TouchableOpacity style={styles.viewButton}>
-                    <Text style={styles.viewButtonText}>🔲 Grid</Text>
+                  <TouchableOpacity 
+                    style={[styles.viewButton, viewMode === 'grid' && styles.viewButtonActive]}
+                    onPress={() => setViewMode('grid')}
+                  >
+                    <Text style={[styles.viewButtonText, viewMode === 'grid' && styles.viewButtonTextActive]}>🔲 Grid</Text>
                   </TouchableOpacity>
-                  <TouchableOpacity style={[styles.viewButton, styles.viewButtonInactive]}>
-                    <Text style={[styles.viewButtonText, styles.viewButtonTextInactive]}>📄 List</Text>
-                  </TouchableOpacity>
-                  <TouchableOpacity style={[styles.viewButton, styles.viewButtonInactive]}>
-                    <Text style={[styles.viewButtonText, styles.viewButtonTextInactive]}>📦 Compact</Text>
+                  <TouchableOpacity 
+                    style={[styles.viewButton, viewMode === 'list' && styles.viewButtonActive]}
+                    onPress={() => setViewMode('list')}
+                  >
+                    <Text style={[styles.viewButtonText, viewMode === 'list' && styles.viewButtonTextActive]}>📄 List</Text>
                   </TouchableOpacity>
                 </View>
               </View>
             )}
 
-            {numColumns > 1 ? (
-              <View style={styles.dealsGrid}>
+            {viewMode === 'list' ? (
+              // List view - single column with list cards
+              <View style={{ marginTop: 16 }}>
+                {filteredDeals.map(deal => (
+                  <DealListCard
+                    key={deal.id}
+                    deal={deal}
+                    isGuest={isGuest}
+                    onVote={handleVote}
+                    userRole={currentUserRole}
+                    userId={user?.id}
+                  />
+                ))}
+              </View>
+            ) : numColumns > 1 ? (
+              // Grid view - multiple columns
+              <View style={[styles.dealsGrid, { marginTop: 16 }]}>
                 {filteredDeals.map(deal => (
                   <View key={deal.id} style={{ width: `${100 / numColumns}%`, padding: 4 }}>
                     <EnhancedDealCardV2
@@ -997,16 +1142,19 @@ export default function HomeScreen() {
                 ))}
               </View>
             ) : (
-              filteredDeals.map(deal => (
-                <EnhancedDealCardV2
-                  key={deal.id}
-                  deal={deal}
-                  isGuest={isGuest}
-                  onVote={handleVote}
-                  userRole={currentUserRole}
-                  userId={user?.id}
-                />
-              ))
+              // Single column grid (mobile)
+              <View style={{ marginTop: 16 }}>
+                {filteredDeals.map(deal => (
+                  <EnhancedDealCardV2
+                    key={deal.id}
+                    deal={deal}
+                    isGuest={isGuest}
+                    onVote={handleVote}
+                    userRole={currentUserRole}
+                    userId={user?.id}
+                  />
+                ))}
+              </View>
             )}
           </>
         )}
@@ -1088,6 +1236,38 @@ export default function HomeScreen() {
                 >
                   <Text style={styles.subHeaderDropdownText}>
                     🏪 {store.name}
+                  </Text>
+                </TouchableOpacity>
+              ))}
+            </ScrollView>
+          </View>
+        </View>
+      )}
+
+      {isDesktop && openDropdown === 'location' && locationEnabled && (
+        <View style={styles.floatingDropdownContainer}>
+          <View style={[styles.subHeaderDropdownMenu, { left: 350, top: 102 }]}>
+            <ScrollView style={{ maxHeight: 150 }} nestedScrollEnabled>
+              <TouchableOpacity
+                style={styles.subHeaderDropdownItem}
+                onPress={() => {
+                  setSelectedRadius(null);
+                  setOpenDropdown(null);
+                }}
+              >
+                <Text style={styles.subHeaderDropdownText}>📍 All Locations</Text>
+              </TouchableOpacity>
+              {[1, 5, 10, 25, 50].map(radius => (
+                <TouchableOpacity
+                  key={radius}
+                  style={styles.subHeaderDropdownItem}
+                  onPress={() => {
+                    setSelectedRadius(radius);
+                    setOpenDropdown(null);
+                  }}
+                >
+                  <Text style={styles.subHeaderDropdownText}>
+                    📍 Within {radius}km
                   </Text>
                 </TouchableOpacity>
               ))}
@@ -1205,17 +1385,17 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between', 
     alignItems: 'center',
     paddingHorizontal: 24, 
-    paddingVertical: 16, 
-    backgroundColor: '#f8fafc', 
-    marginHorizontal: 16,
-    marginBottom: 16,
-    borderRadius: 12,
-    borderWidth: 1,
-    borderColor: '#e2e8f0',
+    paddingVertical: 4, 
+    backgroundColor: '#a78bfa', 
+    marginHorizontal: 0,
+    marginBottom: 0,
+    borderRadius: 0,
+    borderWidth: 0,
+    minHeight: 24,
   },
   statsItem: { flexDirection: 'row', alignItems: 'center' },
-  statsText: { fontSize: 14, fontWeight: '600', color: '#64748b', marginLeft: 6 },
-  trendingLink: { fontSize: 14, fontWeight: '700', color: '#6366f1' },
+  statsText: { fontSize: 12, fontWeight: '600', color: '#64748b', marginLeft: 6 },
+  trendingLink: { fontSize: 12, fontWeight: '700', color: '#6366f1' },
   locationBanner: { marginHorizontal: 16, marginBottom: 8, borderRadius: 12, overflow: 'hidden' },
   locationBannerGradient: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', paddingVertical: 12, paddingHorizontal: 16 },
   locationBannerText: { fontSize: 14, fontWeight: '700', color: '#FFFFFF', marginLeft: 8 },
@@ -1419,47 +1599,52 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   statItem: {
+    flexDirection: 'row',
     alignItems: 'center',
   },
-  statNumber: {
-    fontSize: 18,
-    fontWeight: '700',
-    color: '#1e293b',
-  },
-  statLabel: {
-    fontSize: 12,
-    color: '#64748b',
-    marginTop: 2,
+  statText: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#ffffff',
+    lineHeight: 18,
   },
   statDivider: {
     width: 1,
-    height: 20,
-    backgroundColor: '#d1d5db',
+    height: 12,
+    backgroundColor: 'rgba(255, 255, 255, 0.3)',
     marginHorizontal: 16,
   },
   viewToggle: {
     flexDirection: 'row',
-    backgroundColor: '#ffffff',
+    backgroundColor: 'rgba(255, 255, 255, 0.15)',
     borderRadius: 8,
     borderWidth: 1,
-    borderColor: '#e2e8f0',
+    borderColor: 'rgba(255, 255, 255, 0.25)',
     overflow: 'hidden',
+    padding: 3,
   },
   viewButton: {
     paddingHorizontal: 12,
-    paddingVertical: 8,
-    backgroundColor: '#6366f1',
+    paddingVertical: 6,
+    backgroundColor: 'transparent',
+    borderRadius: 5,
+    marginHorizontal: 1,
   },
-  viewButtonInactive: {
+  viewButtonActive: {
     backgroundColor: '#ffffff',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.1,
+    shadowRadius: 2,
+    elevation: 1,
   },
   viewButtonText: {
     fontSize: 12,
     fontWeight: '600',
-    color: '#ffffff',
+    color: 'rgba(255, 255, 255, 0.8)',
   },
-  viewButtonTextInactive: {
-    color: '#64748b',
+  viewButtonTextActive: {
+    color: '#a78bfa',
   },
   
   // Sub-header styles

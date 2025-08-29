@@ -171,6 +171,41 @@ class LocationService {
   }
 
   /**
+   * Converts an address string to coordinates using geocoding.
+   */
+  async geocodeAddress(address: string): Promise<{ data: LocationData | null; error?: string }> {
+    try {
+      const geocodingResult = await Location.geocodeAsync(address);
+      
+      if (geocodingResult.length === 0) {
+        return { 
+          data: null, 
+          error: 'Address not found' 
+        };
+      }
+
+      const result = geocodingResult[0];
+      const locationData: LocationData = {
+        coordinates: {
+          latitude: result.latitude,
+          longitude: result.longitude
+        },
+        city: address.split(',')[0].trim(),
+        state: address.split(',')[1]?.trim() || '',
+        country: address.split(',')[2]?.trim() || 'US'
+      };
+
+      return { data: locationData };
+    } catch (error) {
+      console.error('Geocoding error:', error);
+      return { 
+        data: null, 
+        error: 'Failed to geocode address' 
+      };
+    }
+  }
+
+  /**
    * Gets the cached current location without making a new request.
    */
   getCachedLocation(): LocationData | null {
