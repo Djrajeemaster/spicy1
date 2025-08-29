@@ -6,6 +6,7 @@ import { useAdminData } from '@/hooks/useAdminData';
 import { UserManagement } from '@/components/admin/UserManagement';
 import { DealManagement } from '@/components/admin/DealManagement';
 import { CategoryManagement } from '@/components/admin/CategoryManagement';
+import { StoreManagement } from '@/components/admin/StoreManagement';
 import { BannerManagement } from '@/components/admin/BannerManagement';
 import { SystemSettingsManagement } from '@/components/admin/SystemSettingsManagement';
 import ReportManagement from '@/components/admin/ReportManagement';
@@ -95,6 +96,8 @@ export default function AdminScreen() {
         return <BannerManagement banners={banners} onToggleBanner={toggleBanner} onAddNewBanner={() => router.push('/add-banner')} />;
       case 'categories':
         return <CategoryManagement categories={categories} onToggleCategory={toggleCategory} onAddNewCategory={addNewCategory} />;
+      case 'stores':
+        return <StoreManagement onRefresh={() => window.location.reload()} />;
       case 'settings':
         return <SystemSettingsManagement settings={systemSettings} onUpdateSetting={updateSetting} />;
       case 'reports':

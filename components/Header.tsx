@@ -29,6 +29,7 @@ interface HeaderProps {
   locationEnabled?: boolean;
   showFilters?: boolean;
   onFiltersToggle?: () => void;
+  filtersActive?: boolean;
 }
 
 export function Header({
@@ -40,6 +41,7 @@ export function Header({
   locationEnabled = false,
   showFilters = false,
   onFiltersToggle,
+  filtersActive = false,
 }: HeaderProps) {
   const { user, profile, signOut } = useAuth();
 
@@ -195,10 +197,22 @@ export function Header({
                 
                 <TouchableOpacity style={styles.desktopFilterButton} onPress={onFiltersToggle}>
                   <LinearGradient
-                    colors={showFilters ? ['#6366f1', '#4f46e5'] : ['#f1f5f9', '#e2e8f0']}
+                    colors={(showFilters || filtersActive) ? ['#6366f1', '#4f46e5'] : ['#f1f5f9', '#e2e8f0']}
                     style={styles.desktopFilterGradient}
                   >
-                    <Filter size={18} color={showFilters ? '#FFFFFF' : '#64748b'} />
+                    <Filter size={18} color={(showFilters || filtersActive) ? '#FFFFFF' : '#64748b'} />
+                    {filtersActive && !showFilters && (
+                      <View style={styles.filterActiveDot} />
+                    )}
+                  </LinearGradient>
+                </TouchableOpacity>
+                
+                <TouchableOpacity style={styles.desktopLocationButton} onPress={onLocationToggle}>
+                  <LinearGradient
+                    colors={locationEnabled ? ['#10b981', '#059669'] : ['#f1f5f9', '#e2e8f0']}
+                    style={styles.desktopLocationGradient}
+                  >
+                    <Navigation size={18} color={locationEnabled ? '#FFFFFF' : '#64748b'} />
                   </LinearGradient>
                 </TouchableOpacity>
                 
@@ -295,10 +309,22 @@ export function Header({
 
               <TouchableOpacity style={styles.filterButton} onPress={onFiltersToggle}>
                 <LinearGradient
-                  colors={showFilters ? ['#6366f1', '#4f46e5'] : ['#f1f5f9', '#e2e8f0']}
+                  colors={(showFilters || filtersActive) ? ['#6366f1', '#4f46e5'] : ['#f1f5f9', '#e2e8f0']}
                   style={styles.filterGradient}
                 >
-                  <Filter size={20} color={showFilters ? '#FFFFFF' : '#64748b'} />
+                  <Filter size={20} color={(showFilters || filtersActive) ? '#FFFFFF' : '#64748b'} />
+                  {filtersActive && !showFilters && (
+                    <View style={styles.filterActiveDot} />
+                  )}
+                </LinearGradient>
+              </TouchableOpacity>
+
+              <TouchableOpacity style={styles.locationButton} onPress={onLocationToggle}>
+                <LinearGradient
+                  colors={locationEnabled ? ['#10b981', '#059669'] : ['#f1f5f9', '#e2e8f0']}
+                  style={styles.locationGradient}
+                >
+                  <Navigation size={20} color={locationEnabled ? '#FFFFFF' : '#64748b'} />
                 </LinearGradient>
               </TouchableOpacity>
 
@@ -457,7 +483,18 @@ const styles = StyleSheet.create({
   clearButton: { fontSize: 18, color: 'rgba(255, 255, 255, 0.7)', paddingHorizontal: 8 },
 
   filterButton: { borderRadius: 16, overflow: 'hidden', marginRight: 8 },
-  filterGradient: { width: 44, height: 44, justifyContent: 'center', alignItems: 'center' },
+  filterGradient: { width: 44, height: 44, justifyContent: 'center', alignItems: 'center', position: 'relative' },
+  filterActiveDot: {
+    position: 'absolute',
+    top: 8,
+    right: 8,
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+    backgroundColor: '#ef4444',
+    borderWidth: 1,
+    borderColor: '#FFFFFF',
+  },
   locationButton: { borderRadius: 16, overflow: 'hidden' },
   locationGradient: { width: 44, height: 44, justifyContent: 'center', alignItems: 'center' },
 
@@ -500,6 +537,7 @@ const styles = StyleSheet.create({
     height: 42,
     justifyContent: 'center',
     alignItems: 'center',
+    position: 'relative',
   },
   desktopLocationButton: {
     borderRadius: 14,
@@ -534,5 +572,3 @@ const styles = StyleSheet.create({
   modalConfirmGradient: { paddingVertical: 10, paddingHorizontal: 16, borderRadius: 10 },
   modalConfirmText: { color: '#fff', fontWeight: '800' },
 });
-
-export { Header };

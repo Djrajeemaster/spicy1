@@ -1,8 +1,8 @@
 import React from 'react';
 import { View, Text, StyleSheet, ScrollView, TouchableOpacity } from 'react-native';
-import { Users, Flag, Settings, BarChart3, Tag, Megaphone, AlertTriangle, Eye, MessageSquare, Shield } from 'lucide-react-native';
+import { Users, Flag, Settings, BarChart3, Tag, Megaphone, AlertTriangle, Eye, MessageSquare, Shield, Store } from 'lucide-react-native';
 
-export type AdminTab = 'dashboard' | 'users' | 'deals' | 'banners' | 'categories' | 'moderation' | 'analytics' | 'communication' | 'audit' | 'settings' | 'reports';
+export type AdminTab = 'dashboard' | 'users' | 'deals' | 'banners' | 'categories' | 'stores' | 'moderation' | 'analytics' | 'communication' | 'audit' | 'settings' | 'reports';
 
 interface AdminTabNavigationProps {
   activeTab: AdminTab;
@@ -19,6 +19,7 @@ const tabs = [
   { id: 'audit' as AdminTab, name: 'Audit Log', icon: Shield },
   { id: 'banners' as AdminTab, name: 'Banners', icon: Megaphone },
   { id: 'categories' as AdminTab, name: 'Categories', icon: Tag },
+  { id: 'stores' as AdminTab, name: 'Stores', icon: Store },
   { id: 'settings' as AdminTab, name: 'Settings', icon: Settings },
   { id: 'reports' as AdminTab, name: 'Reports', icon: AlertTriangle },
 ];
