@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, Alert, Share, Image, useWindowDimensions, Platform } from 'react-native';
-import { Heart, Share2, Bookmark, Clock, TrendingUp, Star, MapPin, Eye } from 'lucide-react-native';
+import { Heart, Share2, Bookmark, Clock, TrendingUp, Star, MapPin, Eye, Edit3 } from 'lucide-react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useTheme } from '@/contexts/ThemeProvider';
 import { useCurrency } from '@/contexts/CurrencyProvider';
@@ -20,6 +20,7 @@ interface Deal {
   save_count?: number;
   isPinned?: boolean;
   expiry_date?: string;
+  created_by?: string;
 }
 
 interface EnhancedDealCardV2Props {
@@ -48,6 +49,12 @@ export function EnhancedDealCardV2({ deal, isGuest, onVote, userRole, userId }: 
     setIsSaved(true);
     Alert.alert('Saved!', 'Deal added to your saved collection');
   };
+
+  const handleEdit = () => {
+    router.push(`/edit-deal/${deal.id}`);
+  };
+
+  const isOwnDeal = deal.created_by === userId;
 
   const handleShare = async () => {
     try {
@@ -266,8 +273,20 @@ export function EnhancedDealCardV2({ deal, isGuest, onVote, userRole, userId }: 
 
       {/* Enhanced Action Button */}
       <View style={[styles.actionContainer, { borderTopColor: colors.border }]}>
+        {isOwnDeal && !isGuest && (
+          <TouchableOpacity 
+            style={styles.editButton}
+            onPress={(e) => { 
+              e.stopPropagation(); 
+              handleEdit();
+            }}
+          >
+            <Edit3 size={16} color="#6366f1" />
+            <Text style={styles.editButtonText}>Edit</Text>
+          </TouchableOpacity>
+        )}
         <TouchableOpacity 
-          style={styles.getDealButton}
+          style={[styles.getDealButton, isOwnDeal && !isGuest && { marginLeft: 8 }]}
           onPress={(e) => { 
             e.stopPropagation(); 
             router.push(`/deal-details?id=${deal.id}&title=${encodeURIComponent(deal.title)}&price=${deal.price}`); 
@@ -525,12 +544,15 @@ const styles = StyleSheet.create({
   
   // Enhanced Action Button
   actionContainer: {
+    flexDirection: 'row',
     paddingHorizontal: 12,
     paddingVertical: 8,
     borderTopWidth: 1,
+    gap: 8,
   },
   
   getDealButton: {
+    flex: 2,
     borderRadius: 10,
     overflow: 'hidden',
   },
@@ -642,5 +664,23 @@ const styles = StyleSheet.create({
   mobileStatusContainer: {
     marginTop: 4,
     alignSelf: 'flex-start',
+  },
+  editButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: 'rgba(99, 102, 241, 0.1)',
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: '#6366f1',
+    flex: 1,
+    justifyContent: 'center',
+  },
+  editButtonText: {
+    marginLeft: 4,
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#6366f1',
   },
 });

@@ -9,6 +9,7 @@ import { CategoryManagement } from '@/components/admin/CategoryManagement';
 import { StoreManagement } from '@/components/admin/StoreManagement';
 import { BannerManagement } from '@/components/admin/BannerManagement';
 import { SystemSettingsManagement } from '@/components/admin/SystemSettingsManagement';
+import { AffiliateManagement } from '@/components/admin/AffiliateManagement';
 import ReportManagement from '@/components/admin/ReportManagement';
 import { useAuth } from '@/contexts/AuthProvider';
 import { router } from 'expo-router';
@@ -98,6 +99,8 @@ export default function AdminScreen() {
         return <CategoryManagement categories={categories} onToggleCategory={toggleCategory} onAddNewCategory={addNewCategory} />;
       case 'stores':
         return <StoreManagement onRefresh={() => window.location.reload()} />;
+      case 'affiliates':
+        return <AffiliateManagement onRefresh={() => window.location.reload()} />;
       case 'settings':
         return <SystemSettingsManagement settings={systemSettings} onUpdateSetting={updateSetting} />;
       case 'reports':

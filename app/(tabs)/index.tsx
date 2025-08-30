@@ -113,10 +113,20 @@ export default function HomeScreen() {
   // View toggle state for desktop (only grid and list)
   const [viewMode, setViewMode] = useState<'grid' | 'list'>('grid');
 
-  const { user, profile } = useAuth();
+  const { user, profile, loading: authLoading } = useAuth();
   const isGuest = !user;
   const currentUserRole = (profile?.role as UserRole) || 'guest';
   const userReputation = profile?.reputation || 0;
+
+  // Debug authentication state
+  useEffect(() => {
+    console.log('🔐 Auth state changed:', {
+      user: user ? `${user.email} (${user.id})` : 'Not logged in',
+      profile: profile ? `${profile.username} (${profile.role})` : 'No profile',
+      isGuest,
+      authLoading
+    });
+  }, [user, profile, isGuest, authLoading]);
 
   // aliveRef prevents setState on unmounted component
   const aliveRef = useRef(true);
@@ -124,29 +134,70 @@ export default function HomeScreen() {
 
   // ----- Filters data (categories/stores) -----
   const loadFilterData = useCallback(async () => {
-    setDataLoading(true);
+    console.log('🔄 Starting to load filter data...');
+    
+    // Set immediate fallbacks to prevent long loading
+    setAvailableCategories([{ id: 'all' as any, name: 'All', emoji: '🔥' } as any]);
+    setAvailableStores([{ id: 'all' as any, name: 'All' } as any]);
+    setBanners([]);
+    setDataLoading(false); // Set to false immediately with defaults
+    
+    // Then try to load actual data in background
     try {
-      const [categoriesRes, storesRes, bannersRes] = await Promise.all([
-        categoryService.getCategories().catch(() => ({ data: [], error: null })),
-        storeService.getStores().catch(() => ({ data: [], error: null })),
-        bannerService.getBanners().catch(() => ({ data: [], error: null }))
+      const [categoriesRes, storesRes, bannersRes] = await Promise.allSettled([
+        categoryService.getCategories().catch((err) => {
+          console.error('❌ Categories service error:', err);
+          return { data: [], error: err };
+        }),
+        storeService.getStores().catch((err) => {
+          console.error('❌ Stores service error:', err);
+          return { data: [], error: err };
+        }),
+        bannerService.getBanners().catch((err) => {
+          console.error('❌ Banners service error:', err);
+          return { data: [], error: err };
+        })
       ]);
 
-      setAvailableCategories([{ id: 'all' as any, name: 'All', emoji: '🔥' } as any, ...(categoriesRes.data || [])]);
-      setAvailableStores([{ id: 'all' as any, name: 'All' } as any, ...(storesRes.data || [])]);
-      setBanners((bannersRes.data || []).filter((b: Banner) => b.is_active));
+      // Handle results from Promise.allSettled
+      const categories = categoriesRes.status === 'fulfilled' ? categoriesRes.value?.data || [] : [];
+      const stores = storesRes.status === 'fulfilled' ? storesRes.value?.data || [] : [];
+      const banners = bannersRes.status === 'fulfilled' ? bannersRes.value?.data || [] : [];
+
+      console.log('✅ Filter data loaded in background:', {
+        categories: categories.length,
+        stores: stores.length,
+        banners: banners.length
+      });
+
+      // Update with actual data if available
+      if (categories.length > 0) {
+        setAvailableCategories([{ id: 'all' as any, name: 'All', emoji: '🔥' } as any, ...categories]);
+      }
+      if (stores.length > 0) {
+        setAvailableStores([{ id: 'all' as any, name: 'All' } as any, ...stores]);
+      }
+      if (banners.length > 0) {
+        setBanners(banners.filter((b: Banner) => b.is_active));
+      }
     } catch (err) {
-      console.error('Error loading filter data:', err);
-      setAvailableCategories([{ id: 'all' as any, name: 'All', emoji: '🔥' } as any]);
-      setAvailableStores([{ id: 'all' as any, name: 'All' } as any]);
-    } finally {
-      setDataLoading(false);
+      console.error('❌ Error loading filter data in background:', err);
+      // Keep the fallback data that was already set
     }
   }, []);
 
   useEffect(() => {
+    console.log('🚀 Index page mounted, starting filter data load...');
     loadFilterData();
-  }, [loadFilterData]);
+    
+    // Reduced timeout to 5 seconds instead of 10
+    const timeout = setTimeout(() => {
+      console.warn('⚠️ Filter loading timeout (5s) - forcefully clearing loading state');
+      setDataLoading(false);
+    }, 5000);
+    
+    return () => clearTimeout(timeout);
+  }, []); // Remove the dependency on loadFilterData to prevent infinite loop
 
   // ----- Deals loader -----
   const loadDeals = useCallback(async () => {
@@ -163,6 +214,7 @@ export default function HomeScreen() {
           category: d.category || {},
           store: d.store || {},
           postedBy: d.created_by_user?.username || 'Unknown',
+          created_by: d.created_by, // Add this for edit functionality
           votes: { up: d.votes_up || 0, down: d.votes_down || 0 },
           votes_up: d.votes_up || 0,
           comments: d.comment_count || 0,
@@ -468,11 +520,28 @@ export default function HomeScreen() {
   const navigateToTrending = () => router.push('/updeals');
   const navigateToPost = () => router.push('/post');
 
+  if (authLoading) {
+    console.log('🔐 Index page showing loading screen for authentication...');
+    return (
+      <SafeAreaView style={styles.loadingContainer}>
+        <ActivityIndicator size="large" color="#6366f1" />
+        <Text style={styles.loadingText}>Loading authentication...</Text>
+        <Text style={[styles.loadingText, { fontSize: 12, marginTop: 10 }]}>
+          Checking login status
+        </Text>
+      </SafeAreaView>
+    );
+  }
+
   if (dataLoading) {
+    console.log('🕐 Index page showing loading screen for filter options...');
     return (
       <SafeAreaView style={styles.loadingContainer}>
         <ActivityIndicator size="large" color="#6366f1" />
         <Text style={styles.loadingText}>Loading filter options...</Text>
+        <Text style={[styles.loadingText, { fontSize: 12, marginTop: 10 }]}>
+          Check console for debugging info
+        </Text>
       </SafeAreaView>
     );
   }

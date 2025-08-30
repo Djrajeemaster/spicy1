@@ -2,7 +2,7 @@ import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { View, Text, StyleSheet, ScrollView, Image, TouchableOpacity, ActivityIndicator, Platform, useWindowDimensions, Linking, Share, Alert, ImageBackground, Animated, Dimensions } from 'react-native';
 import { useLocalSearchParams, router } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { ArrowLeft, Store, User, Clock, Share2, ExternalLink, AlertTriangle, ThumbsUp, ThumbsDown, Bookmark, Heart, Eye, TrendingUp, Star, MapPin, Calendar, Tag, Zap } from 'lucide-react-native';
+import { ArrowLeft, Store, User, Clock, Share2, ExternalLink, AlertTriangle, ThumbsUp, ThumbsDown, Bookmark, Heart, Eye, TrendingUp, Star, MapPin, Calendar, Tag, Zap, Edit3 } from 'lucide-react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { UserBadge } from '@/components/UserBadge';
 import { UserRole, getRoleColor } from '@/types/user';
@@ -123,6 +123,14 @@ export default function DealDetailsScreen() {
     setIsSaved(!isSaved);
     // TODO: Implement save functionality
   };
+
+  const handleEdit = () => {
+    if (!deal) return;
+    router.push(`/edit-deal/${deal.id}`);
+  };
+
+  // Check if user owns this deal
+  const isOwnDeal = user && deal && deal.created_by === user.id;
 
   // Enhanced status badges
   const getStatusBadges = () => {
@@ -283,6 +291,13 @@ export default function DealDetailsScreen() {
           />
           <Text style={[styles.quickActionText, isSaved && { color: '#f59e0b' }]}>Save</Text>
         </TouchableOpacity>
+        
+        {isOwnDeal && (
+          <TouchableOpacity style={styles.quickActionButton} onPress={handleEdit}>
+            <Edit3 size={16} color="#3b82f6" />
+            <Text style={[styles.quickActionText, { color: '#3b82f6' }]}>Edit</Text>
+          </TouchableOpacity>
+        )}
         
         <TouchableOpacity style={styles.quickActionButton} onPress={handleShare}>
           <Share2 size={16} color="#64748b" />

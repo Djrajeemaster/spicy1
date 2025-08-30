@@ -1,127 +1,104 @@
 import { supabase } from '@/lib/supabase';
 
-const base = `${process.env.EXPO_PUBLIC_SUPABASE_URL}/functions/v1/admin-crud`;
-
-export type Entity = 'users' | 'deals' | 'comments' | 'stores' | 'categories' | 'banners';
-
-export async function list(entity: Entity, params?: { q?: string; limit?: number; cursor?: string }) {
-  const url = new URL(base);
-  url.searchParams.set('op', 'list');
-  url.searchParams.set('entity', entity);
-  if (params?.q) url.searchParams.set('q', params.q);
-  if (params?.limit) url.searchParams.set('limit', String(params.limit));
-  if (params?.cursor) url.searchParams.set('cursor', params.cursor);
-
-  const { data: session } = await supabase.auth.getSession();
-  const jwt = session.session?.access_token;
-
-  const res = await fetch(url.toString(), {
-    method: 'GET',
-    headers: { ...(jwt ? { Authorization: `Bearer ${jwt}` } : {}) },
-  });
-  if (!res.ok) throw new Error(`admin-crud list failed: ${res.status}`);
-  return res.json() as Promise<{ items: any[]; next_cursor: string | null }>;
+export interface CrudOptions {
+  entity: string;
+  operation: 'list' | 'get' | 'create' | 'update' | 'delete';
+  limit?: number;
+  cursor?: string;
+  query?: string;
+  data?: any;
+  id?: string;
+  elevationToken?: string;
 }
 
-export async function get(entity: Entity, id: string) {
-  const url = new URL(base);
-  url.searchParams.set('op', 'get');
-  url.searchParams.set('entity', entity);
-  url.searchParams.set('id', id);
-  const { data: session } = await supabase.auth.getSession();
-  const jwt = session.session?.access_token;
-  const res = await fetch(url.toString(), {
-    method: 'GET',
-    headers: { ...(jwt ? { Authorization: `Bearer ${jwt}` } : {}) },
-  });
-  if (!res.ok) throw new Error(`admin-crud get failed: ${res.status}`);
-  return res.json() as Promise<{ item: any }>;
-}
-
-export async function create(entity: Entity, data: any, elevationToken: string) {
-  const url = new URL(base);
-  url.searchParams.set('op', 'create');
-  url.searchParams.set('entity', entity);
-  
-  try {
+class AdminCrudService {
+  private async makeRequest(options: CrudOptions) {
+    const url = `${process.env.EXPO_PUBLIC_SUPABASE_URL}/functions/v1/admin-crud`;
     const { data: session } = await supabase.auth.getSession();
     const jwt = session.session?.access_token;
-    
-    // Sanitize elevation token to prevent HTTP response splitting
-    const sanitizedToken = elevationToken.replace(/[\r\n]/g, '');
-    
-    const res = await fetch(url.toString(), {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        ...(jwt ? { Authorization: `Bearer ${jwt}` } : {}),
-        'x-admin-elevation': sanitizedToken
-      },
-      body: JSON.stringify(data)
+
+    const params = new URLSearchParams({
+      op: options.operation,
+      entity: options.entity,
     });
-    if (!res.ok) throw new Error(`admin-crud create failed: ${res.status}`);
-    return res.json() as Promise<{ ok: boolean; id: string }>;
-  } catch (error) {
-    console.error('Error in admin-crud create:', error);
-    throw error;
+
+    if (options.limit) params.set('limit', options.limit.toString());
+    if (options.cursor) params.set('cursor', options.cursor);
+    if (options.query) params.set('q', options.query);
+    if (options.id) params.set('id', options.id);
+
+    const headers: Record<string, string> = {
+      'Content-Type': 'application/json',
+      ...(jwt ? { Authorization: `Bearer ${jwt}` } : {}),
+    };
+
+    if (options.elevationToken) {
+      headers['x-admin-elevation'] = options.elevationToken;
+    }
+
+    const response = await fetch(`${url}?${params}`, {
+      method: options.data ? 'POST' : 'GET',
+      headers,
+      ...(options.data ? { body: JSON.stringify(options.data) } : {}),
+    });
+
+    if (!response.ok) {
+      const errorText = await response.text().catch(() => '');
+      throw new Error(`CRUD operation failed: ${response.status} ${errorText}`);
+    }
+
+    return response.json();
+  }
+
+  async list(entity: string, limit?: number, cursor?: string, query?: string) {
+    return this.makeRequest({
+      entity,
+      operation: 'list',
+      limit,
+      cursor,
+      query,
+    });
+  }
+
+  async get(entity: string, id: string) {
+    return this.makeRequest({
+      entity,
+      operation: 'get',
+      id,
+    });
+  }
+
+  async create(entity: string, data: any, elevationToken: string) {
+    return this.makeRequest({
+      entity,
+      operation: 'create',
+      data,
+      elevationToken,
+    });
+  }
+
+  async update(entity: string, id: string, data: any, elevationToken: string) {
+    return this.makeRequest({
+      entity,
+      operation: 'update',
+      id,
+      data,
+      elevationToken,
+    });
+  }
+
+  async delete(entity: string, id: string, elevationToken: string) {
+    return this.makeRequest({
+      entity,
+      operation: 'delete',
+      id,
+      elevationToken,
+    });
   }
 }
 
-export async function update(entity: Entity, id: string, data: any, elevationToken: string) {
-  const url = new URL(base);
-  url.searchParams.set('op', 'update');
-  url.searchParams.set('entity', entity);
-  url.searchParams.set('id', id);
-  
-  try {
-    const { data: session } = await supabase.auth.getSession();
-    const jwt = session.session?.access_token;
-    
-    // Sanitize elevation token to prevent HTTP response splitting
-    const sanitizedToken = elevationToken.replace(/[\r\n]/g, '');
-    
-    const res = await fetch(url.toString(), {
-      method: 'PATCH',
-      headers: {
-        'Content-Type': 'application/json',
-        ...(jwt ? { Authorization: `Bearer ${jwt}` } : {}),
-        'x-admin-elevation': sanitizedToken
-      },
-      body: JSON.stringify(data)
-    });
-    if (!res.ok) throw new Error(`admin-crud update failed: ${res.status}`);
-    return res.json() as Promise<{ ok: boolean }>;
-  } catch (error) {
-    console.error('Error in admin-crud update:', error);
-    throw error;
-  }
-}
+export const adminCrudService = new AdminCrudService();
 
-export async function remove(entity: Entity, id: string, elevationToken: string, soft = true) {
-  const url = new URL(base);
-  url.searchParams.set('op', 'delete');
-  url.searchParams.set('entity', entity);
-  url.searchParams.set('id', id);
-  url.searchParams.set('soft', String(soft));
-  
-  try {
-    const { data: session } = await supabase.auth.getSession();
-    const jwt = session.session?.access_token;
-    
-    // Sanitize elevation token to prevent HTTP response splitting
-    const sanitizedToken = elevationToken.replace(/[\r\n]/g, '');
-    
-    const res = await fetch(url.toString(), {
-      method: 'DELETE',
-      headers: {
-        ...(jwt ? { Authorization: `Bearer ${jwt}` } : {}),
-        'x-admin-elevation': sanitizedToken
-      }
-    });
-    if (!res.ok) throw new Error(`admin-crud delete failed: ${res.status}`);
-    return res.json() as Promise<{ ok: boolean }>;
-  } catch (error) {
-    console.error('Error in admin-crud remove:', error);
-    throw error;
-  }
-}
+// Export individual functions for backward compatibility
+export const { list, get, create, update } = adminCrudService;
+export const del = adminCrudService.delete;

@@ -263,6 +263,53 @@ export interface Database {
           updated_at?: string | null;
         };
       };
+      affiliate_settings: {
+        Row: {
+          id: string;
+          store_name: string;
+          country_code: string;
+          affiliate_id: string | null;
+          affiliate_tag: string | null;
+          commission_rate: number | null;
+          tracking_template: string | null;
+          notes: string | null;
+          is_active: boolean;
+          created_at: string;
+          updated_at: string;
+          created_by: string | null;
+          updated_by: string | null;
+        };
+        Insert: {
+          id?: string;
+          store_name: string;
+          country_code?: string;
+          affiliate_id?: string | null;
+          affiliate_tag?: string | null;
+          commission_rate?: number | null;
+          tracking_template?: string | null;
+          notes?: string | null;
+          is_active?: boolean;
+          created_at?: string;
+          updated_at?: string;
+          created_by?: string | null;
+          updated_by?: string | null;
+        };
+        Update: {
+          id?: string;
+          store_name?: string;
+          country_code?: string;
+          affiliate_id?: string | null;
+          affiliate_tag?: string | null;
+          commission_rate?: number | null;
+          tracking_template?: string | null;
+          notes?: string | null;
+          is_active?: boolean;
+          created_at?: string;
+          updated_at?: string;
+          created_by?: string | null;
+          updated_by?: string | null;
+        };
+      };
     };
   };
 }

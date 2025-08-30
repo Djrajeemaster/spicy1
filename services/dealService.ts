@@ -3,6 +3,7 @@ import { Database } from '@/types/database';
 import { safeAsync } from '@/utils/errorHandler';
 
 type DealInsert = Database['public']['Tables']['deals']['Insert'];
+type DealUpdate = Database['public']['Tables']['deals']['Update'];
 export type DealWithRelations = Database['public']['Tables']['deals']['Row'] & {
   store: Database['public']['Tables']['stores']['Row'] | null;
   category: Database['public']['Tables']['categories']['Row'] | null;
@@ -11,7 +12,7 @@ export type DealWithRelations = Database['public']['Tables']['deals']['Row'] & {
 };
 
 class DealService {
-  getDeals(options: { sortBy?: string; limit?: number } = {}) {
+  getDeals(options: { sortBy?: string; limit?: number } = {}, userId?: string) {
     return safeAsync(async () => {
       let query = supabase.from('deals').select(`
         *,
@@ -20,8 +21,11 @@ class DealService {
         created_by_user:users!deals_created_by_fkey(id, username, role, reputation)
       `).eq('status', 'live');
 
-      if (options.sortBy === 'popular') query = query.order('votes_up', { ascending: false });
-      else query = query.order('created_at', { ascending: false });
+      if (options.sortBy === 'popular') {
+        query = query.order('votes_up', { ascending: false });
+      } else {
+        query = query.order('created_at', { ascending: false });
+      }
 
       const { data, error } = await query.limit(options.limit || 50);
       if (error) throw error;
@@ -66,17 +70,41 @@ class DealService {
     }, 'DealService.getUserDeals');
   }
 
-  createDeal(dealData: DealInsert) {
+  createDeal(dealData: any) {
     return safeAsync(async () => {
-      const { data, error } = await supabase.from('deals').insert(dealData).select().single();
+      const { data, error } = await (supabase.from('deals') as any).insert(dealData).select().single();
       if (error) throw error;
       return data;
     }, 'DealService.createDeal');
   }
 
+  updateDeal(dealId: string, dealData: any) {
+    return safeAsync(async () => {
+      const { data, error } = await (supabase
+        .from('deals') as any)
+        .update(dealData)
+        .eq('id', dealId)
+        .select()
+        .single();
+      if (error) throw error;
+      return data;
+    }, 'DealService.updateDeal');
+  }
+
+  deleteDeal(dealId: string) {
+    return safeAsync(async () => {
+      const { error } = await supabase
+        .from('deals')
+        .delete()
+        .eq('id', dealId);
+      if (error) throw error;
+      return { success: true };
+    }, 'DealService.deleteDeal');
+  }
+
   voteDeal(dealId: string, userId: string, voteType: 'up' | 'down') {
     return safeAsync(async () => {
-      const { error } = await supabase.rpc('handle_vote', { deal_id_param: dealId, user_id_param: userId, vote_type_param: voteType });
+      const { error } = await (supabase as any).rpc('handle_vote', { deal_id_param: dealId, user_id_param: userId, vote_type_param: voteType });
       if (error) throw error;
       return { success: true };
     }, 'DealService.voteDeal');
@@ -113,30 +141,6 @@ class DealService {
       return data as DealWithRelations[];
     }, 'DealService.getRelatedDeals');
   }
-  // Add this function inside the DealService class
-  getDeals(options: { sortBy?: string; limit?: number } = {}, userId?: string) {
-    return safeAsync(async () => {
-      let query = supabase.from('deals').select(`
-        *,
-        store:stores(*),
-        category:categories(*),
-        created_by_user:users!deals_created_by_fkey(id, username, role, reputation)
-      `).eq('status', 'live');
-  
-      if (options.sortBy === 'popular') {
-        query = query.order('votes_up', { ascending: false });
-      } else {
-        query = query.order('created_at', { ascending: false });
-      }
-  
-      query = query.limit(options.limit || 50);
-  
-      const { data, error } = await query;
-      if (error) throw error;
-      return data as DealWithRelations[];
-    }, 'DealService.getDeals');
-  }
-  
 }
 
 export const dealService = new DealService();

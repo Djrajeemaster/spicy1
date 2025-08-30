@@ -1,7 +1,7 @@
 import React from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, Image, Alert } from 'react-native';
 import { router } from 'expo-router';
-import { Heart, MessageCircle, User } from 'lucide-react-native';
+import { Heart, MessageCircle, User, Edit3 } from 'lucide-react-native';
 import { formatTimeAgo } from '@/utils/time';
 import { useCurrency } from '@/contexts/CurrencyProvider';
 
@@ -19,6 +19,7 @@ interface Deal {
   created_at: string;
   isVerified?: boolean;
   isSample?: boolean;
+  created_by?: string;
 }
 
 interface DealCardProps {
@@ -26,9 +27,10 @@ interface DealCardProps {
   isGuest: boolean;
   onVote: (dealId: string | number, voteType: 'up' | 'down') => void;
   userRole?: string;
+  userId?: string;
 }
 
-export function DealCard({ deal, onVote }: DealCardProps) {
+export function DealCard({ deal, onVote, isGuest, userId }: DealCardProps) {
   const { formatPrice } = useCurrency();
 
   const handleUserPress = (e: any) => {
@@ -54,6 +56,13 @@ export function DealCard({ deal, onVote }: DealCardProps) {
     }
     onVote(deal.id, voteType);
   };
+
+  const handleEdit = (e: any) => {
+    e.stopPropagation();
+    router.push(`/edit-deal/${deal.id}`);
+  };
+
+  const isOwnDeal = deal.created_by === userId;
 
   const upVotes = deal.votes?.up ?? deal.votes_up ?? 0;
   const comments = deal.comments ?? deal.comment_count ?? 0;
@@ -89,6 +98,12 @@ export function DealCard({ deal, onVote }: DealCardProps) {
               <MessageCircle size={18} color="#6366f1" />
               <Text style={styles.statText}>{comments}</Text>
             </TouchableOpacity>
+            {isOwnDeal && !isGuest && (
+              <TouchableOpacity style={styles.editButton} onPress={handleEdit}>
+                <Edit3 size={16} color="#6366f1" />
+                <Text style={styles.editText}>Edit</Text>
+              </TouchableOpacity>
+            )}
           </View>
           <TouchableOpacity style={styles.viewDealButton} onPress={handleCardPress}>
             <Text style={styles.viewDealText}>View Deal</Text>
@@ -195,5 +210,21 @@ const styles = StyleSheet.create({
     color: '#FFFFFF',
     fontWeight: '700',
     fontSize: 14,
+  },
+  editButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: 'rgba(99, 102, 241, 0.1)',
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: '#6366f1',
+  },
+  editText: {
+    marginLeft: 4,
+    fontSize: 12,
+    fontWeight: '600',
+    color: '#6366f1',
   },
 });

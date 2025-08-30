@@ -156,22 +156,44 @@ class StorageService {
         }
       }
       
-      const uploadPromises = uris.map(uri => this.uploadImage(uri));
+      const uploadPromises = uris.map(async (uri, index) => {
+        try {
+          console.log(`Uploading image ${index + 1}/${uris.length}: ${uri}`);
+          return await this.uploadImage(uri, `image_${index + 1}`);
+        } catch (error) {
+          console.warn(`Failed to upload image ${index + 1} (${uri}):`, error);
+          return { data: null, error: error };
+        }
+      });
+      
       const results = await Promise.all(uploadPromises);
 
-      // Check if any uploads failed
-      const failedUploads = results.filter(result => result.error);
-      if (failedUploads.length > 0) {
-        console.error('Some uploads failed:', failedUploads);
-        return { 
-          data: [], 
-          error: { message: `${failedUploads.length} image(s) failed to upload` } 
-        };
-      }
-
+      // Filter successful uploads
       const successfulUploads = results
         .filter(result => result.data)
         .map(result => result.data!);
+
+      // Check if any uploads failed
+      const failedUploads = results.filter(result => result.error);
+      
+      console.log(`Upload summary: ${successfulUploads.length} succeeded, ${failedUploads.length} failed`);
+      
+      if (failedUploads.length > 0 && successfulUploads.length === 0) {
+        // All uploads failed
+        console.error('All uploads failed:', failedUploads);
+        return { 
+          data: [], 
+          error: { message: `All ${failedUploads.length} image(s) failed to upload` } 
+        };
+      } else if (failedUploads.length > 0) {
+        // Some uploads failed, but some succeeded - this is OK for external images
+        console.warn(`${failedUploads.length} of ${uris.length} uploads failed, but ${successfulUploads.length} succeeded`);
+        // Don't treat partial success as an error for external images
+        return { 
+          data: successfulUploads, 
+          error: null 
+        };
+      }
 
       return { data: successfulUploads, error: null };
     } catch (error) {

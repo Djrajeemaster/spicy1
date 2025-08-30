@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, Alert, Share, Image, useWindowDimensions, Platform, Animated } from 'react-native';
-import { Heart, Share2, Bookmark, Clock, TrendingUp, Star, MapPin, Eye } from 'lucide-react-native';
+import { Heart, Share2, Bookmark, Clock, TrendingUp, Star, MapPin, Eye, Edit3 } from 'lucide-react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useTheme } from '@/contexts/ThemeProvider';
 import { useCurrency } from '@/contexts/CurrencyProvider';
@@ -20,6 +20,7 @@ interface Deal {
   save_count?: number;
   isPinned?: boolean;
   expiry_date?: string;
+  created_by?: string;
 }
 
 interface EnhancedDealCardProps {
@@ -69,6 +70,12 @@ export function EnhancedDealCard({ deal, isGuest, onVote, userRole, userId }: En
 
     setIsLiked(!isLiked);
   };
+
+  const handleEdit = () => {
+    router.push(`/edit-deal/${deal.id}`);
+  };
+
+  const isOwnDeal = deal.created_by === userId;
 
   const getTimeRemaining = () => {
     if (!deal.expiry_date) return null;
@@ -287,6 +294,18 @@ export function EnhancedDealCard({ deal, isGuest, onVote, userRole, userId }: En
 
       {/* Enhanced Get Deal Button */}
       <View style={[styles.actionContainer, { borderTopColor: colors.border }, isDesktop && styles.desktopActionContainer]}>
+        {isOwnDeal && !isGuest && (
+          <TouchableOpacity 
+            style={styles.editButton}
+            onPress={(e) => { 
+              e.stopPropagation(); 
+              handleEdit();
+            }}
+          >
+            <Edit3 size={16} color="#6366f1" />
+            <Text style={styles.editButtonText}>Edit</Text>
+          </TouchableOpacity>
+        )}
         <TouchableOpacity 
           style={[styles.getDealButton, isDesktop && styles.desktopGetDealButton]}
           onPress={(e) => { 
@@ -689,5 +708,22 @@ const styles = StyleSheet.create({
   mobileStatusContainer: {
     marginTop: 4,
     alignSelf: 'flex-start',
+  },
+  editButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    backgroundColor: 'rgba(99, 102, 241, 0.1)',
+    borderRadius: 8,
+    marginRight: 8,
+    borderWidth: 1,
+    borderColor: '#6366f1',
+  },
+  editButtonText: {
+    color: '#6366f1',
+    fontSize: 14,
+    fontWeight: '600',
+    marginLeft: 4,
   },
 });

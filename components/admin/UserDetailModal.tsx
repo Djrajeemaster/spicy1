@@ -90,6 +90,19 @@ export default function UserDetailModal({ visible, onClose, userId, onUserUpdate
     }
   };
 
+  const debugAuth = () => {
+    Alert.alert(
+      'Debug Auth Info',
+      JSON.stringify({
+        hasProfile: !!currentAdminProfile,
+        role: currentAdminProfile?.role,
+        email: currentAdminProfile?.email,
+        id: currentAdminProfile?.id,
+        isSuperAdmin
+      }, null, 2)
+    );
+  };
+
   const handleAction = async (actionType: string) => {
     // Only require reason if not super admin
     if (!isSuperAdmin && !actionReason.trim()) {
@@ -99,12 +112,25 @@ export default function UserDetailModal({ visible, onClose, userId, onUserUpdate
 
     try {
       setActionLoading(true);
-      const elevation = await elevate(10);
+      
+      // Debug current user info
+      console.log('Admin action debug info:', {
+        actionType,
+        currentAdminProfile,
+        currentRole: currentAdminProfile?.role,
+        isSuperAdmin,
+        hasReason: !!actionReason.trim(),
+        userId
+      });
+      
+      console.log('Requesting admin elevation...');
+      const elevationToken = await elevate(10);
+      console.log('Elevation token received:', elevationToken ? 'Yes' : 'No');
       
       let result;
       const baseRequest: UserActionRequest = {
         userId,
-        elevationToken: elevation.token,
+        elevationToken: elevationToken,
         reason: actionReason || 'Action performed by super admin',
       };
 
@@ -400,9 +426,14 @@ export default function UserDetailModal({ visible, onClose, userId, onUserUpdate
       <View style={styles.container}>
         <View style={styles.header}>
           <Text style={styles.title}>User Details</Text>
-          <TouchableOpacity onPress={onClose} style={styles.closeBtn}>
-            <X size={24} color="#6b7280" />
-          </TouchableOpacity>
+          <View style={styles.headerActions}>
+            <TouchableOpacity onPress={debugAuth} style={styles.debugBtn}>
+              <Text style={styles.debugBtnText}>Debug</Text>
+            </TouchableOpacity>
+            <TouchableOpacity onPress={onClose} style={styles.closeBtn}>
+              <X size={24} color="#6b7280" />
+            </TouchableOpacity>
+          </View>
         </View>
 
         {loading ? (
@@ -492,6 +523,22 @@ const styles = StyleSheet.create({
     fontSize: 20,
     fontWeight: '700',
     color: '#111827',
+  },
+  headerActions: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  debugBtn: {
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    backgroundColor: '#f59e0b',
+    borderRadius: 6,
+  },
+  debugBtnText: {
+    color: '#fff',
+    fontSize: 12,
+    fontWeight: '600',
   },
   closeBtn: {
     padding: 8,

@@ -22,15 +22,20 @@ import {
   Upload,
   Zap,
   X,
+  ArrowLeft,
+  Home,
 } from 'lucide-react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { router } from 'expo-router';
 import { useAuth } from '@/contexts/AuthProvider';
+import { useDebounce } from '@/hooks/useDebounce';
 import { dealService } from '@/services/dealService';
 import { categoryService } from '@/services/categoryService';
 import { storeService } from '@/services/storeService';
 import { storageService } from '@/services/storageService';
+import { extractUrlData, shouldUseStoreModal, isValidUrlFormat, validateUrl } from '@/services/urlService';
 import { Database } from '@/types/database';
+import StoreModal from '@/components/StoreModal';
 import * as ImagePicker from 'expo-image-picker';
 
 type Category = Database['public']['Tables']['categories']['Row'];
@@ -61,6 +66,20 @@ export default function PostDealScreen() {
   const [dataLoading, setDataLoading] = useState(true);
   const [selectedImages, setSelectedImages] = useState<string[]>([]);
   const [uploadingImages, setUploadingImages] = useState(false);
+  const [urlValidating, setUrlValidating] = useState(false);
+  const [urlValid, setUrlValid] = useState<boolean | null>(null);
+  const [extractedImages, setExtractedImages] = useState<string[]>([]);
+  const [urlMetadata, setUrlMetadata] = useState<any>(null);
+  const [showAutoFill, setShowAutoFill] = useState(false);
+
+  const [amazonImageUrl, setAmazonImageUrl] = useState('');
+
+  // Store Modal State
+  const [showStoreModal, setShowStoreModal] = useState(false);
+  const [storeModalUrl, setStoreModalUrl] = useState('');
+
+  // Debounce the deal URL for validation
+  const debouncedDealUrl = useDebounce(formData.dealUrl, 1500);
 
   /** ---------- in-app notice + confirm (web), native Alert elsewhere ---------- */
   const isWeb = Platform.OS === 'web';
@@ -79,7 +98,7 @@ export default function PostDealScreen() {
     okText: string;
     cancelText: string;
   }>({ open: false, title: '', message: '', okText: 'OK', cancelText: 'Cancel' });
-  const confirmResolveRef = useRef<(val: boolean) => void>();
+  const confirmResolveRef = useRef<((val: boolean) => void) | undefined>(undefined);
 
   const notify = (title: string, message: string, type: NoticeType = 'error') => {
     if (isWeb) setNotice({ type, title, message });
@@ -102,11 +121,36 @@ export default function PostDealScreen() {
   };
   /** ------------------------------------------------------------------------ */
 
+  // Effect to validate URL when it changes
+  useEffect(() => {
+    if (debouncedDealUrl && debouncedDealUrl.trim()) {
+      validateDealUrl(debouncedDealUrl.trim());
+    } else {
+      setUrlValid(null);
+      setExtractedImages([]);
+    }
+  }, [debouncedDealUrl]);
+
   useEffect(() => {
     const loadFormData = async () => {
       setDataLoading(true);
       try {
-        const { data: fetchedCategories, error: categoryError } = await categoryService.getCategories();
+        // Set a timeout for the entire loading operation
+        const timeoutPromise = new Promise((_, reject) => 
+          setTimeout(() => reject(new Error('Loading timeout')), 15000)
+        );
+
+        const loadPromise = Promise.all([
+          categoryService.getCategories(),
+          storeService.getStores()
+        ]);
+
+        const [categoriesResult, storesResult] = await Promise.race([
+          loadPromise,
+          timeoutPromise
+        ]) as any;
+
+        const { data: fetchedCategories, error: categoryError } = categoriesResult;
         if (categoryError) {
           console.error('Error fetching categories:', categoryError);
           notify('Error', 'Failed to load categories.');
@@ -114,7 +158,7 @@ export default function PostDealScreen() {
           setCategories(fetchedCategories || []);
         }
 
-        const { data: fetchedStores, error: storeError } = await storeService.getStores();
+        const { data: fetchedStores, error: storeError } = storesResult;
         if (storeError) {
           console.error('Error fetching stores:', storeError);
           notify('Error', 'Failed to load stores.');
@@ -123,7 +167,7 @@ export default function PostDealScreen() {
         }
       } catch (err) {
         console.error('Unexpected error loading form data:', err);
-        notify('Error', 'Failed to load form data.');
+        notify('Error', 'Failed to load form data. Please refresh the page.');
       } finally {
         setDataLoading(false);
       }
@@ -143,6 +187,7 @@ export default function PostDealScreen() {
       Alert.alert('Add Photos', 'Choose how to add photos', [
         { text: '📷 Camera', onPress: () => openCamera() },
         { text: '🖼️ Gallery', onPress: () => openGallery() },
+        { text: '🔗 Image URL', onPress: () => promptForImageUrl() },
         { text: 'Cancel', style: 'cancel' },
       ]);
     }
@@ -198,10 +243,280 @@ export default function PostDealScreen() {
     setSelectedImages((prev) => prev.filter((_, index) => index !== indexToRemove));
   };
 
+  const promptForImageUrl = async () => {
+    if (isWeb) {
+      // For web, use a prompt
+      const url = prompt('Enter image URL (Amazon, eBay, or any direct image URL):');
+      if (url && url.trim()) {
+        addImageFromUrl(url.trim());
+      }
+    } else {
+      // For mobile, use Alert.prompt (iOS) or create a custom input modal
+      if (Platform.OS === 'ios') {
+        Alert.prompt(
+          'Add Image URL',
+          'Enter the image URL (Amazon, eBay, or any direct image URL):',
+          [
+            { text: 'Cancel', style: 'cancel' },
+            { 
+              text: 'Add', 
+              onPress: (url) => {
+                if (url && url.trim()) {
+                  addImageFromUrl(url.trim());
+                }
+              }
+            },
+          ],
+          'plain-text',
+          '',
+          'url'
+        );
+      } else {
+        // For Android, we'll need to create a simple input modal or use the Amazon input field approach
+        notify('Add Image URL', 'For Android, please use the Amazon image input field when you paste an Amazon deal URL, or copy the image URL and use the web version for now.', 'info');
+      }
+    }
+  };
+
+  const addImageFromUrl = (url: string) => {
+    if (selectedImages.length >= 5) {
+      notify('Image Limit Reached', 'You can only add up to 5 images per deal.', 'error');
+      return;
+    }
+
+    // Validate URL format
+    if (!url.startsWith('http://') && !url.startsWith('https://')) {
+      notify('Invalid URL', 'Please enter a valid image URL starting with http:// or https://', 'error');
+      return;
+    }
+
+    // Check if it's likely an image URL
+    const imageExtensions = ['.jpg', '.jpeg', '.png', '.gif', '.webp'];
+    const isDirectImageUrl = imageExtensions.some(ext => url.toLowerCase().includes(ext));
+    const isAmazonImage = url.includes('m.media-amazon.com/images/I/');
+    const isEbayImage = url.includes('i.ebayimg.com');
+
+    if (!isDirectImageUrl && !isAmazonImage && !isEbayImage) {
+      notify('Invalid Image URL', 'Please enter a direct image URL (should end with .jpg, .png, etc.) or an Amazon/eBay image URL.', 'error');
+      return;
+    }
+
+    // Add to selected images
+    setSelectedImages(prev => [...prev, url]);
+    
+    if (isAmazonImage) {
+      notify('Amazon Image Added!', 'Amazon image URL added successfully!', 'success');
+    } else if (isEbayImage) {
+      notify('eBay Image Added!', 'eBay image URL added successfully!', 'success');
+    } else {
+      notify('Image Added!', 'Image URL added successfully!', 'success');
+    }
+  };
+
+  const validateDealUrl = async (url: string) => {
+    console.log('validateDealUrl called with:', url);
+    
+    if (!url || !isValidUrlFormat(url)) {
+      console.log('URL format invalid or empty');
+      setUrlValid(null);
+      setExtractedImages([]);
+      setUrlMetadata(null);
+      setShowAutoFill(false);
+      return;
+    }
+
+    setUrlValidating(true);
+    setUrlValid(null);
+
+    try {
+      console.log('Calling urlService.validateUrl for:', url);
+      
+      // Add timeout for URL validation to prevent hanging
+      const validationTimeoutPromise = new Promise((_, reject) => 
+        setTimeout(() => reject(new Error('URL validation timeout')), 15000)
+      );
+
+      const validationPromise = validateUrl(url);
+      
+      const result = await Promise.race([
+        validationPromise,
+        validationTimeoutPromise
+      ]) as any;
+      
+      console.log('URL validation result:', result);
+      
+      if (result.isReachable) {
+        setUrlValid(true);
+        setUrlMetadata(result);
+        
+        // Show auto-fill option if we found useful metadata
+        if (result.title || result.description || result.category || result.store || 
+            result.price || result.originalPrice || result.couponCode || 
+            (result.images && result.images.length > 0)) {
+          setShowAutoFill(true);
+        }
+        
+        // Special handling for Amazon URLs
+        if (url.toLowerCase().includes('amazon')) {
+          console.log('Amazon URL detected, result.images:', result.images);
+          if (result.images && result.images.length > 0) {
+            setExtractedImages(result.images);
+            console.log(`Setting ${result.images.length} Amazon images:`, result.images);
+            notify('Amazon URL Detected', 'To add Amazon product images, right-click on the product images on Amazon and copy the image URL, then paste them in the manual image picker below. Amazon image URLs work with format: m.media-amazon.com/images/I/...', 'info');
+          } else {
+            setExtractedImages([]);
+            console.log('No Amazon images found in result');
+            notify('Amazon URL Detected', 'Amazon product found! To add product images: 1) Go to the Amazon page, 2) Right-click on product images, 3) Copy image URL, 4) Use manual image picker below to add them.', 'info');
+          }
+        } else {
+          // Set extracted images if we found them from the URL
+          if (result.images && result.images.length > 0) {
+            console.log(`Found ${result.images.length} images from URL:`, result.images);
+            setExtractedImages(result.images);
+            notify('Images Found!', `Found ${result.images.length} image(s) from the URL. You can add them below.`, 'info');
+          } else {
+            console.log('No images found in URL validation result');
+            setExtractedImages([]);
+          }
+        }
+      } else {
+        setUrlValid(false);
+        setExtractedImages([]);
+        setUrlMetadata(null);
+        setShowAutoFill(false);
+        notify('URL Not Reachable', result.error || 'The URL appears to be invalid or unreachable.', 'error');
+      }
+    } catch (error: any) {
+      console.error('URL validation error:', error);
+      setUrlValid(false);
+      setExtractedImages([]);
+      setUrlMetadata(null);
+      setShowAutoFill(false);
+      
+      if (error.message === 'URL validation timeout') {
+        notify('URL Timeout', 'URL validation is taking too long. You can still post the deal with the URL, but we cannot extract images or metadata.', 'error');
+      } else {
+        notify('URL Error', 'Could not validate the URL. You can still post the deal.', 'error');
+      }
+    } finally {
+      setUrlValidating(false);
+    }
+  };
+
+  const autoFillFromUrl = async () => {
+    if (!urlMetadata) return;
+
+    const updatedFormData = { ...formData };
+    let fieldsUpdated = [];
+
+    // Auto-fill title (only if empty or user confirms)
+    if (urlMetadata.title && (!formData.title.trim() || 
+        await confirm('Auto-fill title?', `Replace current title with: "${urlMetadata.title}"?`))) {
+      updatedFormData.title = urlMetadata.title;
+      fieldsUpdated.push('title');
+    }
+
+    // Auto-fill description (only if empty or user confirms)
+    if (urlMetadata.description && (!formData.description.trim() || 
+        await confirm('Auto-fill description?', `Replace current description with extracted content?`))) {
+      updatedFormData.description = urlMetadata.description;
+      fieldsUpdated.push('description');
+    }
+
+    // Auto-select category if we can match it
+    if (urlMetadata.category && categories.length > 0) {
+      const matchingCategory = categories.find(cat => 
+        cat.name.toLowerCase().includes(urlMetadata.category.toLowerCase()) ||
+        urlMetadata.category.toLowerCase().includes(cat.name.toLowerCase())
+      );
+      
+      if (matchingCategory && (!formData.selectedCategoryId || 
+          await confirm('Auto-select category?', `Set category to: "${matchingCategory.name}"?`))) {
+        updatedFormData.selectedCategoryId = matchingCategory.id;
+        fieldsUpdated.push('category');
+      }
+    }
+
+    // Auto-select store if we can match it
+    if (urlMetadata.store && stores.length > 0) {
+      const matchingStore = stores.find(store => 
+        store.name.toLowerCase().includes(urlMetadata.store.toLowerCase()) ||
+        urlMetadata.store.toLowerCase().includes(store.name.toLowerCase())
+      );
+      
+      if (matchingStore && (!formData.selectedStoreId || 
+          await confirm('Auto-select store?', `Set store to: "${matchingStore.name}"?`))) {
+        updatedFormData.selectedStoreId = matchingStore.id;
+        fieldsUpdated.push('store');
+      }
+    }
+
+    // Auto-fill pricing information
+    if (urlMetadata.price && (!formData.price.trim() || 
+        await confirm('Auto-fill price?', `Set price to: $${urlMetadata.price}?`))) {
+      updatedFormData.price = urlMetadata.price.toString();
+      fieldsUpdated.push('price');
+    }
+
+    if (urlMetadata.originalPrice && (!formData.originalPrice.trim() || 
+        await confirm('Auto-fill original price?', `Set original price to: $${urlMetadata.originalPrice}?`))) {
+      updatedFormData.originalPrice = urlMetadata.originalPrice.toString();
+      fieldsUpdated.push('original price');
+    }
+
+    // Auto-fill coupon code
+    if (urlMetadata.couponCode && (!formData.couponCode.trim() || 
+        await confirm('Auto-fill coupon code?', `Set coupon code to: "${urlMetadata.couponCode}"?`))) {
+      updatedFormData.couponCode = urlMetadata.couponCode;
+      fieldsUpdated.push('coupon code');
+    }
+
+    // Update form data
+    setFormData(updatedFormData);
+
+    // Add images if available and slots are free
+    if (urlMetadata.images && urlMetadata.images.length > 0 && selectedImages.length < 5) {
+      const imagesToAdd = urlMetadata.images.slice(0, 5 - selectedImages.length);
+      setSelectedImages(prev => [...prev, ...imagesToAdd]);
+      fieldsUpdated.push('images');
+    }
+
+    // Show success message
+    if (fieldsUpdated.length > 0) {
+      notify('Auto-Fill Complete!', `Updated: ${fieldsUpdated.join(', ')}. Review and adjust as needed.`, 'success');
+      setShowAutoFill(false);
+    } else {
+      notify('Nothing to Fill', 'All fields are already filled or no matching data found.', 'info');
+    }
+  };
+
+  const addExtractedImages = (imagesToAdd: string[]) => {
+    setSelectedImages(prev => {
+      const combined = [...prev, ...imagesToAdd];
+      return combined.slice(0, 5); // Limit to 5 images
+    });
+    
+    // Remove the added images from extracted images instead of clearing all
+    setExtractedImages(prev => prev.filter(img => !imagesToAdd.includes(img)));
+    
+    // Special message for Amazon images
+    if (urlMetadata?.store === 'Amazon') {
+      notify('Amazon Images Added!', `Added ${imagesToAdd.length} Amazon image(s). If they don't upload, try using manual image picker.`);
+    } else {
+      notify('Images Added!', `Added ${imagesToAdd.length} image(s) from the URL.`);
+    }
+  };
+
   const createDealRecord = async (uploadedImageUrls: string[]) => {
     try {
+      // Parse the validated price (we already validated it's not empty and is valid)
       const price = parseFloat(formData.price);
       const originalPrice = formData.originalPrice ? parseFloat(formData.originalPrice) : null;
+
+      // Ensure price is valid (extra safety check)
+      if (isNaN(price) || price <= 0) {
+        throw new Error('Invalid price value');
+      }
 
       const dealData: Database['public']['Tables']['deals']['Insert'] = {
         title: formData.title.trim(),
@@ -209,9 +524,9 @@ export default function PostDealScreen() {
         price,
         original_price: originalPrice ?? null,
         category_id: formData.selectedCategoryId,
-        store_id: formData.selectedStoreId || null,
-        city: formData.city.trim() || null,
-        state: formData.state?.trim() || null,
+        store_id: formData.selectedStoreId || '',
+        city: formData.city.trim() || '',
+        state: formData.state?.trim() || '',
         country: formData.country?.trim() || null,
         is_online: true,
         deal_url: formData.dealUrl.trim() || null,
@@ -231,48 +546,120 @@ export default function PostDealScreen() {
         dealData.status = 'pending';
       }
 
-      const { error } = await dealService.createDeal(dealData);
+      console.log('Creating deal with data:', dealData);
+      
+      // Set up timeout for deal creation
+      const createDealTimeout = new Promise((_, reject) => 
+        setTimeout(() => reject(new Error('Deal creation timeout')), 30000)
+      );
+
+      const createDealPromise = dealService.createDeal(dealData);
+      
+      const [error, result] = await Promise.race([
+        createDealPromise,
+        createDealTimeout
+      ]) as any;
+      
+      console.log('Deal creation result:', { error, result });
+      
       if (error) {
         console.error('Error creating deal:', error);
-        notify('Deal Submission Failed', error.message);
+        notify('Deal Submission Failed', error.message || 'Failed to create deal. Please try again.');
+        setUploadingImages(false);
+        setLoading(false);
         return;
       }
+
+      console.log('Deal created successfully, preparing success message...');
 
       const msg =
         dealData.status === 'live'
           ? 'Your deal is now live! Thanks for sharing with the community.'
           : "Your deal has been submitted for review. You'll be notified once it's approved!";
 
-      if (isWeb) {
-        notify('🎉 Deal Posted!', msg, 'success');
-        router.push('/profile');
-      } else {
-        Alert.alert('🎉 Deal Posted!', msg, [
-          { text: 'View My Deals', onPress: () => router.push('/profile') },
-          {
-            text: 'Post Another',
-            onPress: () => {
-              setFormData({
-                title: '',
-                description: '',
-                price: '',
-                originalPrice: '',
-                selectedCategoryId: '',
-                selectedStoreId: '',
-                city: '',
-                state: '',
-                country: '',
-                expiryDate: '',
-                dealUrl: '',
-                couponCode: '',
-                rulesAccepted: false,
-              });
-              setSelectedImages([]);
+      console.log('Success message prepared:', msg);
+      console.log('isWeb value:', isWeb);
+
+      try {
+        console.log('About to show success notification/alert...');
+        
+        if (isWeb) {
+          console.log('Showing web notification...');
+          notify('🎉 Deal Posted!', msg, 'success');
+          console.log('Web notification shown, navigating to profile...');
+          
+          // Reset form first, then navigate
+          setFormData({
+            title: '',
+            description: '',
+            price: '',
+            originalPrice: '',
+            selectedCategoryId: '',
+            selectedStoreId: '',
+            city: '',
+            state: '',
+            country: '',
+            expiryDate: '',
+            dealUrl: '',
+            couponCode: '',
+            rulesAccepted: false,
+          });
+          setSelectedImages([]);
+          
+          setTimeout(() => {
+            router.push('/profile');
+          }, 1000);
+          console.log('Navigation initiated');
+        } else {
+          console.log('Showing mobile alert...');
+          Alert.alert('🎉 Deal Posted!', msg, [
+            { text: 'View My Deals', onPress: () => {
+              console.log('View My Deals pressed');
+              router.push('/profile');
+            }},
+            {
+              text: 'Post Another',
+              onPress: () => {
+                console.log('Post Another pressed');
+                setFormData({
+                  title: '',
+                  description: '',
+                  price: '',
+                  originalPrice: '',
+                  selectedCategoryId: '',
+                  selectedStoreId: '',
+                  city: '',
+                  state: '',
+                  country: '',
+                  expiryDate: '',
+                  dealUrl: '',
+                  couponCode: '',
+                  rulesAccepted: false,
+                });
+                setSelectedImages([]);
+              },
             },
-          },
-        ]);
+          ]);
+        }
+        console.log('Success UI completed');
+      } catch (notifyError) {
+        console.error('Error showing success notification:', notifyError);
+        // Still complete the process even if notification fails
       }
-    } finally {
+
+      console.log('Setting loading states to false...');
+      setUploadingImages(false);
+      setLoading(false);
+      console.log('Deal creation process completed successfully');
+    } catch (err: any) {
+      console.error('Unexpected error creating deal:', err);
+      
+      let errorMessage = 'An unexpected error occurred. Please try again.';
+      if (err.message === 'Deal creation timeout') {
+        errorMessage = 'Deal creation is taking too long. Please check your connection and try again.';
+      }
+      
+      notify('Deal Submission Failed', errorMessage);
       setUploadingImages(false);
       setLoading(false);
     }
@@ -296,52 +683,157 @@ export default function PostDealScreen() {
     if (!formData.selectedCategoryId) return notify('Missing Information', 'Please select a category.');
     if (!formData.rulesAccepted) return notify('Community Rules', 'Please accept our community guidelines to continue.');
 
-    // Allow deals without specific price (percentage off, coupon deals)
-    const price = formData.price.trim() ? parseFloat(formData.price) : 0;
-    if (formData.price.trim() && (isNaN(price) || price <= 0)) {
-      return notify('Invalid Price', 'Please enter a valid price or leave empty for percentage/coupon deals.');
+    // Price validation - require a valid price
+    if (!formData.price.trim()) return notify('Missing Information', 'Please enter a price for the deal.');
+    const price = parseFloat(formData.price);
+    if (isNaN(price) || price <= 0) {
+      return notify('Invalid Price', 'Please enter a valid price greater than 0.');
     }
+    
     const originalPriceParsed = formData.originalPrice ? parseFloat(formData.originalPrice) : null;
-    if (originalPriceParsed !== null && (isNaN(originalPriceParsed) || originalPriceParsed <= 0)) {
-      return notify('Invalid Original Price', 'Please enter a valid original price.');
+    if (originalPriceParsed !== null && (isNaN(originalPriceParsed) || originalPriceParsed <= price)) {
+      return notify('Invalid Original Price', 'Original price must be higher than current price.');
     }
 
     setLoading(true);
+
+    // Set up safety timeout to prevent infinite loading
+    const safetyTimeout = setTimeout(() => {
+      console.warn('Safety timeout triggered - clearing loading states');
+      setLoading(false);
+      setUploadingImages(false);
+      notify('Timeout Error', 'Operation took too long. Please try again.');
+    }, 60000); // 60 second safety timeout
 
     try {
       let uploadedImageUrls: string[] = [];
 
       if (selectedImages.length > 0) {
         setUploadingImages(true);
-        const { data: uploadResults, error: uploadError } = await storageService.uploadMultipleImages(selectedImages);
+        
+        // Separate local images from external URLs for better debugging
+        const localImages = selectedImages.filter(uri => !uri.startsWith('http'));
+        const externalImages = selectedImages.filter(uri => uri.startsWith('http'));
+        
+        console.log(`Uploading ${localImages.length} local images and ${externalImages.length} external images`);
+        
+        // Set up upload timeout
+        const uploadTimeoutPromise = new Promise((_, reject) => 
+          setTimeout(() => reject(new Error('Image upload timeout')), 45000)
+        );
 
-        if (uploadError) {
-          console.error('Error uploading images:', uploadError);
+        const uploadPromise = storageService.uploadMultipleImages(selectedImages);
+        
+        try {
+          const { data: uploadResults, error: uploadError } = await Promise.race([
+            uploadPromise,
+            uploadTimeoutPromise
+          ]) as any;
+
+          if (uploadError) {
+            console.error('Error uploading images:', uploadError);
+            
+            // Handle partial uploads differently than complete failures
+            if (uploadError.partial && uploadResults && uploadResults.length > 0) {
+              // Some images uploaded successfully
+              uploadedImageUrls = uploadResults.map((r: any) => r.url).filter(Boolean);
+              notify('Some Images Failed', `${uploadedImageUrls.length} of ${selectedImages.length} images uploaded. ${uploadError.message}`);
+            } else {
+              // All images failed to upload
+              const proceed = await confirm(
+                'Image Upload Failed',
+                `Images could not be uploaded: ${uploadError.message || 'Unknown error'}. Continue without images?`,
+                'Continue',
+                'Cancel'
+              );
+              if (!proceed) {
+                clearTimeout(safetyTimeout);
+                setUploadingImages(false);
+                setLoading(false);
+                return;
+              }
+              uploadedImageUrls = [];
+            }
+          } else {
+            uploadedImageUrls = (uploadResults || []).map((r: any) => r.url).filter(Boolean);
+            
+            // Provide feedback if some images failed
+            if (uploadedImageUrls.length < selectedImages.length) {
+              const failed = selectedImages.length - uploadedImageUrls.length;
+              notify('Partial Upload', `${uploadedImageUrls.length} of ${selectedImages.length} images uploaded successfully. ${failed} failed.`);
+            } else if (uploadedImageUrls.length > 0) {
+              console.log(`Successfully uploaded ${uploadedImageUrls.length} images`);
+            }
+          }
+        } catch (uploadErr: any) {
+          console.error('Upload timeout or error:', uploadErr);
           const proceed = await confirm(
-            'Image Upload Failed',
-            'Some images could not be uploaded. Continue without images?',
+            'Upload Timeout',
+            'Image upload is taking too long. Continue without images?',
             'Continue',
             'Cancel'
           );
           if (!proceed) {
+            clearTimeout(safetyTimeout);
             setUploadingImages(false);
             setLoading(false);
             return;
           }
           uploadedImageUrls = [];
-        } else {
-          uploadedImageUrls = (uploadResults || []).map((r: any) => r.url).filter(Boolean);
         }
+        
         setUploadingImages(false);
       }
 
       await createDealRecord(uploadedImageUrls);
+      clearTimeout(safetyTimeout);
     } catch (err) {
       console.error('Unexpected error during deal submission:', err);
       notify('Connection Error', 'Unable to connect to the server. Please try again.');
+      clearTimeout(safetyTimeout);
       setUploadingImages(false);
       setLoading(false);
     }
+  };
+
+  // -------------------- STORE MODAL HANDLERS --------------------
+  const handleStoreModalSubmit = async (dealData: any) => {
+    try {
+      console.log('🏪 Store modal data received:', dealData);
+      
+      // Update form data with store modal data
+      setFormData(prev => ({
+        ...prev,
+        title: dealData.title,
+        description: dealData.description,
+        price: dealData.price?.replace('$', '') || '',
+        originalPrice: dealData.originalPrice?.replace('$', '') || '',
+        dealUrl: dealData.url
+      }));
+      
+      // Add image if provided
+      if (dealData.imageUrl) {
+        setSelectedImages(prev => [...prev, dealData.imageUrl].slice(0, 5));
+      }
+      
+      // Set store if provided
+      if (dealData.store) {
+        const store = stores.find(s => s.name.toLowerCase().includes(dealData.store.toLowerCase()));
+        if (store) {
+          setFormData(prev => ({ ...prev, selectedStoreId: store.id }));
+        }
+      }
+      
+      notify('Store Data Applied!', `${dealData.store || 'Store'} deal data has been applied to the form.`, 'success');
+    } catch (error) {
+      console.error('Store modal error:', error);
+      notify('Error', 'Failed to apply store data. Please try again.');
+    }
+  };
+
+  const handleStoreModalClose = () => {
+    setShowStoreModal(false);
+    setStoreModalUrl('');
   };
 
   // -------------------- RENDER --------------------
@@ -396,8 +888,26 @@ export default function PostDealScreen() {
   return (
     <View style={styles.container}>
       <LinearGradient colors={['#6366f1', '#8b5cf6']} style={styles.header}>
-        <Text style={styles.headerTitle}>Share a Deal</Text>
-        <Text style={styles.headerSubtitle}>Help your community save money</Text>
+        <View style={styles.headerTop}>
+          <TouchableOpacity 
+            style={styles.headerButton} 
+            onPress={() => router.back()}
+          >
+            <ArrowLeft size={24} color="#fff" />
+          </TouchableOpacity>
+          
+          <View style={styles.headerCenter}>
+            <Text style={styles.headerTitle}>Share a Deal</Text>
+            <Text style={styles.headerSubtitle}>Help your community save money</Text>
+          </View>
+          
+          <TouchableOpacity 
+            style={styles.headerButton} 
+            onPress={() => router.push('/(tabs)/')}
+          >
+            <Home size={24} color="#fff" />
+          </TouchableOpacity>
+        </View>
       </LinearGradient>
 
       {/* web notice banner */}
@@ -608,15 +1118,89 @@ export default function PostDealScreen() {
 
           <View style={styles.inputGroup}>
             <Text style={styles.label}>Deal URL (Optional)</Text>
-            <TextInput
-              style={styles.input}
-              placeholder="https://store.com/deal-link"
-              value={formData.dealUrl}
-              onChangeText={(text) => setFormData((prev) => ({ ...prev, dealUrl: text }))}
-              placeholderTextColor="#94a3b8"
-              keyboardType="url"
-            />
-            <Text style={styles.helpText}>Link to the deal on the store's website</Text>
+            <View style={styles.inputWithIcon}>
+              <View style={styles.inputIcon}>
+                {urlValidating ? (
+                  <ActivityIndicator size={18} color="#6366f1" />
+                ) : urlValid === true ? (
+                  <CheckCircle size={18} color="#10b981" />
+                ) : urlValid === false ? (
+                  <X size={18} color="#ef4444" />
+                ) : (
+                  <Zap size={18} color="#6366f1" />
+                )}
+              </View>
+              <TextInput
+                style={styles.inputWithPadding}
+                placeholder="https://store.com/deal-link"
+                value={formData.dealUrl}
+                onChangeText={(text) => {
+                  setFormData((prev) => ({ ...prev, dealUrl: text }));
+                  
+                  // Check if this is a major store URL that should use the modal
+                  if (text && isValidUrlFormat(text)) {
+                    const { useModal, store } = shouldUseStoreModal(text);
+                    if (useModal && store) {
+                      // Show store-specific modal for Amazon, Walmart, Target
+                      setStoreModalUrl(text);
+                      setShowStoreModal(true);
+                      return; // Don't proceed with normal validation
+                    }
+                  }
+                  
+                  // Reset validation state when typing
+                  if (text !== formData.dealUrl) {
+                    setUrlValid(null);
+                    setExtractedImages([]);
+                    setUrlMetadata(null);
+                    setShowAutoFill(false);
+                  }
+                }}
+                placeholderTextColor="#94a3b8"
+                keyboardType="url"
+              />
+            </View>
+            <View style={styles.helpTextContainer}>
+              <Text style={styles.helpText}>
+                {urlValidating 
+                  ? '🔍 Checking URL and looking for images...' 
+                  : urlValid === true 
+                    ? '✅ URL is reachable and ready to use' 
+                    : urlValid === false 
+                      ? '❌ URL appears to be invalid or unreachable'
+                      : 'Link to the deal on the store\'s website - we\'ll auto-check it!'
+                }
+              </Text>
+              {urlValid === true && (
+                <Text style={styles.helpTextSuccess}>
+                  ✨ We'll automatically extract images and details when you enter the URL
+                </Text>
+              )}
+            </View>
+
+            {/* Auto-Fill Button */}
+            {showAutoFill && urlMetadata && (
+              <TouchableOpacity style={styles.autoFillButton} onPress={autoFillFromUrl}>
+                <LinearGradient colors={['#8b5cf6', '#7c3aed']} style={styles.autoFillGradient}>
+                  <Sparkles size={20} color="#FFFFFF" />
+                  <View style={styles.autoFillContent}>
+                    <Text style={styles.autoFillTitle}>🎯 Auto-Fill from URL</Text>
+                    <Text style={styles.autoFillSubtitle}>
+                      Found: {[
+                        urlMetadata.title && 'title',
+                        urlMetadata.category && 'category', 
+                        urlMetadata.store && 'store',
+                        urlMetadata.price && 'price',
+                        urlMetadata.originalPrice && 'original price',
+                        urlMetadata.couponCode && 'coupon code',
+                        urlMetadata.images?.length > 0 && `${urlMetadata.images.length} images`
+                      ].filter(Boolean).join(', ')}
+                    </Text>
+                  </View>
+                  <Zap size={20} color="#FFFFFF" />
+                </LinearGradient>
+              </TouchableOpacity>
+            )}
           </View>
 
           <View style={styles.inputGroup}>
@@ -670,6 +1254,87 @@ export default function PostDealScreen() {
               <Text style={styles.imageLimitText}>Max 5 photos, 2MB each • Auto-compressed for web</Text>
             </LinearGradient>
           </TouchableOpacity>
+
+          {/* Add Image URL Button */}
+          <TouchableOpacity style={styles.addImageUrlButton} onPress={promptForImageUrl}>
+            <View style={styles.addImageUrlContent}>
+              <Text style={styles.addImageUrlIcon}>🔗</Text>
+              <View style={styles.addImageUrlTextContainer}>
+                <Text style={styles.addImageUrlText}>Add Image URL</Text>
+                <Text style={styles.addImageUrlSubtext}>Amazon, eBay, or any direct image URL</Text>
+              </View>
+            </View>
+          </TouchableOpacity>
+
+          {extractedImages.length > 0 && selectedImages.length < 5 && (
+            <View style={styles.extractedImagesContainer}>
+              <Text style={styles.extractedImagesTitle}>Found Images from URL</Text>
+              {urlMetadata?.store === 'Amazon' ? (
+                <View style={styles.amazonImageHelpContainer}>
+                  <View style={styles.addImageUrlTextContainer}>
+                    <Text style={styles.extractedImagesSubtitle}>💡 Amazon Image URLs: Paste Amazon image URLs below (right-click Amazon product images → copy image address)</Text>
+                  </View>
+                  <View style={styles.amazonImageInputContainer}>
+                    <TextInput
+                      style={styles.amazonImageInput}
+                      value={amazonImageUrl}
+                      onChangeText={setAmazonImageUrl}
+                      placeholder="Paste Amazon image URL here and press Enter"
+                      placeholderTextColor="#94a3b8"
+                      multiline={false}
+                      returnKeyType="done"
+                      onSubmitEditing={() => {
+                        const url = amazonImageUrl.trim();
+                        if (url && url.includes('m.media-amazon.com/images/I/')) {
+                          setSelectedImages(prev => [...prev, url].slice(0, 5));
+                          notify('Amazon Image Added!', 'Amazon image URL added successfully!', 'success');
+                          setAmazonImageUrl(''); // Clear the input
+                        } else if (url) {
+                          notify('Invalid URL', 'Please paste a valid Amazon image URL (should contain m.media-amazon.com/images/I/)', 'error');
+                        }
+                      }}
+                    />
+                  </View>
+                </View>
+              ) : (
+                <View style={styles.addImageUrlTextContainer}>
+                  <Text style={styles.extractedImagesSubtitle}>Tap images to add them to your deal</Text>
+                </View>
+              )}
+              <ScrollView horizontal showsHorizontalScrollIndicator={false}>
+                <View style={styles.extractedImagesList}>
+                  {extractedImages.slice(0, 5 - selectedImages.length).map((uri, index) => (
+                    <TouchableOpacity 
+                      key={index} 
+                      style={styles.extractedImageItem}
+                      onPress={() => addExtractedImages([uri])}
+                    >
+                      <View style={styles.extractedImageWrapper}>
+                        <Image 
+                          source={{ uri }} 
+                          style={styles.extractedImagePreview}
+                          onError={(error) => {
+                            console.log(`Failed to load image: ${uri}`, error);
+                          }}
+                        />
+                        <View style={styles.addImageOverlay}>
+                          <Text style={styles.addImageText}>+</Text>
+                        </View>
+                      </View>
+                    </TouchableOpacity>
+                  ))}
+                  {extractedImages.length > 1 && selectedImages.length + 1 < 5 && (
+                    <TouchableOpacity 
+                      style={styles.addAllImagesButton}
+                      onPress={() => addExtractedImages(extractedImages.slice(0, 5 - selectedImages.length))}
+                    >
+                      <Text style={styles.addAllImagesText}>Add All ({Math.min(extractedImages.length, 5 - selectedImages.length)})</Text>
+                    </TouchableOpacity>
+                  )}
+                </View>
+              </ScrollView>
+            </View>
+          )}
 
           <View style={styles.inputGroup}>
             <Text style={styles.label}>Expiry Date (Optional)</Text>
@@ -742,6 +1407,14 @@ export default function PostDealScreen() {
 
         <View style={styles.bottomPadding} />
       </ScrollView>
+
+      {/* Store Modal for Amazon, Walmart, Target */}
+      <StoreModal
+        visible={showStoreModal}
+        onClose={handleStoreModalClose}
+        onSubmit={handleStoreModalSubmit}
+        url={storeModalUrl}
+      />
     </View>
   );
 }
@@ -806,8 +1479,24 @@ const styles = StyleSheet.create({
   joinButtonText: { color: '#FFFFFF', fontSize: 18, fontWeight: '700', marginLeft: 8 },
 
   header: { paddingHorizontal: 20, paddingTop: Platform.OS === 'ios' ? 20 : 40, paddingBottom: 30 },
-  headerTitle: { fontSize: 28, fontWeight: '800', color: '#FFFFFF', marginBottom: 8, letterSpacing: -0.5 },
-  headerSubtitle: { fontSize: 16, color: 'rgba(255,255,255,0.9)', fontWeight: '500' },
+  headerTop: { 
+    flexDirection: 'row', 
+    alignItems: 'center', 
+    justifyContent: 'space-between',
+    width: '100%' 
+  },
+  headerButton: { 
+    padding: 8, 
+    borderRadius: 8, 
+    backgroundColor: 'rgba(255,255,255,0.2)' 
+  },
+  headerCenter: { 
+    flex: 1, 
+    alignItems: 'center', 
+    paddingHorizontal: 16 
+  },
+  headerTitle: { fontSize: 28, fontWeight: '800', color: '#FFFFFF', marginBottom: 8, letterSpacing: -0.5, textAlign: 'center' },
+  headerSubtitle: { fontSize: 16, color: 'rgba(255,255,255,0.9)', fontWeight: '500', textAlign: 'center' },
   form: { flex: 1, marginTop: -20 },
   section: {
     backgroundColor: '#FFFFFF',
@@ -943,6 +1632,157 @@ const styles = StyleSheet.create({
   },
   verificationText: { flex: 1, fontSize: 14, color: '#065f46', marginLeft: 12, lineHeight: 20, fontWeight: '500' },
   helpText: { fontSize: 12, color: '#64748b', marginTop: 4, fontStyle: 'italic' },
+  helpTextContainer: { marginTop: 4 },
+  helpTextSuccess: { fontSize: 12, color: '#10b981', marginTop: 2, fontWeight: '600' },
   imageLimitText: { fontSize: 11, color: '#94a3b8', textAlign: 'center', marginTop: 4 },
+  addImageUrlButton: {
+    backgroundColor: '#ffffff',
+    borderRadius: 16,
+    marginTop: 12,
+    borderWidth: 1,
+    borderColor: '#e5e7eb',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.05,
+    shadowRadius: 4,
+    elevation: 2,
+  },
+  addImageUrlContent: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    padding: 16,
+  },
+  addImageUrlIcon: {
+    fontSize: 24,
+    marginRight: 12,
+  },
+  addImageUrlText: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: '#374151',
+    marginBottom: 2,
+  },
+  addImageUrlSubtext: {
+    fontSize: 12,
+    color: '#6b7280',
+  },
+  extractedImagesContainer: {
+    marginBottom: 20,
+    backgroundColor: '#f0f9ff',
+    borderRadius: 16,
+    padding: 16,
+    borderWidth: 1,
+    borderColor: '#bae6fd',
+  },
+  extractedImagesTitle: { fontSize: 16, fontWeight: '700', color: '#0c4a6e', marginBottom: 4 },
+  extractedImagesSubtitle: { fontSize: 14, color: '#0369a1', marginBottom: 12 },
+  amazonImageInputContainer: {
+    marginBottom: 12,
+    backgroundColor: '#ffffff',
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: '#d1d5db',
+  },
+  amazonImageInput: {
+    padding: 12,
+    fontSize: 14,
+    color: '#374151',
+    minHeight: 44,
+    maxHeight: 88,
+  },
+  extractedImagesList: { flexDirection: 'row', paddingVertical: 8 },
+  extractedImageItem: { position: 'relative', marginRight: 12 },
+  extractedImagePreview: { 
+    width: 80, 
+    height: 80, 
+    borderRadius: 12, 
+    backgroundColor: '#f1f5f9',
+    borderWidth: 2,
+    borderColor: '#e2e8f0'
+  },
+  addImageOverlay: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    backgroundColor: 'rgba(99, 102, 241, 0.8)',
+    borderRadius: 12,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  addImageText: { color: '#FFFFFF', fontSize: 24, fontWeight: '700' },
+  imagePreviewOverlay: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    backgroundColor: 'rgba(148, 163, 184, 0.9)',
+    borderRadius: 12,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  imagePreviewIcon: { 
+    fontSize: 20, 
+    color: '#FFFFFF', 
+    marginBottom: 2 
+  },
+  imagePreviewText: { 
+    fontSize: 10, 
+    color: '#FFFFFF', 
+    fontWeight: '600' 
+  },
+  addAllImagesButton: {
+    backgroundColor: '#6366f1',
+    borderRadius: 12,
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginLeft: 8,
+    height: 80,
+  },
+  addAllImagesText: { color: '#FFFFFF', fontSize: 12, fontWeight: '700', textAlign: 'center' },
+  autoFillButton: {
+    marginTop: 12,
+    borderRadius: 16,
+    overflow: 'hidden',
+    elevation: 4,
+    shadowColor: '#8b5cf6',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.3,
+    shadowRadius: 8,
+  },
+  autoFillGradient: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 20,
+    paddingVertical: 16,
+  },
+  autoFillContent: {
+    flex: 1,
+    marginHorizontal: 12,
+  },
+  autoFillTitle: {
+    color: '#FFFFFF',
+    fontSize: 16,
+    fontWeight: '700',
+    marginBottom: 2,
+  },
+  autoFillSubtitle: {
+    color: 'rgba(255,255,255,0.9)',
+    fontSize: 12,
+    fontWeight: '500',
+  },
+  addImageUrlTextContainer: {
+    flex: 1,
+  },
+  amazonImageHelpContainer: {
+    marginBottom: 10,
+  },
+  extractedImageWrapper: {
+    position: 'relative',
+  },
   bottomPadding: { height: 100 },
 });

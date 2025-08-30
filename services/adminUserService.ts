@@ -1,382 +1,220 @@
 import { supabase } from '@/lib/supabase';
-import { Database } from '@/types/database';
-
-type UserProfile = Database['public']['Tables']['users']['Row'];
 
 export interface UserActionRequest {
   userId: string;
+  reason: string;
   elevationToken: string;
-  reason?: string;
-  adminId?: string;
 }
 
 export interface BanUserRequest extends UserActionRequest {
-  banDuration?: number; // Duration in days, null for permanent
-  banReason: string;
+  banReason?: string;
+  banDuration?: number; // in days, undefined for permanent
 }
 
-export interface AdminUserAction {
-  id: string;
-  user_id: string;
-  admin_id: string;
-  action_type: 'ban' | 'unban' | 'verify' | 'unverify' | 'suspend' | 'unsuspend' | 'delete' | 'restore' | 'role_change';
-  reason?: string;
-  duration_days?: number;
-  created_at: string;
+export interface SuspendUserRequest extends UserActionRequest {
+  suspendDays: number;
+}
+
+export interface ChangeRoleRequest extends UserActionRequest {
+  newRole: string;
+}
+
+export interface DeleteUserRequest extends UserActionRequest {
+  hardDelete?: boolean;
+}
+
+export interface UserStats {
+  user: {
+    id: string;
+    username: string;
+    email: string;
+    role: string;
+    is_verified_business: boolean | null;
+    join_date: string | null;
+    status: string | null;
+    reputation: number | null;
+    total_posts: number | null;
+    avatar_url: string | null;
+    location: string | null;
+    created_at: string | null;
+    updated_at: string | null;
+    is_banned: boolean | null;
+    ban_expiry: string | null;
+    suspend_expiry: string | null;
+  };
+  stats: {
+    total_deals: number;
+    total_comments: number;
+    total_votes_given: number;
+    total_votes_received: number;
+    account_age_days: number;
+    last_activity: string;
+    is_banned: boolean;
+    is_suspended: boolean;
+    ban_expiry?: string;
+    suspend_expiry?: string;
+  };
 }
 
 class AdminUserService {
-  private async makeAdminRequest(endpoint: string, data: any, elevationToken: string): Promise<any> {
+  private async makeRequest(endpoint: string, data: any, elevationToken: string) {
     const url = `${process.env.EXPO_PUBLIC_SUPABASE_URL}/functions/v1/${endpoint}`;
     const { data: session } = await supabase.auth.getSession();
     const jwt = session.session?.access_token;
 
-    const sanitizedToken = elevationToken.replace(/[\r\n]/g, '');
+    if (!jwt) {
+      throw new Error('Not authenticated. Please sign in.');
+    }
 
-    console.log('Admin request:', {
-      endpoint,
+    console.log(`Making admin request to ${endpoint}`, {
       hasJWT: !!jwt,
-      hasElevationToken: !!sanitizedToken,
-      tokenLength: sanitizedToken.length,
-      userEmail: session.session?.user?.email
+      hasElevationToken: !!elevationToken,
+      jwtPreview: jwt ? `${jwt.substring(0, 20)}...` : 'none'
     });
 
     const response = await fetch(url, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        ...(jwt ? { Authorization: `Bearer ${jwt}` } : {}),
-        'x-admin-elevation': sanitizedToken,
+        'Authorization': `Bearer ${jwt}`,
+        'x-admin-elevation': elevationToken,
       },
       body: JSON.stringify(data),
     });
 
     if (!response.ok) {
       const errorText = await response.text().catch(() => '');
-      console.error('Admin request failed:', {
-        endpoint,
+      
+      if (response.status === 401) {
+        throw new Error('Unauthorized: You may not have admin privileges or your session has expired. Please sign in again.');
+      } else if (response.status === 403) {
+        throw new Error('Forbidden: You do not have sufficient admin privileges for this action.');
+      } else if (response.status === 428) {
+        throw new Error('Admin elevation required: Please provide a valid elevation token.');
+      } else if (response.status === 440) {
+        throw new Error('Elevation token expired: Please request a new elevation token.');
+      }
+      
+      console.error(`${endpoint} failed:`, {
         status: response.status,
         statusText: response.statusText,
-        error: errorText
+        errorText,
+        url
       });
-      throw new Error(`${endpoint} failed: ${response.status} ${errorText}`);
+      
+      throw new Error(`${endpoint} failed: ${response.status} ${response.statusText}${errorText ? ` - ${errorText}` : ''}`);
     }
 
     return response.json();
   }
 
-  /**
-   * Ban a user with optional duration
-   */
-  async banUser(request: BanUserRequest): Promise<{ success: boolean; message: string }> {
-    return this.makeAdminRequest('admin-ban-user', {
+  async getUserStats(userId: string): Promise<UserStats> {
+    const url = `${process.env.EXPO_PUBLIC_SUPABASE_URL}/functions/v1/admin-user-stats`;
+    const { data: session } = await supabase.auth.getSession();
+    const jwt = session.session?.access_token;
+
+    const response = await fetch(`${url}?user_id=${userId}`, {
+      method: 'GET',
+      headers: {
+        'Content-Type': 'application/json',
+        ...(jwt ? { Authorization: `Bearer ${jwt}` } : {}),
+      },
+    });
+
+    if (!response.ok) {
+      throw new Error(`Failed to get user stats: ${response.status}`);
+    }
+
+    return response.json();
+  }
+
+  async banUser(request: BanUserRequest) {
+    return this.makeRequest('admin-ban-user', {
       user_id: request.userId,
-      reason: request.banReason,
+      reason: request.banReason || request.reason,
       duration_days: request.banDuration,
-      admin_id: request.adminId,
     }, request.elevationToken);
   }
 
-  /**
-   * Unban a user
-   */
-  async unbanUser(request: UserActionRequest): Promise<{ success: boolean; message: string }> {
-    return this.makeAdminRequest('admin-unban-user', {
+  async unbanUser(request: UserActionRequest) {
+    return this.makeRequest('admin-unban-user', {
       user_id: request.userId,
       reason: request.reason,
-      admin_id: request.adminId,
     }, request.elevationToken);
   }
 
-  /**
-   * Verify a user (mark as verified)
-   */
-  async verifyUser(request: UserActionRequest): Promise<{ success: boolean; message: string }> {
-    return this.makeAdminRequest('admin-verify-user', {
-      user_id: request.userId,
-      reason: request.reason,
-      admin_id: request.adminId,
-    }, request.elevationToken);
-  }
-
-  /**
-   * Unverify a user (remove verification)
-   */
-  async unverifyUser(request: UserActionRequest): Promise<{ success: boolean; message: string }> {
-    return this.makeAdminRequest('admin-unverify-user', {
-      user_id: request.userId,
-      reason: request.reason,
-      admin_id: request.adminId,
-    }, request.elevationToken);
-  }
-
-  /**
-   * Suspend a user temporarily
-   */
-  async suspendUser(request: UserActionRequest & { suspendDays: number }): Promise<{ success: boolean; message: string }> {
-    return this.makeAdminRequest('admin-suspend-user', {
+  async suspendUser(request: SuspendUserRequest) {
+    return this.makeRequest('admin-suspend-user', {
       user_id: request.userId,
       reason: request.reason,
       duration_days: request.suspendDays,
-      admin_id: request.adminId,
     }, request.elevationToken);
   }
 
-  /**
-   * Unsuspend a user
-   */
-  async unsuspendUser(request: UserActionRequest): Promise<{ success: boolean; message: string }> {
-    return this.makeAdminRequest('admin-unsuspend-user', {
+  async unsuspendUser(request: UserActionRequest) {
+    return this.makeRequest('admin-unsuspend-user', {
       user_id: request.userId,
       reason: request.reason,
-      admin_id: request.adminId,
     }, request.elevationToken);
   }
 
-  /**
-   * Change a user's role
-   */
-  async changeUserRole(request: UserActionRequest & { newRole: string }): Promise<{ success: boolean; message: string }> {
-    return this.makeAdminRequest('admin-change-role', {
+  async changeUserRole(request: ChangeRoleRequest) {
+    return this.makeRequest('admin-change-role', {
       user_id: request.userId,
       new_role: request.newRole,
       reason: request.reason,
-      admin_id: request.adminId,
     }, request.elevationToken);
   }
 
-  /**
-   * Delete a user account (soft delete by default)
-   */
-  async deleteUser(request: UserActionRequest & { hardDelete?: boolean }): Promise<{ success: boolean; message: string }> {
-    return this.makeAdminRequest('admin-delete-user', {
+  async deleteUser(request: DeleteUserRequest) {
+    return this.makeRequest('admin-delete-user', {
       user_id: request.userId,
       reason: request.reason,
       hard_delete: request.hardDelete || false,
-      admin_id: request.adminId,
     }, request.elevationToken);
   }
 
-  /**
-   * Restore a deleted user account
-   */
-  async restoreUser(request: UserActionRequest): Promise<{ success: boolean; message: string }> {
-    return this.makeAdminRequest('admin-restore-user', {
+  async restoreUser(request: UserActionRequest) {
+    return this.makeRequest('admin-restore-user', {
       user_id: request.userId,
       reason: request.reason,
-      admin_id: request.adminId,
     }, request.elevationToken);
   }
 
-  /**
-   * Reset user password
-   */
-  async resetUserPassword(request: UserActionRequest): Promise<{ success: boolean; message: string; tempPassword?: string }> {
-    return this.makeAdminRequest('admin-reset-password', {
+  async resetUserPassword(request: UserActionRequest) {
+    return this.makeRequest('admin-reset-password', {
       user_id: request.userId,
       reason: request.reason,
-      admin_id: request.adminId,
     }, request.elevationToken);
   }
 
-  /**
-   * Get user action history
-   */
-  async getUserActionHistory(userId: string): Promise<{ actions: AdminUserAction[] }> {
-    try {
-      // Try the Edge Function first
-      const url = `${process.env.EXPO_PUBLIC_SUPABASE_URL}/functions/v1/admin-user-history?user_id=${userId}`;
-      const { data: session } = await supabase.auth.getSession();
-      const jwt = session.session?.access_token;
-
-      const response = await fetch(url, {
-        method: 'GET',
-        headers: {
-          ...(jwt ? { Authorization: `Bearer ${jwt}` } : {}),
-        },
-      });
-
-      if (response.ok) {
-        return response.json();
-      }
-    } catch (error) {
-      console.warn('Edge function not available, falling back to direct queries:', error);
-    }
-
-    // Fallback to direct database query if Edge Function fails
-    console.log('Using direct database queries for user action history');
-    
-    try {
-      // Try audit_log table first (your existing table)
-      const { data: auditActions, error: auditError } = await supabase
-        .from('audit_log')
-        .select('*')
-        .eq('target_id', userId)
-        .order('created_at', { ascending: false })
-        .limit(100);
-
-      if (auditError && auditError.code !== 'PGRST116') {
-        // If there's an error other than table not found, try admin_actions
-        const { data: adminActions, error: adminActionsError } = await supabase
-          .from('admin_actions')
-          .select('*')
-          .eq('user_id', userId)
-          .order('created_at', { ascending: false })
-          .limit(100);
-
-        if (adminActionsError) {
-          console.warn('No audit tables available, returning empty actions');
-          return { actions: [] };
-        }
-
-        return { actions: adminActions || [] };
-      }
-
-      return { actions: auditActions || [] };
-    } catch (fallbackError: any) {
-      console.warn('Failed to fetch user history, returning empty:', fallbackError.message);
-      return { actions: [] };
-    }
+  async verifyUser(request: UserActionRequest) {
+    return this.makeRequest('admin-verify-user', {
+      user_id: request.userId,
+      reason: request.reason,
+    }, request.elevationToken);
   }
 
-  /**
-   * Get user statistics for admin panel
-   */
-  async getUserStats(userId: string): Promise<{
-    user: UserProfile;
-    stats: {
-      total_deals: number;
-      total_comments: number;
-      total_votes_given: number;
-      total_votes_received: number;
-      account_age_days: number;
-      last_activity: string;
-      is_banned: boolean;
-      is_suspended: boolean;
-      ban_expiry?: string;
-      suspend_expiry?: string;
-    };
-  }> {
-    try {
-      // Try the Edge Function first
-      const url = `${process.env.EXPO_PUBLIC_SUPABASE_URL}/functions/v1/admin-user-stats?user_id=${userId}`;
-      const { data: session } = await supabase.auth.getSession();
-      const jwt = session.session?.access_token;
-
-      const response = await fetch(url, {
-        method: 'GET',
-        headers: {
-          ...(jwt ? { Authorization: `Bearer ${jwt}` } : {}),
-        },
-      });
-
-      if (response.ok) {
-        return response.json();
-      }
-    } catch (error) {
-      console.warn('Edge function not available, falling back to direct queries:', error);
-    }
-
-    // Fallback to direct database queries if Edge Function fails
-    console.log('Using fallback queries for user stats');
-    
-    try {
-      // Get user data
-      const { data: user, error: userError } = await supabase
-        .from('users')
-        .select('*')
-        .eq('id', userId)
-        .single();
-
-      if (userError || !user) {
-        throw new Error('User not found');
-      }
-
-      // Get user statistics with parallel queries
-      const [dealsResult, commentsResult, votesGivenResult, dealsForVotesResult] = await Promise.allSettled([
-        // Total deals created by user
-        supabase
-          .from('deals')
-          .select('id', { count: 'exact' })
-          .eq('created_by', userId),
-        
-        // Total comments by user
-        supabase
-          .from('comments')
-          .select('id', { count: 'exact' })
-          .eq('user_id', userId),
-        
-        // Total votes given by user
-        supabase
-          .from('votes')
-          .select('id', { count: 'exact' })
-          .eq('user_id', userId),
-        
-        // Get deals to calculate votes received
-        supabase
-          .from('deals')
-          .select('votes_up')
-          .eq('created_by', userId)
-      ]);
-
-      const totalDeals = dealsResult.status === 'fulfilled' ? (dealsResult.value.count || 0) : 0;
-      const totalComments = commentsResult.status === 'fulfilled' ? (commentsResult.value.count || 0) : 0;
-      const totalVotesGiven = votesGivenResult.status === 'fulfilled' ? (votesGivenResult.value.count || 0) : 0;
-      const totalVotesReceived = dealsForVotesResult.status === 'fulfilled' 
-        ? (dealsForVotesResult.value.data as any[])?.reduce((sum: number, deal: any) => sum + (deal.votes_up || 0), 0) || 0
-        : 0;
-
-      // Calculate account age
-      const accountAgeMs = new Date().getTime() - new Date((user as any).created_at).getTime();
-      const accountAgeDays = Math.floor(accountAgeMs / (1000 * 60 * 60 * 24));
-
-      // Check ban/suspend status
-      const now = new Date().toISOString();
-      const userRecord = user as any;
-      const isBanned = userRecord.is_banned || userRecord.status === 'banned';
-      const isSuspended = userRecord.status === 'suspended';
-      const banExpired = userRecord.ban_expiry && userRecord.ban_expiry < now;
-      const suspendExpired = userRecord.suspend_expiry && userRecord.suspend_expiry < now;
-
-      return {
-        user: user as UserProfile,
-        stats: {
-          total_deals: totalDeals,
-          total_comments: totalComments,
-          total_votes_given: totalVotesGiven,
-          total_votes_received: totalVotesReceived,
-          account_age_days: accountAgeDays,
-          last_activity: userRecord.updated_at || userRecord.created_at,
-          is_banned: isBanned && !banExpired,
-          is_suspended: isSuspended && !suspendExpired,
-          ban_expiry: userRecord.ban_expiry,
-          suspend_expiry: userRecord.suspend_expiry
-        }
-      };
-    } catch (fallbackError: any) {
-      console.error('Direct database query failed:', fallbackError);
-      throw new Error(`Failed to fetch user stats: ${fallbackError.message}`);
-    }
+  async unverifyUser(request: UserActionRequest) {
+    return this.makeRequest('admin-unverify-user', {
+      user_id: request.userId,
+      reason: request.reason,
+    }, request.elevationToken);
   }
 
-  /**
-   * Bulk actions on multiple users
-   */
-  async bulkUserAction(request: {
+  async bulkUserAction(data: {
     userIds: string[];
-    action: 'ban' | 'unban' | 'verify' | 'unverify' | 'suspend' | 'unsuspend' | 'delete';
+    action: string;
     reason: string;
     elevationToken: string;
-    adminId?: string;
     duration?: number;
-  }): Promise<{ success: boolean; results: Array<{ userId: string; success: boolean; error?: string }> }> {
-    return this.makeAdminRequest('admin-bulk-user-action', {
-      user_ids: request.userIds,
-      action: request.action,
-      reason: request.reason,
-      admin_id: request.adminId,
-      duration_days: request.duration,
-    }, request.elevationToken);
+  }) {
+    return this.makeRequest('admin-bulk-user-action', {
+      user_ids: data.userIds,
+      action: data.action,
+      reason: data.reason,
+      duration: data.duration,
+    }, data.elevationToken);
   }
 }
 
