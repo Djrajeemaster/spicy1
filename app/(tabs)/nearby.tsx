@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { 
   View, 
   Text, 
@@ -28,9 +28,9 @@ export default function NearbyScreen() {
   const isDesktop = Platform.OS === 'web' && width >= 768;
   const [locationEnabled, setLocationEnabled] = useState(false);
   const [radius, setRadius] = useState(5); // miles
-  const [nearbyDeals, setNearbyDeals] = useState([]);
+  const [nearbyDeals, setNearbyDeals] = useState<any[]>([]);
   const [loading, setLoading] = useState(false);
-  const [userLocation, setUserLocation] = useState(null);
+  const [userLocation, setUserLocation] = useState<any>(null);
 
   const radiusOptions = [1, 2, 5, 10, 25];
 
@@ -43,11 +43,22 @@ export default function NearbyScreen() {
   }, [locationEnabled, radius, userLocation]);
 
   // Refresh nearby deals when screen comes into focus (with simple optimization)
+  const lastNearbyLoadRef = useRef(0);
+  const NEARBY_RELOAD_THRESHOLD = 5 * 60 * 1000; // 5 minutes
+
   useFocusEffect(
     useCallback(() => {
-      if (locationEnabled && userLocation && nearbyDeals.length === 0) {
-        console.log('📍 Nearby: Loading deals (empty state)');
+      const now = Date.now();
+      const timeSinceLastLoad = now - lastNearbyLoadRef.current;
+      
+      // Only reload if location is enabled and data is stale
+      if (locationEnabled && userLocation && 
+          (timeSinceLastLoad > NEARBY_RELOAD_THRESHOLD || nearbyDeals.length === 0)) {
+        console.log('� Nearby: Reloading deals on focus');
         loadNearbyDeals();
+        lastNearbyLoadRef.current = now;
+      } else {
+        console.log('📱 Nearby: Skipping reload');
       }
     }, [locationEnabled, userLocation, nearbyDeals.length])
   );
@@ -133,7 +144,7 @@ export default function NearbyScreen() {
     }
   };
 
-  const handleVote = (dealId, voteType) => {
+  const handleVote = (dealId: any, voteType: any) => {
     if (isGuest) {
       Alert.alert(
         "Join SpicyBeats",

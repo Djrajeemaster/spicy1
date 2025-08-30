@@ -1,5 +1,5 @@
 // app/(tabs)/updeals.tsx
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import {
   View,
   Text,
@@ -37,11 +37,13 @@ export default function UpDealsScreen() {
   const [locationEnabled, setLocationEnabled] = useState(false);
   const [loading, setLoading] = useState(true);
   const [categories, setCategories] = useState<Category[]>([]);
-  const [trendingDeals, setTrendingDeals] = useState<DealWithRelations[]>([]);
+  const [trendingDeals, setTrendingDeals] = useState<any[]>([]);
 
   const loadData = useCallback(async () => {
     setLoading(true);
     try {
+      // For now, show a mix of popular and recent deals for "For You" experience
+      // In the future, this could be enhanced with actual user preference algorithms
       const [dealsRes, categoriesRes] = await Promise.all([
         dealService.getDeals({ sortBy: 'popular', limit: 20 }),
         categoryService.getCategories()
@@ -76,18 +78,31 @@ export default function UpDealsScreen() {
     loadData();
   }, [loadData]);
 
-  // Refresh data when screen comes into focus
+  // Refresh data when screen comes into focus - but only if data is stale
+  const lastLoadTimeRef = useRef(0);
+  const RELOAD_THRESHOLD = 10 * 60 * 1000; // 10 minutes
+
   useFocusEffect(
     useCallback(() => {
-      loadData();
-    }, [loadData])
+      const now = Date.now();
+      const timeSinceLastLoad = now - lastLoadTimeRef.current;
+      
+      // Only reload if data is stale or empty
+      if (trendingDeals.length === 0 || timeSinceLastLoad > RELOAD_THRESHOLD) {
+        console.log('🔄 For You: Reloading deals on focus');
+        loadData();
+        lastLoadTimeRef.current = now;
+      } else {
+        console.log('📱 For You: Skipping reload, data is fresh');
+      }
+    }, [trendingDeals.length, loadData])
   );
 
-  const handleVote = (dealId: string, voteType: 'up' | 'down') => {
+  const handleVote = (dealId: string | number, voteType: 'up' | 'down') => {
     if (isGuest) {
       Alert.alert(
         "Join SpicyBeats",
-        "Sign in to vote on trending deals!",
+        "Sign in to vote on recommended deals!",
         [
           { text: "Maybe Later", style: "cancel" },
           { text: "Sign In", onPress: () => router.push('/sign-in') }
@@ -113,15 +128,15 @@ export default function UpDealsScreen() {
 
       <View style={styles.headerSection}>
         <LinearGradient
-          colors={['#f59e0b', '#d97706']}
+          colors={['#6366f1', '#4f46e5']}
           style={styles.headerGradient}
         >
           <View style={styles.titleContainer}>
             <TrendingUp size={24} color="#FFFFFF" />
-            <Text style={styles.pageTitle}>Trending UpDeals</Text>
+            <Text style={styles.pageTitle}>For You</Text>
           </View>
           <Text style={styles.subtitle}>
-            Most popular deals right now
+            Recommended deals based on your alerts and interests
           </Text>
         </LinearGradient>
       </View>
@@ -135,20 +150,27 @@ export default function UpDealsScreen() {
 
       <ScrollView style={styles.dealsContainer} showsVerticalScrollIndicator={false}>
         {loading ? (
-          <ActivityIndicator style={{ marginTop: 50 }} size="large" color="#f59e0b" />
+          <ActivityIndicator style={{ marginTop: 50 }} size="large" color="#6366f1" />
         ) : (
           <>
-            {false ? ( // Temporarily disable grid view to fix syntax error
-              <View style={styles.dealsGrid}>
-                {trendingDeals.map(deal => (
-                  <View key={deal.id} style={{ width: `${100 / 2}%`, padding: 8 }}>
-                    <Text>Deal placeholder</Text>
-                  </View>
-                ))}
+            {trendingDeals.length === 0 ? (
+              <View style={styles.emptyState}>
+                <TrendingUp size={48} color="#6366f1" />
+                <Text style={styles.emptyStateTitle}>No recommendations yet</Text>
+                <Text style={styles.emptyStateSubtitle}>
+                  Set up alerts to get personalized deal recommendations!
+                </Text>
               </View>
             ) : (
               trendingDeals.map(deal => (
-                <Text key={deal.id}>Deal: {deal.title}</Text>
+                <DealCard
+                  key={deal.id}
+                  deal={deal}
+                  isGuest={isGuest}
+                  onVote={handleVote}
+                  userRole={user?.role}
+                  userId={user?.id}
+                />
               ))
             )}
           </>
@@ -194,6 +216,26 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     flexWrap: 'wrap',
     padding: 8,
+  },
+  emptyState: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: 40,
+    marginTop: 60,
+  },
+  emptyStateTitle: {
+    fontSize: 20,
+    fontWeight: '600',
+    color: '#1f2937',
+    marginTop: 16,
+    marginBottom: 8,
+  },
+  emptyStateSubtitle: {
+    fontSize: 16,
+    color: '#6b7280',
+    textAlign: 'center',
+    lineHeight: 24,
   },
   bottomPadding: {
     height: 100,

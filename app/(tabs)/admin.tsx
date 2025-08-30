@@ -1,4 +1,4 @@
-import React, { useState, useCallback } from 'react';
+import React, { useState, useCallback, useRef } from 'react';
 import { View, Text, StyleSheet, ScrollView, ActivityIndicator, TouchableOpacity, Alert } from 'react-native';
 import { useFocusEffect } from '@react-navigation/native';
 import { AdminHeader } from '@/components/admin/AdminHeader';
@@ -44,11 +44,24 @@ export default function AdminScreen() {
     refreshData,
   } = useAdminData();
 
-  // Refresh admin data when screen comes into focus
+  // Refresh admin data when screen comes into focus - but only if data is stale
+  const lastAdminLoadRef = useRef(0);
+  const ADMIN_RELOAD_THRESHOLD = 15 * 60 * 1000; // 15 minutes for admin data
+
   useFocusEffect(
     useCallback(() => {
-      refreshData();
-    }, [refreshData])
+      const now = Date.now();
+      const timeSinceLastLoad = now - lastAdminLoadRef.current;
+      
+      // Only reload if data is stale or missing
+      if (timeSinceLastLoad > ADMIN_RELOAD_THRESHOLD || !adminStats) {
+        console.log('🔄 Admin: Reloading data on focus');
+        refreshData();
+        lastAdminLoadRef.current = now;
+      } else {
+        console.log('📱 Admin: Skipping reload, data is fresh');
+      }
+    }, [refreshData, adminStats])
   );
 
   if (loading) {

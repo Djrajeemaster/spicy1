@@ -1,5 +1,5 @@
 import { Tabs } from 'expo-router';
-import { Chrome as Home, TrendingUp, Plus, Bell, User, MapPin, Bookmark } from 'lucide-react-native';
+import { Home, Heart, Plus, MapPin, User } from 'lucide-react-native';
 import { View, StyleSheet, Platform } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { BlurView } from 'expo-blur';
@@ -45,6 +45,7 @@ export default function TabLayout() {
           )
         ),
       }}>
+      {/* Tab Order: Discover, For You, Post, Nearby, Profile */}
       <Tabs.Screen
         name="index"
         options={{
@@ -59,10 +60,10 @@ export default function TabLayout() {
       <Tabs.Screen
         name="updeals"
         options={{
-          title: 'Trending',
+          title: 'For You',
           tabBarIcon: ({ size, color, focused }) => (
             <View style={[styles.iconContainer, focused && styles.iconContainerActive]}>
-              <TrendingUp size={focused ? 24 : 22} color={color} strokeWidth={focused ? 2.5 : 2} />
+              <Heart size={focused ? 24 : 22} color={color} strokeWidth={focused ? 2.5 : 2} fill={focused ? color : 'none'} />
             </View>
           ),
         }}
@@ -70,18 +71,29 @@ export default function TabLayout() {
       <Tabs.Screen
         name="post"
         options={{
-          title: '',
+          title: 'Post',
           tabBarIcon: ({ focused }) => (
             <View style={styles.postButtonContainer}>
               <LinearGradient
                 colors={['#6366f1', '#4f46e5']}
                 style={[styles.postButton, focused && styles.postButtonActive]}
               >
-                <Plus size={24} color="#FFFFFF" strokeWidth={3} />
+                <Plus size={24} color="#FFFFFF" strokeWidth={2.5} />
               </LinearGradient>
             </View>
           ),
           tabBarLabel: '',
+        }}
+      />
+      <Tabs.Screen
+        name="nearby"
+        options={{
+          title: 'Nearby',
+          tabBarIcon: ({ size, color, focused }) => (
+            <View style={[styles.iconContainer, focused && styles.iconContainerActive]}>
+              <MapPin size={focused ? 24 : 22} color={color} strokeWidth={focused ? 2.5 : 2} />
+            </View>
+          ),
         }}
       />
       <Tabs.Screen
@@ -132,9 +144,9 @@ const styles = StyleSheet.create({
   tabBar: {
     backgroundColor: 'transparent',
     borderTopWidth: 0,
-    paddingBottom: Platform.OS === 'ios' ? 20 : 8,
+    paddingBottom: Platform.OS === 'ios' ? 30 : 16,
     paddingTop: 12,
-    height: Platform.OS === 'ios' ? 90 : 70,
+    height: Platform.OS === 'ios' ? 100 : 85,
     elevation: 0,
     shadowColor: '#000',
     shadowOffset: { width: 0, height: -2 },
@@ -142,18 +154,28 @@ const styles = StyleSheet.create({
     shadowRadius: 8,
   },
   tabBarLabel: {
-    fontSize: 12,
+    fontSize: 11,
     fontWeight: '600',
     marginTop: 4,
+    marginBottom: 0,
+    textAlign: 'center',
   },
   iconContainer: {
-    padding: 4,
+    padding: 6,
+    borderRadius: 12,
+    alignItems: 'center',
+    justifyContent: 'center',
+    minHeight: 40,
+    minWidth: 40,
   },
   iconContainerActive: {
-    transform: [{ scale: 1.1 }],
+    transform: [{ scale: 1.05 }],
+    backgroundColor: 'rgba(99, 102, 241, 0.1)',
   },
   postButtonContainer: {
-    marginTop: -8,
+    marginTop: -10,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   postButton: {
     width: 56,
@@ -164,10 +186,13 @@ const styles = StyleSheet.create({
     shadowColor: '#6366f1',
     shadowOffset: { width: 0, height: 4 },
     shadowOpacity: 0.3,
-    shadowRadius: 8,
+    shadowRadius: 12,
     elevation: 8,
+    borderWidth: 3,
+    borderColor: '#FFFFFF',
   },
   postButtonActive: {
     transform: [{ scale: 1.05 }],
+    shadowOpacity: 0.4,
   },
 });

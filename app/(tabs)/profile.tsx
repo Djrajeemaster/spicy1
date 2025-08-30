@@ -184,7 +184,7 @@ useEffect(() => {
 
   // Smart refresh: only reload data when necessary  
   const lastProfileLoadRef = useRef(0);
-  const PROFILE_RELOAD_THRESHOLD = 3 * 60 * 1000; // 3 minutes
+  const PROFILE_RELOAD_THRESHOLD = 10 * 60 * 1000; // Increased to 10 minutes
 
   useFocusEffect(
     useCallback(() => {
@@ -193,7 +193,7 @@ useEffect(() => {
       const now = Date.now();
       const timeSinceLastLoad = now - lastProfileLoadRef.current;
       
-      // Only reload if it's been more than 3 minutes or if data is missing
+      // Only reload if it's been more than 10 minutes or if data is missing
       const shouldReload = timeSinceLastLoad > PROFILE_RELOAD_THRESHOLD || 
                           fetchedUserDeals.length === 0 || 
                           !followCounts;

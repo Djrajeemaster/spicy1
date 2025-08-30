@@ -13,6 +13,7 @@ import {
   Switch,
   useWindowDimensions,
   AppState,
+  Animated,
 } from 'react-native';
 import { useFocusEffect } from '@react-navigation/native';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -41,6 +42,26 @@ type Store = Database['public']['Tables']['stores']['Row'];
 const RADIUS_OPTIONS = [1, 5, 10, 25];
 
 export default function HomeScreen() {
+  const scrollY = useRef(new Animated.Value(0)).current;
+  // Scroll tracking for header animation
+  // Animation for subheader (sorting/filter options)
+  const subHeaderOpacity = useRef(new Animated.Value(1)).current;
+
+  useEffect(() => {
+    const listener = scrollY.addListener(({ value }) => {
+      const threshold = 100;
+      const progress = Math.min(value / threshold, 1);
+      const elementsOpacity = 1 - progress;
+      Animated.timing(subHeaderOpacity, {
+        toValue: elementsOpacity,
+        duration: 0,
+        useNativeDriver: true,
+      }).start();
+    });
+    return () => {
+      scrollY.removeListener(listener);
+    };
+  }, [subHeaderOpacity, scrollY]);
   const { theme, colors } = useTheme();
   const [deals, setDeals] = useState<any[]>([]);
   const [filteredDeals, setFilteredDeals] = useState<any[]>([]);
@@ -67,6 +88,7 @@ export default function HomeScreen() {
   const [showFilters, setShowFilters] = useState(false);
   const [locationEnabled, setLocationEnabled] = useState(false);
   const [userLocation, setUserLocation] = useState<any>(null);
+
 
   // Check if location is already available on component mount
   useEffect(() => {
@@ -284,14 +306,14 @@ export default function HomeScreen() {
       if (minPrice.trim()) {
         const min = parseFloat(minPrice);
         if (!isNaN(min)) {
-          filtered = filtered.filter(deal => deal.price >= min);
+          filtered = filtered.filter(deal => Number(deal.price) >= min);
         }
       }
       
       if (maxPrice.trim()) {
         const max = parseFloat(maxPrice);
         if (!isNaN(max)) {
-          filtered = filtered.filter(deal => deal.price <= max);
+          filtered = filtered.filter(deal => Number(deal.price) <= max);
         }
       }
 
@@ -301,7 +323,7 @@ export default function HomeScreen() {
         if (!isNaN(minDiscountValue)) {
           filtered = filtered.filter(deal => {
             if (deal.originalPrice && deal.price) {
-              const discount = ((deal.originalPrice - deal.price) / deal.originalPrice) * 100;
+              const discount = ((Number(deal.originalPrice) - Number(deal.price)) / Number(deal.originalPrice)) * 100;
               return discount >= minDiscountValue;
             }
             return false;
@@ -381,7 +403,7 @@ export default function HomeScreen() {
 
   // Smart refresh: only reload deals when necessary
   const lastLoadTimeRef = useRef(0);
-  const RELOAD_THRESHOLD = 5 * 60 * 1000; // 5 minutes
+  const RELOAD_THRESHOLD = 10 * 60 * 1000; // Increased to 10 minutes to reduce excessive reloading
 
   useFocusEffect(
     useCallback(() => {
@@ -390,9 +412,9 @@ export default function HomeScreen() {
       
       // Only reload if:
       // 1. No deals loaded yet (deals.length === 0)
-      // 2. It's been more than 5 minutes since last load
-      // 3. Data is explicitly stale
-      if (deals.length === 0 || timeSinceLastLoad > RELOAD_THRESHOLD || loading) {
+      // 2. It's been more than 10 minutes since last load
+      // 3. User explicitly requested refresh
+      if (deals.length === 0 || timeSinceLastLoad > RELOAD_THRESHOLD) {
         console.log('🔄 Home: Reloading deals on focus', { 
           dealsCount: deals.length, 
           timeSinceLastLoad: Math.round(timeSinceLastLoad / 1000), 
@@ -406,7 +428,7 @@ export default function HomeScreen() {
           timeSinceLastLoad: Math.round(timeSinceLastLoad / 1000) 
         });
       }
-    }, [deals.length, loading, loadDeals])
+    }, [deals.length, loadDeals]) // Removed 'loading' dependency to prevent unnecessary reloads
   );
 
 
@@ -590,11 +612,38 @@ export default function HomeScreen() {
         showFilters={showFilters}
         onFiltersToggle={() => setShowFilters(!showFilters)}
         filtersActive={hasActiveFilters()}
+        scrollY={scrollY}
       />
 
-      {/* Sub-header with functional filters for Desktop */}
+      {/* Sub-header with functional filters for Desktop, animated out on scroll */}
       {isDesktop && (
-        <View style={styles.subHeader}>
+        <Animated.View
+          style={[
+            styles.subHeader,
+            {
+              opacity: subHeaderOpacity,
+              transform: [{
+                translateY: subHeaderOpacity.interpolate({
+                  inputRange: [0, 1],
+                  outputRange: [-30, 0],
+                })
+              }],
+              height: subHeaderOpacity.interpolate({
+                inputRange: [0, 1],
+                outputRange: [0, 56],
+              }),
+              paddingVertical: subHeaderOpacity.interpolate({
+                inputRange: [0, 1],
+                outputRange: [0, 6],
+              }),
+              backgroundColor: subHeaderOpacity.interpolate({
+                inputRange: [0, 1],
+                outputRange: ['rgba(0,0,0,0)', '#4f46e5'],
+              }),
+              overflow: 'hidden',
+            },
+          ]}
+        >
           <View style={styles.subHeaderContent}>
             <View style={styles.subHeaderLeft}>
               <Text style={styles.subHeaderTitle}>Category:</Text>
@@ -690,7 +739,7 @@ export default function HomeScreen() {
               </View>
             </View>
           </View>
-        </View>
+        </Animated.View>
       )}
 
       {/* Sub-header Dropdown Backdrop */}
@@ -1106,6 +1155,11 @@ export default function HomeScreen() {
           />
         }
         showsVerticalScrollIndicator={false}
+        onScroll={Animated.event(
+          [{ nativeEvent: { contentOffset: { y: scrollY } } }],
+          { useNativeDriver: false }
+        )}
+        scrollEventThrottle={16}
       >
 
         {loading ? (
@@ -1181,8 +1235,9 @@ export default function HomeScreen() {
                   <View style={styles.statItem}>
                     <Text style={styles.statText}>
                       ⚡ {filteredDeals.filter(deal => {
-                        if (!deal.expires_at) return false;
-                        const expiresIn = new Date(deal.expires_at).getTime() - Date.now();
+                        const expiry = deal.expiry_date || deal.expires_at;
+                        if (!expiry) return false;
+                        const expiresIn = new Date(expiry).getTime() - Date.now();
                         const hoursLeft = expiresIn / (1000 * 60 * 60);
                         return hoursLeft > 0 && hoursLeft <= 24;
                       }).length} expiring soon
@@ -1743,19 +1798,16 @@ const styles = StyleSheet.create({
   
   // Sub-header styles
   subHeader: {
-    backgroundColor: '#4f46e5',
-    paddingVertical: 6,
-    paddingHorizontal: 20,
-    borderBottomWidth: 1,
-    borderBottomColor: 'rgba(255, 255, 255, 0.1)',
-    minHeight: 42,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.05,
-    shadowRadius: 2,
-    elevation: 50,
-    zIndex: 50,
-    position: 'relative',
+  paddingHorizontal: 20,
+  borderBottomWidth: 1,
+  borderBottomColor: 'rgba(255, 255, 255, 0.1)',
+  shadowColor: '#000',
+  shadowOffset: { width: 0, height: 1 },
+  shadowOpacity: 0.05,
+  shadowRadius: 2,
+  elevation: 50,
+  zIndex: 50,
+  position: 'relative',
   },
   subHeaderContent: {
     flexDirection: 'row',

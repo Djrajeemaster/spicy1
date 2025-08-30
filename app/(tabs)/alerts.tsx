@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState, useCallback } from 'react';
+import React, { useEffect, useMemo, useState, useCallback, useRef } from 'react';
 import { View, Text, TextInput, TouchableOpacity, ScrollView, ActivityIndicator, Switch, StyleSheet } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useFocusEffect } from '@react-navigation/native';
@@ -44,11 +44,24 @@ export default function AlertsScreen() {
     loadData();
   }, [loadData]);
 
-  // Refresh alerts when screen comes into focus
+  // Refresh alerts when screen comes into focus - but only if data is stale
+  const lastAlertsLoadRef = useRef(0);
+  const ALERTS_RELOAD_THRESHOLD = 5 * 60 * 1000; // 5 minutes for alerts
+
   useFocusEffect(
     useCallback(() => {
-      loadData();
-    }, [loadData])
+      const now = Date.now();
+      const timeSinceLastLoad = now - lastAlertsLoadRef.current;
+      
+      // Only reload if data is stale or missing
+      if (timeSinceLastLoad > ALERTS_RELOAD_THRESHOLD || !alerts || alerts.length === 0) {
+        console.log('🔄 Alerts: Reloading data on focus');
+        loadData();
+        lastAlertsLoadRef.current = now;
+      } else {
+        console.log('📱 Alerts: Skipping reload, data is fresh');
+      }
+    }, [loadData, alerts])
   );
 
   const rulesPreview = useMemo(() => {
