@@ -1,5 +1,6 @@
-import React, { useState } from 'react';
+import React, { useState, useCallback } from 'react';
 import { View, Text, StyleSheet, ScrollView, ActivityIndicator, TouchableOpacity, Alert } from 'react-native';
+import { useFocusEffect } from '@react-navigation/native';
 import { AdminHeader } from '@/components/admin/AdminHeader';
 import { AdminTabNavigation, AdminTab } from '@/components/admin/AdminTabNavigation';
 import { useAdminData } from '@/hooks/useAdminData';
@@ -40,7 +41,15 @@ export default function AdminScreen() {
     toggleBanner,
     addNewBanner,
     updateSetting,
+    refreshData,
   } = useAdminData();
+
+  // Refresh admin data when screen comes into focus
+  useFocusEffect(
+    useCallback(() => {
+      refreshData();
+    }, [refreshData])
+  );
 
   if (loading) {
     return (

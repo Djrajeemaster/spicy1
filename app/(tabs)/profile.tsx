@@ -1,9 +1,10 @@
 // app/(tabs)/profile.tsx
 import { useLocalSearchParams, router } from 'expo-router';
+import { useFocusEffect } from '@react-navigation/native';
 import { followService } from '@/services/followService';
 import { dealService, type DealWithRelations } from '@/services/dealService';
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import {
   View,
   Text,
@@ -64,7 +65,7 @@ export default function ProfileScreen() {
       (async () => {
         try {
           setLoadingFollowing(true);
-          const { data, error } = await followService.getFollowingFeed(30, 0);
+          const [error, data] = await followService.getFollowingFeed(30, 0);
           if (error) {
             console.error('Error fetching following feed:', error);
           } else if (data) {
@@ -80,7 +81,7 @@ export default function ProfileScreen() {
       (async () => {
         try {
           setLoadingSaved(true);
-          const { data, error } = await dealService.getSavedDeals(user.id);
+          const [error, data] = await dealService.getSavedDeals(user.id);
           if (error) {
             console.error('Error fetching saved deals:', error);
           } else if (data) {
@@ -135,7 +136,7 @@ export default function ProfileScreen() {
   useEffect(() => {
   (async () => {
     if (user?.id) {
-      const { data } = await followService.getCounts(user.id);
+      const [error, data] = await followService.getCounts(user.id);
       if (data) setFollowCounts(data);
     }
   })();
@@ -144,7 +145,7 @@ useEffect(() => {
     if (user?.id) {
       const loadUserDeals = async () => {
         setLoadingDeals(true);
-        const { data, error } = await dealService.getUserDeals(user.id);
+        const [error, data] = await dealService.getUserDeals(user.id);
         if (error) {
           console.error('Error fetching user deals:', error);
           Alert.alert('Error', 'Failed to load your deals.');
@@ -178,6 +179,68 @@ useEffect(() => {
       setLoadingActivities(false);
     }
   }, [user?.id]);
+
+  // Refresh data when screen comes into focus
+  useFocusEffect(
+    useCallback(() => {
+      if (user?.id) {
+        // Reload follow counts
+        (async () => {
+          const [error, data] = await followService.getCounts(user.id);
+          if (data) setFollowCounts(data);
+        })();
+
+        // Reload user deals
+        (async () => {
+          setLoadingDeals(true);
+          const [error, data] = await dealService.getUserDeals(user.id);
+          if (error) {
+            console.error('Error fetching user deals:', error);
+          } else if (data) {
+            setFetchedUserDeals(data);
+          }
+          setLoadingDeals(false);
+        })();
+
+        // Reload user activities
+        (async () => {
+          setLoadingActivities(true);
+          const { data, error } = await activityService.getUserActivities(user.id);
+          if (error) {
+            console.error('Error fetching user activities:', error);
+          } else if (data) {
+            setFetchedActivities(data);
+          }
+          setLoadingActivities(false);
+        })();
+
+        // Reload tab-specific data
+        if (profileTab === 'following') {
+          (async () => {
+            setLoadingFollowing(true);
+            const [error, data] = await followService.getFollowingFeed(30, 0);
+            if (error) {
+              console.error('Error fetching following feed:', error);
+            } else if (data) {
+              setFollowingFeed((data as any) as DealWithRelations[]);
+            }
+            setLoadingFollowing(false);
+          })();
+        } else if (profileTab === 'saved') {
+          (async () => {
+            setLoadingSaved(true);
+            const [error, data] = await dealService.getSavedDeals(user.id);
+            if (error) {
+              console.error('Error fetching saved deals:', error);
+            } else if (data) {
+              setSavedDeals(data as DealWithRelations[]);
+            }
+            setLoadingSaved(false);
+          })();
+        }
+      }
+    }, [user?.id, profileTab])
+  );
 
   const userDeals = {
     approved: fetchedUserDeals.filter(d => d.status === 'live'),

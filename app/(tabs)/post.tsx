@@ -891,7 +891,7 @@ export default function PostDealScreen() {
         <View style={styles.headerTop}>
           <TouchableOpacity 
             style={styles.headerButton} 
-            onPress={() => router.back()}
+            onPress={() => router.canGoBack() ? router.back() : router.replace('/(tabs)')}
           >
             <ArrowLeft size={24} color="#fff" />
           </TouchableOpacity>

@@ -9,8 +9,10 @@ import {
   Alert,
   ActivityIndicator,
   useWindowDimensions,
+  Platform,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { useFocusEffect } from '@react-navigation/native';
 import { TrendingUp } from 'lucide-react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Header } from '@/components/Header';
@@ -45,8 +47,8 @@ export default function UpDealsScreen() {
         categoryService.getCategories()
       ]);
 
-      if (dealsRes.data) {
-        const mappedDeals = (dealsRes.data as DealWithRelations[]).map((d: any) => ({
+      if (dealsRes[1]) {
+        const mappedDeals = (dealsRes[1] as DealWithRelations[]).map((d: any) => ({
           ...d,
           id: String(d.id),
           price: d.price,
@@ -74,7 +76,14 @@ export default function UpDealsScreen() {
     loadData();
   }, [loadData]);
 
-  const handleVote = (dealId, voteType) => {
+  // Refresh data when screen comes into focus
+  useFocusEffect(
+    useCallback(() => {
+      loadData();
+    }, [loadData])
+  );
+
+  const handleVote = (dealId: string, voteType: 'up' | 'down') => {
     if (isGuest) {
       Alert.alert(
         "Join SpicyBeats",

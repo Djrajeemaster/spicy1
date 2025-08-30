@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { 
   View, 
   Text, 
@@ -8,8 +8,10 @@ import {
   Alert,
   ActivityIndicator,
   useWindowDimensions,
+  Platform,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { useFocusEffect } from '@react-navigation/native';
 import { MapPin, Navigation, Filter, Zap } from 'lucide-react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Header } from '@/components/Header';
@@ -39,6 +41,15 @@ export default function NearbyScreen() {
       setNearbyDeals([]);
     }
   }, [locationEnabled, radius, userLocation]);
+
+  // Refresh nearby deals when screen comes into focus
+  useFocusEffect(
+    useCallback(() => {
+      if (locationEnabled && userLocation) {
+        loadNearbyDeals();
+      }
+    }, [locationEnabled, userLocation])
+  );
 
   const loadNearbyDeals = async () => {
     if (!userLocation) return;

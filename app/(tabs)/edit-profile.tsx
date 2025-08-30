@@ -118,7 +118,7 @@ export default function EditProfileScreen() {
       <LinearGradient colors={['#667eea', '#764ba2']} style={styles.gradient}>
         <SafeAreaView style={styles.safeArea} edges={['top']}>
           <View style={styles.header}>
-            <TouchableOpacity style={styles.backButton} onPress={() => router.push('/(tabs)/settings')}>
+            <TouchableOpacity style={styles.backButton} onPress={() => router.canGoBack() ? router.back() : router.push('/(tabs)/settings')}>
               <ArrowLeft size={24} color="#FFFFFF" />
             </TouchableOpacity>
             <Text style={styles.headerTitle}>Edit Profile</Text>

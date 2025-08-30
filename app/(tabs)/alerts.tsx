@@ -1,6 +1,7 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useState, useCallback } from 'react';
 import { View, Text, TextInput, TouchableOpacity, ScrollView, ActivityIndicator, Switch, StyleSheet } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { useFocusEffect } from '@react-navigation/native';
 import { Header } from '@/components/Header';
 import { useAuth } from '@/contexts/AuthProvider';
 import { alertService } from '@/services/alertService';
@@ -22,22 +23,31 @@ export default function AlertsScreen() {
   const [maxPrice, setMaxPrice] = useState('');
   const [storeId, setStoreId] = useState<string>('');
 
-  useEffect(() => {
+  const loadData = useCallback(async () => {
     if (!user?.id) return;
-    (async () => {
-      setLoading(true);
-      try {
-        const [alertsRes, storesRes] = await Promise.all([
-          alertService.getUserAlerts(user.id),
-          storeService.getStores()
-        ]);
-        setAlerts(Array.isArray(alertsRes.data) ? alertsRes.data : []);
-        setStores(Array.isArray(storesRes.data) ? storesRes.data.map((x: any) => ({ id: x.id, name: x.name })) : []);
-      } finally {
-        setLoading(false);
-      }
-    })();
+    setLoading(true);
+    try {
+      const [alertsRes, storesRes] = await Promise.all([
+        alertService.getUserAlerts(user.id),
+        storeService.getStores()
+      ]);
+      setAlerts(Array.isArray(alertsRes.data) ? alertsRes.data : []);
+      setStores(Array.isArray(storesRes.data) ? storesRes.data.map((x: any) => ({ id: x.id, name: x.name })) : []);
+    } finally {
+      setLoading(false);
+    }
   }, [user?.id]);
+
+  useEffect(() => {
+    loadData();
+  }, [loadData]);
+
+  // Refresh alerts when screen comes into focus
+  useFocusEffect(
+    useCallback(() => {
+      loadData();
+    }, [loadData])
+  );
 
   const rulesPreview = useMemo(() => {
     switch (type) {

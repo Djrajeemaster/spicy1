@@ -8,6 +8,7 @@ import { UserBadge } from '@/components/UserBadge';
 import { UserRole, getRoleColor } from '@/types/user';
 import { reportService } from '@/services/reportService';
 import { dealService, DealWithRelations } from '@/services/dealService';
+import { handleBackNavigation } from '@/utils/navigation';
 import { useAuth } from '@/contexts/AuthProvider';
 import { useCurrency } from '@/contexts/CurrencyProvider';
 import { formatTimeAgo } from '@/utils/time';
@@ -92,8 +93,7 @@ export default function DealDetailsScreen() {
   }, [deal]);
 
   const handleBackPress = () => {
-    if (router.canGoBack()) router.back();
-    else router.replace('/(tabs)');
+    handleBackNavigation();
   };
 
   const handleVote = useCallback(async (voteType: 'up' | 'down') => {

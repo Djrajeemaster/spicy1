@@ -67,92 +67,92 @@ export const useAdminData = () => {
 
   // Fetch all admin data on mount
   useEffect(() => {
-    const loadAdminData = async () => {
-      setLoading(true);
-      console.log('🔄 Starting admin data load...');
-      
-      try {
-        // Fetch users
-        console.log('📊 Fetching users...');
-        const { data: usersData, error: usersError } = await userService.getAllUsers();
-        if (usersError) {
-          console.error('❌ Error fetching users:', usersError);
-        } else {
-          console.log('✅ Users fetched successfully:', usersData?.length || 0, 'users');
-          setUsers(usersData || []);
-        }
-
-        // Fetch categories (all categories for admin)
-        console.log('📊 Fetching categories...');
-        const { data: categoriesData, error: categoriesError } = await categoryService.getAllCategories();
-        if (categoriesError) {
-          console.error('❌ Error fetching categories:', categoriesError);
-        } else {
-          console.log('✅ Categories fetched successfully:', categoriesData?.length || 0, 'categories');
-          setCategories(categoriesData || []);
-        }
-
-        // Fetch banners
-        console.log('📊 Fetching banners...');
-        const { data: bannersData, error: bannersError } = await bannerService.getBanners();
-        if (bannersError) {
-          console.error('❌ Error fetching banners:', bannersError);
-        } else {
-          console.log('✅ Banners fetched successfully:', bannersData?.length || 0, 'banners');
-          setBanners(bannersData || []);
-        }
-
-        // Fetch pending deals
-        console.log('📊 Fetching pending deals...');
-        const { data: dealsData, error: dealsError } = await dealService.getPendingDeals();
-        if (dealsError) {
-          console.error('❌ Error fetching pending deals:', dealsError);
-        } else {
-          console.log('✅ Pending deals fetched successfully:', dealsData?.length || 0, 'deals');
-          // Transform deals to include flagged status and report count
-          const transformedDeals = (dealsData || []).map(deal => ({
-            ...deal,
-            flagged: false, // TODO: Implement report checking
-            reportCount: 0, // TODO: Implement report counting
-          }));
-          setPendingDeals(transformedDeals);
-        }
-
-        // Calculate and set admin stats
-        const calculatedStats = {
-          totalUsers: usersData?.length || 0,
-          activeDeals: 0, // Will be calculated separately if needed
-          pendingReviews: dealsData?.length || 0,
-          dailyActiveUsers: Math.floor((usersData?.length || 0) * 0.3), // mock
-        };
-
-        console.log('📊 Calculated stats:', calculatedStats);
-        setAdminStats(calculatedStats);
-
-        // Fetch system settings
-        console.log('📊 Fetching system settings...');
-        const { data: settingsData, error: settingsError } = await settingsService.getSettings();
-        if (settingsError) {
-          console.error('❌ Error fetching settings:', settingsError);
-        } else {
-          console.log('✅ Settings fetched successfully:', settingsData?.length || 0, 'settings');
-          // Transform settings array to object and merge with defaults
-          const settingsObj = (settingsData || []).reduce((acc, setting) => {
-            acc[setting.key] = setting.value;
-            return acc;
-          }, {} as any);
-          setSystemSettings({ ...defaultSystemSettings, ...settingsObj });
-        }
-
-        console.log('✅ Admin data load completed successfully');
-      } catch (error) {
-        console.error('❌ Unexpected error loading admin data:', error);
-      } finally {
-        setLoading(false);
-      }
-    };
-
     loadAdminData();
+  }, []);
+
+  const loadAdminData = useCallback(async () => {
+    setLoading(true);
+    console.log('🔄 Starting admin data load...');
+    
+    try {
+      // Fetch users
+      console.log('📊 Fetching users...');
+      const { data: usersData, error: usersError } = await userService.getAllUsers();
+      if (usersError) {
+        console.error('❌ Error fetching users:', usersError);
+      } else {
+        console.log('✅ Users fetched successfully:', usersData?.length || 0, 'users');
+        setUsers(usersData || []);
+      }
+
+      // Fetch categories (all categories for admin)
+      console.log('📊 Fetching categories...');
+      const { data: categoriesData, error: categoriesError } = await categoryService.getAllCategories();
+      if (categoriesError) {
+        console.error('❌ Error fetching categories:', categoriesError);
+      } else {
+        console.log('✅ Categories fetched successfully:', categoriesData?.length || 0, 'categories');
+        setCategories(categoriesData || []);
+      }
+
+      // Fetch banners
+      console.log('📊 Fetching banners...');
+      const { data: bannersData, error: bannersError } = await bannerService.getBanners();
+      if (bannersError) {
+        console.error('❌ Error fetching banners:', bannersError);
+      } else {
+        console.log('✅ Banners fetched successfully:', bannersData?.length || 0, 'banners');
+        setBanners(bannersData || []);
+      }
+
+      // Fetch pending deals
+      console.log('📊 Fetching pending deals...');
+      const { data: dealsData, error: dealsError } = await dealService.getPendingDeals();
+      if (dealsError) {
+        console.error('❌ Error fetching pending deals:', dealsError);
+      } else {
+        console.log('✅ Pending deals fetched successfully:', dealsData?.length || 0, 'deals');
+        // Transform deals to include flagged status and report count
+        const transformedDeals = (dealsData || []).map(deal => ({
+          ...deal,
+          flagged: false, // TODO: Implement report checking
+          reportCount: 0, // TODO: Implement report counting
+        }));
+        setPendingDeals(transformedDeals);
+      }
+
+      // Calculate and set admin stats
+      const calculatedStats = {
+        totalUsers: usersData?.length || 0,
+        activeDeals: 0, // Will be calculated separately if needed
+        pendingReviews: dealsData?.length || 0,
+        dailyActiveUsers: Math.floor((usersData?.length || 0) * 0.3), // mock
+      };
+
+      console.log('📊 Calculated stats:', calculatedStats);
+      setAdminStats(calculatedStats);
+
+      // Fetch system settings
+      console.log('📊 Fetching system settings...');
+      const { data: settingsData, error: settingsError } = await settingsService.getSettings();
+      if (settingsError) {
+        console.error('❌ Error fetching settings:', settingsError);
+      } else {
+        console.log('✅ Settings fetched successfully:', settingsData?.length || 0, 'settings');
+        // Transform settings array to object and merge with defaults
+        const settingsObj = (settingsData || []).reduce((acc, setting) => {
+          acc[setting.key] = setting.value;
+          return acc;
+        }, {} as any);
+        setSystemSettings({ ...defaultSystemSettings, ...settingsObj });
+      }
+
+      console.log('✅ Admin data load completed successfully');
+    } catch (error) {
+      console.error('❌ Unexpected error loading admin data:', error);
+    } finally {
+      setLoading(false);
+    }
   }, []);
 
   // User management actions
@@ -390,5 +390,8 @@ export const useAdminData = () => {
     toggleBanner,
     addNewBanner,
     updateSetting,
+    
+    // Refresh function
+    refreshData: loadAdminData,
   };
 };          
