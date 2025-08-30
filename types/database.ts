@@ -310,6 +310,26 @@ export interface Database {
           updated_by?: string | null;
         };
       };
+      saved_deals: {
+        Row: {
+          id: string;
+          user_id: string;
+          deal_id: string;
+          created_at: string;
+        };
+        Insert: {
+          id?: string;
+          user_id: string;
+          deal_id: string;
+          created_at?: string;
+        };
+        Update: {
+          id?: string;
+          user_id?: string;
+          deal_id?: string;
+          created_at?: string;
+        };
+      };
     };
   };
 }

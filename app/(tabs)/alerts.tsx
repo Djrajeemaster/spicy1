@@ -4,6 +4,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { useFocusEffect } from '@react-navigation/native';
 import { Header } from '@/components/Header';
 import { useAuth } from '@/contexts/AuthProvider';
+import { useTheme } from '@/contexts/ThemeProvider';
 import { alertService } from '@/services/alertService';
 import { storeService } from '@/services/storeService';
 
@@ -12,6 +13,7 @@ type StoreLite = { id: string; name: string };
 
 export default function AlertsScreen() {
   const { user } = useAuth();
+  const { theme, colors } = useTheme();
   const [loading, setLoading] = useState(true);
   const [alerts, setAlerts] = useState<any[]>([]);
   const [stores, setStores] = useState<StoreLite[]>([]);
@@ -95,12 +97,12 @@ export default function AlertsScreen() {
   }
 
   return (
-    <SafeAreaView style={styles.container}>
+    <SafeAreaView style={[styles.container, { backgroundColor: colors.background }]}>
       <Header />
-      <ScrollView contentContainerStyle={styles.content}>
-        <TouchableOpacity onPress={() => setExpanded(x => !x)} style={styles.expandButton}>
-          <Text style={styles.title}>Create New Alert</Text>
-          <Text style={styles.arrow}>{expanded ? '▲' : '▼'}</Text>
+      <ScrollView contentContainerStyle={[styles.content, { backgroundColor: colors.background }]}>
+        <TouchableOpacity onPress={() => setExpanded(x => !x)} style={[styles.expandButton, { backgroundColor: colors.surface }]}>
+          <Text style={[styles.title, { color: colors.text }]}>Create New Alert</Text>
+          <Text style={[styles.arrow, { color: colors.text }]}>{expanded ? '▲' : '▼'}</Text>
         </TouchableOpacity>
 
         {expanded && (

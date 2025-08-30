@@ -1,5 +1,6 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { Platform } from 'react-native';
 
 type Theme = 'light' | 'dark';
 
@@ -41,7 +42,23 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
   useEffect(() => {
     const loadTheme = async () => {
       try {
-        const savedTheme = await AsyncStorage.getItem('theme');
+        let savedTheme: string | null = null;
+        
+        if (Platform.OS === 'web') {
+          // For web, check localStorage first
+          savedTheme = localStorage.getItem('spicy_app_settings');
+          if (savedTheme) {
+            const appSettings = JSON.parse(savedTheme);
+            savedTheme = appSettings.darkMode ? 'dark' : 'light';
+          } else {
+            // Fallback to direct theme storage
+            savedTheme = localStorage.getItem('theme');
+          }
+        } else {
+          // For React Native, use AsyncStorage
+          savedTheme = await AsyncStorage.getItem('theme');
+        }
+        
         if (savedTheme === 'dark' || savedTheme === 'light') {
           setTheme(savedTheme);
         }
@@ -56,7 +73,28 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
     const newTheme = theme === 'light' ? 'dark' : 'light';
     setTheme(newTheme);
     try {
-      await AsyncStorage.setItem('theme', newTheme);
+      if (Platform.OS === 'web') {
+        // Update both direct theme storage and app settings
+        localStorage.setItem('theme', newTheme);
+        
+        // Update the app settings as well
+        const appSettings = localStorage.getItem('spicy_app_settings');
+        if (appSettings) {
+          const settings = JSON.parse(appSettings);
+          settings.darkMode = newTheme === 'dark';
+          localStorage.setItem('spicy_app_settings', JSON.stringify(settings));
+        } else {
+          // Create new app settings
+          const newSettings = {
+            darkMode: newTheme === 'dark',
+            autoRefresh: true,
+            showTutorials: true,
+          };
+          localStorage.setItem('spicy_app_settings', JSON.stringify(newSettings));
+        }
+      } else {
+        await AsyncStorage.setItem('theme', newTheme);
+      }
     } catch (error) {
       console.error('Error saving theme:', error);
     }

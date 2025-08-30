@@ -3,8 +3,9 @@ import { useLocalSearchParams, router } from 'expo-router';
 import { useFocusEffect } from '@react-navigation/native';
 import { followService } from '@/services/followService';
 import { dealService, type DealWithRelations } from '@/services/dealService';
+import { useTheme } from '@/contexts/ThemeProvider';
 
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import {
   View,
   Text,
@@ -28,7 +29,7 @@ import {
   Clock,
   CircleCheck as CheckCircle,
   Circle as XCircle,
-
+  Edit3,
   Search,
   Crown,
   Zap,
@@ -45,6 +46,7 @@ import { Header } from '@/components/Header';
 
 export default function ProfileScreen() {
   const { user, profile, signOut } = useAuth();
+  const { theme, colors } = useTheme();
   
   // New: local tab state (Overview | Following | Saved)
   const params = useLocalSearchParams<{ tab?: string }>();
@@ -180,10 +182,32 @@ useEffect(() => {
     }
   }, [user?.id]);
 
-  // Refresh data when screen comes into focus
+  // Smart refresh: only reload data when necessary  
+  const lastProfileLoadRef = useRef(0);
+  const PROFILE_RELOAD_THRESHOLD = 3 * 60 * 1000; // 3 minutes
+
   useFocusEffect(
     useCallback(() => {
-      if (user?.id) {
+      if (!user?.id) return;
+
+      const now = Date.now();
+      const timeSinceLastLoad = now - lastProfileLoadRef.current;
+      
+      // Only reload if it's been more than 3 minutes or if data is missing
+      const shouldReload = timeSinceLastLoad > PROFILE_RELOAD_THRESHOLD || 
+                          fetchedUserDeals.length === 0 || 
+                          !followCounts;
+
+      console.log('👤 Profile: Focus effect', { 
+        shouldReload, 
+        timeSinceLastLoad: Math.round(timeSinceLastLoad / 1000),
+        tab: profileTab,
+        dealsCount: fetchedUserDeals.length 
+      });
+
+      if (shouldReload) {
+        lastProfileLoadRef.current = now;
+        
         // Reload follow counts
         (async () => {
           const [error, data] = await followService.getCounts(user.id);
@@ -213,33 +237,33 @@ useEffect(() => {
           }
           setLoadingActivities(false);
         })();
-
-        // Reload tab-specific data
-        if (profileTab === 'following') {
-          (async () => {
-            setLoadingFollowing(true);
-            const [error, data] = await followService.getFollowingFeed(30, 0);
-            if (error) {
-              console.error('Error fetching following feed:', error);
-            } else if (data) {
-              setFollowingFeed((data as any) as DealWithRelations[]);
-            }
-            setLoadingFollowing(false);
-          })();
-        } else if (profileTab === 'saved') {
-          (async () => {
-            setLoadingSaved(true);
-            const [error, data] = await dealService.getSavedDeals(user.id);
-            if (error) {
-              console.error('Error fetching saved deals:', error);
-            } else if (data) {
-              setSavedDeals(data as DealWithRelations[]);
-            }
-            setLoadingSaved(false);
-          })();
-        }
       }
-    }, [user?.id, profileTab])
+
+      // Always reload tab-specific data if tab changed or if first time
+      if (profileTab === 'following' && (shouldReload || followingFeed.length === 0)) {
+        (async () => {
+          setLoadingFollowing(true);
+          const [error, data] = await followService.getFollowingFeed(30, 0);
+          if (error) {
+            console.error('Error fetching following feed:', error);
+          } else if (data) {
+            setFollowingFeed((data as any) as DealWithRelations[]);
+          }
+          setLoadingFollowing(false);
+        })();
+      } else if (profileTab === 'saved' && (shouldReload || savedDeals.length === 0)) {
+        (async () => {
+          setLoadingSaved(true);
+          const [error, data] = await dealService.getSavedDeals(user.id);
+          if (error) {
+            console.error('Error fetching saved deals:', error);
+          } else if (data) {
+            setSavedDeals(data as DealWithRelations[]);
+          }
+          setLoadingSaved(false);
+        })();
+      }
+    }, [user?.id, profileTab, fetchedUserDeals.length, followCounts, followingFeed.length, savedDeals.length])
   );
 
   const userDeals = {
@@ -513,21 +537,21 @@ useEffect(() => {
                       style={[
                         styles.statusBadge,
                         deal.status === 'live' && styles.statusApproved,
-                        ['pending', 'draft', 'scheduled'].includes(deal.status) && styles.statusPending,
-                        ['archived', 'expired'].includes(deal.status) && styles.statusRejected,
+                        deal.status && ['pending', 'draft', 'scheduled'].includes(deal.status) && styles.statusPending,
+                        deal.status && ['archived', 'expired'].includes(deal.status) && styles.statusRejected,
                       ]}
                     >
                       {deal.status === 'live' && <CheckCircle size={12} color="#059669" />}
-                      {['pending', 'draft', 'scheduled'].includes(deal.status) && (
+                      {deal.status && ['pending', 'draft', 'scheduled'].includes(deal.status) && (
                         <Clock size={12} color="#d97706" />
                       )}
-                      {['archived', 'expired'].includes(deal.status) && <XCircle size={12} color="#dc2626" />}
+                      {deal.status && ['archived', 'expired'].includes(deal.status) && <XCircle size={12} color="#dc2626" />}
                       <Text
                         style={[
                           styles.statusText,
                           deal.status === 'live' && styles.statusTextApproved,
-                          ['pending', 'draft', 'scheduled'].includes(deal.status) && styles.statusTextPending,
-                          ['archived', 'expired'].includes(deal.status) && styles.statusTextRejected,
+                          deal.status && ['pending', 'draft', 'scheduled'].includes(deal.status) && styles.statusTextPending,
+                          deal.status && ['archived', 'expired'].includes(deal.status) && styles.statusTextRejected,
                         ]}
                       >
                         {deal.status}
@@ -546,7 +570,7 @@ useEffect(() => {
                         <Text style={styles.dealStatText}>{deal.comment_count || 0}</Text>
                       </View>
                     </View>
-                    <Text style={styles.dealTime}>{formatTimeAgo(deal.created_at)}</Text>
+                    <Text style={styles.dealTime}>{formatTimeAgo(deal.created_at || new Date().toISOString())}</Text>
                   </View>
                 </TouchableOpacity>
               ))}

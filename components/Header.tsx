@@ -14,6 +14,7 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { UserBadge } from '@/components/UserBadge';
 import { getRolePrivileges } from '@/types/user';
 import { useAuth } from '@/contexts/AuthProvider';
+import { useTheme } from '@/contexts/ThemeProvider';
 import { alertService } from '@/services/alertService';
 
 import { canAccessAdmin } from '@/lib/supabase';
@@ -44,6 +45,7 @@ export function Header({
   filtersActive = false,
 }: HeaderProps) {
   const { user, profile, signOut } = useAuth();
+  const { theme, colors } = useTheme();
 
   const [showUserMenu, setShowUserMenu] = useState(false);
   const [alertCount, setAlertCount] = useState(0);

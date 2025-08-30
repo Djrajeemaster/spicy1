@@ -24,6 +24,7 @@ import { EnhancedDealCardV2 } from '@/components/EnhancedDealCardV2';
 import DealListCard from '@/components/DealListCard';
 import { UserRole } from '@/types/user';
 import { useAuth } from '@/contexts/AuthProvider';
+import { useTheme } from '@/contexts/ThemeProvider';
 import { dealService } from '@/services/dealService';
 import { categoryService } from '@/services/categoryService';
 import { storeService } from '@/services/storeService';
@@ -40,6 +41,7 @@ type Store = Database['public']['Tables']['stores']['Row'];
 const RADIUS_OPTIONS = [1, 5, 10, 25];
 
 export default function HomeScreen() {
+  const { theme, colors } = useTheme();
   const [deals, setDeals] = useState<any[]>([]);
   const [filteredDeals, setFilteredDeals] = useState<any[]>([]);
   const [searchQuery, setSearchQuery] = useState('');
@@ -377,11 +379,34 @@ export default function HomeScreen() {
     filterDeals();
   }, [deals, searchQuery, selectedCategories, selectedStores, minPrice, maxPrice, minDiscount, locationEnabled, userLocation, selectedRadius, sortBy]);
 
-  // Refresh deals when screen comes into focus
+  // Smart refresh: only reload deals when necessary
+  const lastLoadTimeRef = useRef(0);
+  const RELOAD_THRESHOLD = 5 * 60 * 1000; // 5 minutes
+
   useFocusEffect(
     useCallback(() => {
-      loadDeals();
-    }, [loadDeals])
+      const now = Date.now();
+      const timeSinceLastLoad = now - lastLoadTimeRef.current;
+      
+      // Only reload if:
+      // 1. No deals loaded yet (deals.length === 0)
+      // 2. It's been more than 5 minutes since last load
+      // 3. Data is explicitly stale
+      if (deals.length === 0 || timeSinceLastLoad > RELOAD_THRESHOLD || loading) {
+        console.log('🔄 Home: Reloading deals on focus', { 
+          dealsCount: deals.length, 
+          timeSinceLastLoad: Math.round(timeSinceLastLoad / 1000), 
+          loading 
+        });
+        loadDeals();
+        lastLoadTimeRef.current = now;
+      } else {
+        console.log('📱 Home: Skipping reload, data is fresh', { 
+          dealsCount: deals.length, 
+          timeSinceLastLoad: Math.round(timeSinceLastLoad / 1000) 
+        });
+      }
+    }, [deals.length, loading, loadDeals])
   );
 
 
@@ -554,7 +579,7 @@ export default function HomeScreen() {
   ) : 1;
 
   return (
-    <SafeAreaView style={styles.container} edges={['top']}>
+    <SafeAreaView style={[styles.container, { backgroundColor: colors.background }]} edges={['top']}>
       <Header
         onPostPress={navigateToPost}
         onAlertsPress={() => router.push('/alerts')}

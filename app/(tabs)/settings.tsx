@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   View,
   Text,
@@ -28,8 +28,10 @@ import {
 import { LinearGradient } from 'expo-linear-gradient';
 import { router } from 'expo-router';
 import { useAuth } from '@/contexts/AuthProvider';
-import { useCurrency } from '@/contexts/CurrencyProvider';
+import { useCurrency, CURRENCIES } from '@/contexts/CurrencyProvider';
 import { useTheme } from '@/contexts/ThemeProvider';
+import { userSettingsService, UserSettings } from '@/services/userSettingsService';
+import { useFocusEffect } from '@react-navigation/native';
 
 /* -------------------- Small in-app confirm dialog (no browser popups) -------------------- */
 function ConfirmDialog({
@@ -83,10 +85,10 @@ function ConfirmDialog({
 
 export default function SettingsScreen() {
   const { user, signOut } = useAuth();
-  const { currency } = useCurrency();
-  const { theme, toggleTheme } = useTheme();
+  const { currency, setCurrency, availableCurrencies } = useCurrency();
+  const { theme, toggleTheme, colors } = useTheme();
 
-  // toggles (unchanged)
+  // Settings state from service
   const [notificationSettings, setNotificationSettings] = useState({
     pushNotifications: true,
     emailNotifications: false,
@@ -105,21 +107,105 @@ export default function SettingsScreen() {
     showTutorials: true,
   });
 
+  const [loading, setLoading] = useState(true);
+
   // local state for in-app confirms
   const [signoutOpen, setSignoutOpen] = useState(false);
   const [deleteOpen, setDeleteOpen] = useState(false);
 
-  const toggleNotification = (k: keyof typeof notificationSettings) =>
-    setNotificationSettings(p => ({ ...p, [k]: !p[k] }));
+  // Load settings from service
+  const loadSettings = async () => {
+    try {
+      setLoading(true);
+      const { data: allSettings, error } = await userSettingsService.getAllSettings();
+      
+      if (error) {
+        console.error('Error loading settings:', error);
+        return;
+      }
 
-  const togglePrivacy = (k: keyof typeof privacySettings) =>
-    setPrivacySettings(p => ({ ...p, [k]: !p[k] }));
+      if (allSettings) {
+        setNotificationSettings(allSettings.notifications);
+        setPrivacySettings(allSettings.privacy);
+        setAppSettings(allSettings.app);
+      }
+    } catch (error) {
+      console.error('Error loading settings:', error);
+    } finally {
+      setLoading(false);
+    }
+  };
 
-  const toggleApp = (k: keyof typeof appSettings) =>
-    setAppSettings(p => ({ ...p, [k]: !p[k] }));
+  // Load settings on focus
+  useFocusEffect(
+    React.useCallback(() => {
+      loadSettings();
+    }, [])
+  );
+
+  const toggleNotification = async (k: keyof typeof notificationSettings) => {
+    const newValue = !notificationSettings[k];
+    setNotificationSettings(p => ({ ...p, [k]: newValue }));
+    
+    // Save to service
+    try {
+      await userSettingsService.updateNotificationPreferences({ [k]: newValue });
+    } catch (error) {
+      console.error('Error updating notification settings:', error);
+      // Revert on error
+      setNotificationSettings(p => ({ ...p, [k]: !newValue }));
+    }
+  };
+
+  const togglePrivacy = async (k: keyof typeof privacySettings) => {
+    const newValue = !privacySettings[k];
+    setPrivacySettings(p => ({ ...p, [k]: newValue }));
+    
+    // Save to service
+    try {
+      await userSettingsService.updatePrivacySettings({ [k]: newValue });
+    } catch (error) {
+      console.error('Error updating privacy settings:', error);
+      // Revert on error
+      setPrivacySettings(p => ({ ...p, [k]: !newValue }));
+    }
+  };
+
+  const toggleApp = async (k: keyof typeof appSettings) => {
+    const newValue = !appSettings[k];
+    setAppSettings(p => ({ ...p, [k]: newValue }));
+    
+    // Save to service
+    try {
+      await userSettingsService.updateAppSettings({ [k]: newValue });
+    } catch (error) {
+      console.error('Error updating app settings:', error);
+      // Revert on error
+      setAppSettings(p => ({ ...p, [k]: !newValue }));
+    }
+  };
 
   const handleChangePassword = () => {
     router.push('/change-password');
+  };
+
+  const handleCurrencySelect = async (selectedCurrency: any) => {
+    try {
+      await setCurrency(selectedCurrency);
+    } catch (error) {
+      console.error('Error setting currency:', error);
+    }
+  };
+
+  const cycleCurrency = async () => {
+    try {
+      const currentIndex = availableCurrencies.findIndex(c => c.code === currency.code);
+      const nextIndex = (currentIndex + 1) % availableCurrencies.length;
+      const nextCurrency = availableCurrencies[nextIndex];
+      await setCurrency(nextCurrency);
+    } catch (error) {
+      console.error('Error cycling currency:', error);
+    }
   };
 
   const handleSignOut = () => setSignoutOpen(true);
@@ -167,6 +253,27 @@ export default function SettingsScreen() {
     );
   }
 
+  if (loading) {
+    return (
+      <View style={styles.container}>
+        <LinearGradient colors={['#667eea', '#764ba2']} style={styles.gradient}>
+          <SafeAreaView style={styles.safeArea} edges={['top']}>
+            <View style={styles.header}>
+              <TouchableOpacity style={styles.backButton} onPress={() => router.back()}>
+                <ArrowLeft size={24} color="#FFFFFF" />
+              </TouchableOpacity>
+              <Text style={styles.headerTitle}>Settings</Text>
+              <View style={styles.headerSpacer} />
+            </View>
+          </SafeAreaView>
+          <View style={styles.loadingContainer}>
+            <Text style={styles.loadingText}>Loading settings...</Text>
+          </View>
+        </LinearGradient>
+      </View>
+    );
+  }
+
   return (
     <View style={styles.container}>
       <LinearGradient colors={['#667eea', '#764ba2']} style={styles.gradient}>
@@ -204,10 +311,10 @@ export default function SettingsScreen() {
           </View>
         </SafeAreaView>
 
-        <ScrollView style={styles.content} showsVerticalScrollIndicator={false}>
+        <ScrollView style={[styles.content, { backgroundColor: colors.background }]} showsVerticalScrollIndicator={false}>
           {/* Account */}
-          <View style={styles.section}>
-            <Text style={styles.sectionTitle}>Account</Text>
+          <View style={[styles.section, { backgroundColor: colors.surface }]}>
+            <Text style={[styles.sectionTitle, { color: colors.text }]}>Account</Text>
           
           <TouchableOpacity 
             style={styles.settingItem}
@@ -240,8 +347,8 @@ export default function SettingsScreen() {
           </View>
 
           {/* Notifications */}
-          <View style={styles.section}>
-            <Text style={styles.sectionTitle}>Notifications</Text>
+          <View style={[styles.section, { backgroundColor: colors.surface }]}>
+            <Text style={[styles.sectionTitle, { color: colors.text }]}>Notifications</Text>
           
           <View style={styles.settingItem}>
             <View style={styles.settingLeft}>
@@ -249,8 +356,8 @@ export default function SettingsScreen() {
                 <Bell size={20} color="#10b981" />
               </View>
               <View style={styles.settingTextContainer}>
-                <Text style={styles.settingName}>Push Notifications</Text>
-                <Text style={styles.settingDescription}>Receive notifications about new deals</Text>
+                <Text style={[styles.settingName, { color: colors.text }]}>Push Notifications</Text>
+                <Text style={[styles.settingDescription, { color: colors.textSecondary }]}>Receive notifications about new deals</Text>
               </View>
             </View>
             <Switch
@@ -399,7 +506,10 @@ export default function SettingsScreen() {
             />
           </View>
 
-          <TouchableOpacity style={styles.settingItem}>
+          <TouchableOpacity 
+            style={styles.settingItem}
+            onPress={cycleCurrency}
+          >
             <View style={styles.settingLeft}>
               <View style={styles.settingIcon}>
                 <Globe size={20} color="#3b82f6" />
@@ -592,6 +702,22 @@ const styles = StyleSheet.create({
   infoLink: { fontSize: 16, fontWeight: '600', color: '#6366f1' },
 
   bottomPadding: { height: 100 },
+
+  // Loading state styles
+  loadingContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    backgroundColor: 'rgba(255,255,255,0.9)',
+    marginHorizontal: 16,
+    marginTop: 20,
+    borderRadius: 20,
+  },
+  loadingText: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: '#374151',
+  },
 
   // modal styles
   modalOverlay: {

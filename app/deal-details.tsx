@@ -8,6 +8,7 @@ import { UserBadge } from '@/components/UserBadge';
 import { UserRole, getRoleColor } from '@/types/user';
 import { reportService } from '@/services/reportService';
 import { dealService, DealWithRelations } from '@/services/dealService';
+import { savedDealService } from '@/services/savedDealService';
 import { handleBackNavigation } from '@/utils/navigation';
 import { useAuth } from '@/contexts/AuthProvider';
 import { useCurrency } from '@/contexts/CurrencyProvider';
@@ -54,6 +55,12 @@ export default function DealDetailsScreen() {
       setVoteCounts({ up: dealData.votes_up || 0, down: dealData.votes_down || 0 });
       setSelectedImage(dealData.images?.[0] || 'https://placehold.co/600x400');
       setViewCount(dealData.view_count || 0);
+      
+      // Check if deal is saved by current user
+      if (user?.id) {
+        const isSavedStatus = await savedDealService.isDealSaved(id, user.id);
+        setIsSaved(isSavedStatus);
+      }
       
       // Animate content when loaded
       Animated.parallel([
@@ -120,8 +127,35 @@ export default function DealDetailsScreen() {
       Alert.alert('Sign In Required', 'Please sign in to save deals');
       return;
     }
-    setIsSaved(!isSaved);
-    // TODO: Implement save functionality
+    
+    if (!deal) return;
+    
+    try {
+      if (isSaved) {
+        // Unsave the deal
+        const [error] = await savedDealService.unsaveDeal(deal.id, user.id);
+        if (!error) {
+          setIsSaved(false);
+          Alert.alert('Deal Unsaved', 'Deal removed from your saved list');
+        } else {
+          console.error('Error unsaving deal:', error);
+          Alert.alert('Error', 'Failed to unsave deal. Please try again.');
+        }
+      } else {
+        // Save the deal
+        const [error] = await savedDealService.saveDeal(deal.id, user.id);
+        if (!error) {
+          setIsSaved(true);
+          Alert.alert('Deal Saved', 'Deal added to your saved list');
+        } else {
+          console.error('Error saving deal:', error);
+          Alert.alert('Error', 'Failed to save deal. Please try again.');
+        }
+      }
+    } catch (error) {
+      console.error('Error in handleSave:', error);
+      Alert.alert('Error', 'Something went wrong. Please try again.');
+    }
   };
 
   const handleEdit = () => {

@@ -74,6 +74,8 @@ interface CurrencyContextType {
   currency: Currency;
   formatPrice: (amount: number, showSymbol?: boolean) => string;
   convertPrice: (amount: number, fromCurrency?: Currency) => number;
+  setCurrency: (currency: Currency) => Promise<void>;
+  availableCurrencies: Currency[];
 }
 
 const CurrencyContext = createContext<CurrencyContextType | undefined>(undefined);
@@ -81,15 +83,36 @@ const CurrencyContext = createContext<CurrencyContextType | undefined>(undefined
 export function CurrencyProvider({ children }: { children: React.ReactNode }) {
   const [currency, setCurrencyState] = useState<Currency>(CURRENCIES[1]); // Default to USD
 
+  const setCurrency = async (newCurrency: Currency) => {
+    setCurrencyState(newCurrency);
+    try {
+      await AsyncStorage.setItem('selectedCurrency', newCurrency.code);
+      // Also update location-based cache
+      await AsyncStorage.setItem('locationBasedCurrency', newCurrency.code);
+    } catch (error) {
+      console.error('Error saving currency:', error);
+    }
+  };
+
   useEffect(() => {
-    const detectLocationAndSetCurrency = async () => {
+    const loadSavedCurrency = async () => {
       try {
+        // First check for manually selected currency
+        const savedCurrency = await AsyncStorage.getItem('selectedCurrency');
+        if (savedCurrency) {
+          const currency = CURRENCIES.find(c => c.code === savedCurrency);
+          if (currency) {
+            setCurrencyState(currency);
+            return;
+          }
+        }
+
         // Check if we have a cached currency based on location
         const cachedCurrency = await AsyncStorage.getItem('locationBasedCurrency');
         if (cachedCurrency) {
-          const savedCurrency = CURRENCIES.find(c => c.code === cachedCurrency);
-          if (savedCurrency) {
-            setCurrencyState(savedCurrency);
+          const currency = CURRENCIES.find(c => c.code === cachedCurrency);
+          if (currency) {
+            setCurrencyState(currency);
             return;
           }
         }
@@ -107,13 +130,13 @@ export function CurrencyProvider({ children }: { children: React.ReactNode }) {
           }
         }
       } catch (error) {
-        console.error('Error detecting location for currency:', error);
+        console.error('Error loading currency:', error);
         // Fallback to USD if location detection fails
         setCurrencyState(CURRENCIES.find(c => c.code === 'USD') || CURRENCIES[1]);
       }
     };
 
-    detectLocationAndSetCurrency();
+    loadSavedCurrency();
   }, []);
 
   const formatPrice = (amount: number, showSymbol: boolean = true): string => {
@@ -146,6 +169,8 @@ export function CurrencyProvider({ children }: { children: React.ReactNode }) {
     currency,
     formatPrice,
     convertPrice,
+    setCurrency,
+    availableCurrencies: CURRENCIES,
   };
 
   return (

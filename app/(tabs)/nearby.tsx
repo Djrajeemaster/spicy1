@@ -42,13 +42,14 @@ export default function NearbyScreen() {
     }
   }, [locationEnabled, radius, userLocation]);
 
-  // Refresh nearby deals when screen comes into focus
+  // Refresh nearby deals when screen comes into focus (with simple optimization)
   useFocusEffect(
     useCallback(() => {
-      if (locationEnabled && userLocation) {
+      if (locationEnabled && userLocation && nearbyDeals.length === 0) {
+        console.log('📍 Nearby: Loading deals (empty state)');
         loadNearbyDeals();
       }
-    }, [locationEnabled, userLocation])
+    }, [locationEnabled, userLocation, nearbyDeals.length])
   );
 
   const loadNearbyDeals = async () => {

@@ -4,8 +4,10 @@ import { View, StyleSheet, Platform } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { BlurView } from 'expo-blur';
 import { useState, useEffect } from 'react';
+import { useTheme } from '@/contexts/ThemeProvider';
 
 export default function TabLayout() {
+  const { theme, colors } = useTheme();
   const [isDesktopWeb, setIsDesktopWeb] = useState(
     Platform.OS === 'web' && typeof window !== 'undefined' && window.innerWidth >= 1024
   );
@@ -28,16 +30,18 @@ export default function TabLayout() {
         headerShown: false,
         tabBarStyle: isDesktopWeb ? { display: 'none' } : {
           ...styles.tabBar,
+          backgroundColor: colors.surface,
+          borderTopColor: colors.border,
           ...(Platform.OS === 'web' && !isDesktopWeb ? { paddingBottom: 20, height: 90 } : {})
         },
-        tabBarActiveTintColor: '#6366f1',
-        tabBarInactiveTintColor: '#94a3b8',
+        tabBarActiveTintColor: colors.primary,
+        tabBarInactiveTintColor: colors.textSecondary,
         tabBarLabelStyle: styles.tabBarLabel,
         tabBarBackground: () => (
           Platform.OS === 'ios' ? (
             <BlurView intensity={100} style={StyleSheet.absoluteFill} />
           ) : (
-            <View style={[StyleSheet.absoluteFill, { backgroundColor: 'rgba(255, 255, 255, 0.95)' }]} />
+            <View style={[StyleSheet.absoluteFill, { backgroundColor: colors.surface }]} />
           )
         ),
       }}>

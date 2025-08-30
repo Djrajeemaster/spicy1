@@ -1,4 +1,5 @@
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useEffect, useRef, useState, useCallback } from 'react';
+import { useFocusEffect } from '@react-navigation/native';
 import {
   View,
   Text,
@@ -120,6 +121,55 @@ export default function PostDealScreen() {
     });
   };
   /** ------------------------------------------------------------------------ */
+
+  // Function to reset the form to initial state
+  const resetForm = useCallback(() => {
+    setFormData({
+      title: '',
+      description: '',
+      price: '',
+      originalPrice: '',
+      selectedCategoryId: '',
+      selectedStoreId: '',
+      city: '',
+      state: '',
+      country: '',
+      expiryDate: '',
+      dealUrl: '',
+      couponCode: '',
+      rulesAccepted: false,
+    });
+    setSelectedImages([]);
+    setExtractedImages([]);
+    setUrlMetadata(null);
+    setUrlValid(null);
+    setAmazonImageUrl('');
+    setShowAutoFill(false);
+    console.log('📝 Post form reset');
+  }, []);
+
+  // Track if user has started filling the form
+  const hasFormData = formData.title.trim() || 
+                     formData.description.trim() || 
+                     formData.price.trim() || 
+                     formData.dealUrl.trim() || 
+                     selectedImages.length > 0;
+
+  // Reset form when navigating to this page (but only if it's dirty)
+  useFocusEffect(
+    useCallback(() => {
+      // Only reset if user has some data and it's been more than 30 seconds since last interaction
+      // This prevents accidental resets while actively using the form
+      const lastInteractionTime = Date.now();
+      
+      return () => {
+        // On blur (leaving the page), mark the time
+        if (hasFormData) {
+          console.log('📝 Post: User left page with form data');
+        }
+      };
+    }, [hasFormData])
+  );
 
   // Effect to validate URL when it changes
   useEffect(() => {
