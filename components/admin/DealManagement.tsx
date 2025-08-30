@@ -1,7 +1,8 @@
 import React from 'react';
 import { View, Text, StyleSheet, FlatList, TouchableOpacity } from 'react-native';
 import { AdminDeal } from '@/hooks/useAdminData';
-import { CircleCheck as CheckCircle, Circle as XCircle, Flag } from 'lucide-react-native';
+import { CircleCheck as CheckCircle, Circle as XCircle, Flag, Edit2 } from 'lucide-react-native';
+import { router } from 'expo-router';
 
 interface DealManagementProps {
   deals: AdminDeal[];
@@ -13,16 +14,19 @@ const DealItem: React.FC<{ deal: AdminDeal; onDealAction: (dealId: string, actio
     <View style={dealStyles.dealInfo}>
       <Text style={dealStyles.dealTitle}>{deal.title}</Text>
       <Text style={dealStyles.dealMeta}>
-        {deal.created_by_user?.username || 'Unknown'} • {deal.category?.name || 'Unknown'}
+        {deal.created_by_user?.username || 'Unknown'} • {deal.category?.name || 'Unknown'} • {deal.store?.name || 'Unknown'}
+      </Text>
+      <Text style={dealStyles.dealPrice}>
+        ${deal.price}{deal.original_price ? ` (was $${deal.original_price})` : ''}
       </Text>
     </View>
     <View style={dealStyles.dealActions}>
-      {deal.flagged && (
-        <View style={dealStyles.flaggedBadge}>
-          <Flag size={16} color="#ef4444" />
-          <Text style={dealStyles.flaggedText}>{deal.reportCount}</Text>
-        </View>
-      )}
+      <TouchableOpacity 
+        onPress={() => router.push(`/edit-deal/${deal.id}`)} 
+        style={[dealStyles.actionButton, dealStyles.editButton]}
+      >
+        <Edit2 size={18} color="#3b82f6" />
+      </TouchableOpacity>
       <TouchableOpacity onPress={() => onDealAction(deal.id, 'Approve')} style={dealStyles.actionButton}>
         <CheckCircle size={20} color="#10b981" />
       </TouchableOpacity>
@@ -90,27 +94,24 @@ const dealStyles = StyleSheet.create({
     fontSize: 13,
     color: '#64748b',
   },
+  dealPrice: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#10b981',
+    marginTop: 4,
+  },
   dealActions: {
     flexDirection: 'row',
     alignItems: 'center',
   },
-  flaggedBadge: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: '#fee2e2',
-    borderRadius: 8,
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-    marginRight: 10,
-  },
-  flaggedText: {
-    fontSize: 12,
-    fontWeight: '600',
-    color: '#dc2626',
-    marginLeft: 4,
-  },
   actionButton: {
     padding: 8,
     marginLeft: 5,
+    borderRadius: 8,
+  },
+  editButton: {
+    backgroundColor: '#eff6ff',
+    borderWidth: 1,
+    borderColor: '#bfdbfe',
   },
 });

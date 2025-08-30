@@ -32,7 +32,7 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { useLocalSearchParams, router } from 'expo-router';
 import { useAuth } from '@/contexts/AuthProvider';
 import { useDebounce } from '@/hooks/useDebounce';
-import { dealService, DealWithRelations } from '@/services/dealService';
+import { dealService, DealWithRelations, canEditDeal } from '@/services/dealService';
 import { categoryService } from '@/services/categoryService';
 import { storeService } from '@/services/storeService';
 import { storageService } from '@/services/storageService';
@@ -142,8 +142,8 @@ export default function EditDealScreen() {
         return;
       }
 
-      // Check if user owns this deal
-      if (dealData.created_by !== user.id) {
+      // Check if user can edit this deal (owner, admin, or super admin)
+      if (!canEditDeal(dealData, user.id, profile?.role)) {
         Alert.alert('Access Denied', 'You can only edit your own deals', [
           { text: 'OK', onPress: () => router.back() }
         ]);
@@ -341,7 +341,12 @@ export default function EditDealScreen() {
           : null
       };
 
-      const [error] = await dealService.updateDeal(deal.id, updateData);
+      // Use admin update if user is admin/super_admin and not the creator
+      const isAdminEdit = (profile?.role === 'admin' || profile?.role === 'super_admin') && deal.created_by !== user.id;
+      
+      const [error] = isAdminEdit 
+        ? await dealService.adminUpdateDeal(deal.id, updateData, user.id, profile?.role)
+        : await dealService.updateDeal(deal.id, updateData, user.id, profile?.role);
       
       if (error) {
         console.error('Error updating deal:', error);

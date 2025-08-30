@@ -372,13 +372,22 @@ export default function DealDetailsScreen() {
                   <View key={relatedDeal.id} style={isDesktop ? styles.dealTile : { marginBottom: 16 }}>
                     <DealCard 
                       deal={{
-                        ...relatedDeal,
-                        postedBy: relatedDeal.created_by_user?.username || 'Unknown',
+                        id: relatedDeal.id,
+                        title: relatedDeal.title,
+                        price: relatedDeal.price,
+                        original_price: relatedDeal.original_price || undefined,
                         image: relatedDeal.images?.[0] || 'https://placehold.co/400x200',
                         votes: { up: relatedDeal.votes_up || 0, down: relatedDeal.votes_down || 0 },
                         comments: relatedDeal.comment_count || 0,
+                        postedBy: relatedDeal.created_by_user?.username || 'Unknown',
+                        created_at: relatedDeal.created_at || '',
+                        created_by: relatedDeal.created_by,
+                        isVerified: relatedDeal.status === 'live',
+                        isSample: false
                       }} 
                       isGuest={!user} 
+                      userRole={user?.user_metadata?.role}
+                      userId={user?.id}
                       onVote={() => router.push(`/deal-details?id=${relatedDeal.id}`)} />
                   </View>
                 ))}

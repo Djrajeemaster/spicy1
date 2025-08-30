@@ -136,6 +136,7 @@ export default function UserProfileScreen() {
                   <Text style={styles.username}>{profile.username}</Text>
                   {profile.role && <UserBadge role={profile.role as UserRole} size="medium" />}
                 </View>
+                
                 {currentUser && currentUser.id !== profile.id && (
                   <TouchableOpacity onPress={handleFollowToggle} style={styles.followButton}>
                     <LinearGradient
@@ -144,6 +145,15 @@ export default function UserProfileScreen() {
                     >
                       {isFollowing ? <UserCheck size={16} color="#FFFFFF" /> : <UserPlus size={16} color="#FFFFFF" />}
                       <Text style={styles.followText}>{isFollowing ? 'Following' : 'Follow'}</Text>
+                    </LinearGradient>
+                  </TouchableOpacity>
+                )}
+                
+                {!currentUser && (
+                  <TouchableOpacity onPress={() => router.push('/sign-in')} style={styles.followButton}>
+                    <LinearGradient colors={['#6366f1', '#4f46e5']} style={styles.followGradient}>
+                      <UserPlus size={16} color="#FFFFFF" />
+                      <Text style={styles.followText}>Sign in to Follow</Text>
                     </LinearGradient>
                   </TouchableOpacity>
                 )}
@@ -170,9 +180,23 @@ export default function UserProfileScreen() {
                 {dealsToShow.map(deal => (
                   <View key={deal.id} style={isDesktop ? styles.dealTile : { marginBottom: 16 }}>
                   <DealCard
-                    deal={{ ...deal, distance: 'N/A', isPinned: false, isSample: false }}
+                    deal={{
+                      id: deal.id,
+                      title: deal.title,
+                      price: deal.price,
+                      original_price: deal.original_price || undefined,
+                      image: deal.images?.[0] || '',
+                      votes: { up: deal.votes_up || 0, down: deal.votes_down || 0 },
+                      comments: deal.comment_count || 0,
+                      postedBy: deal.created_by_user?.username || 'Unknown',
+                      created_at: deal.created_at || '',
+                      isVerified: deal.status === 'live',
+                      isSample: false,
+                      created_by: deal.created_by
+                    }}
                     isGuest={!currentUser}
-                    userRole={currentUser ? 'user' : 'guest'}
+                    userRole={currentUser?.user_metadata?.role}
+                    userId={currentUser?.id}
                     onVote={() => {
                       router.push(`/deal-details?id=${deal.id}`);
                     }}

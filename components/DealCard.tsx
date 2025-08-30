@@ -4,6 +4,7 @@ import { router } from 'expo-router';
 import { Heart, MessageCircle, User, Edit3 } from 'lucide-react-native';
 import { formatTimeAgo } from '@/utils/time';
 import { useCurrency } from '@/contexts/CurrencyProvider';
+import { canEditAnyDeal } from '@/utils/adminUtils';
 
 interface Deal {
   id: string | number;
@@ -30,7 +31,7 @@ interface DealCardProps {
   userId?: string;
 }
 
-export function DealCard({ deal, onVote, isGuest, userId }: DealCardProps) {
+export function DealCard({ deal, onVote, isGuest, userId, userRole }: DealCardProps) {
   const { formatPrice } = useCurrency();
 
   const handleUserPress = (e: any) => {
@@ -63,6 +64,7 @@ export function DealCard({ deal, onVote, isGuest, userId }: DealCardProps) {
   };
 
   const isOwnDeal = deal.created_by === userId;
+  const canEdit = isOwnDeal || canEditAnyDeal(userRole);
 
   const upVotes = deal.votes?.up ?? deal.votes_up ?? 0;
   const comments = deal.comments ?? deal.comment_count ?? 0;
@@ -98,10 +100,12 @@ export function DealCard({ deal, onVote, isGuest, userId }: DealCardProps) {
               <MessageCircle size={18} color="#6366f1" />
               <Text style={styles.statText}>{comments}</Text>
             </TouchableOpacity>
-            {isOwnDeal && !isGuest && (
+            {canEdit && !isGuest && (
               <TouchableOpacity style={styles.editButton} onPress={handleEdit}>
                 <Edit3 size={16} color="#6366f1" />
-                <Text style={styles.editText}>Edit</Text>
+                <Text style={styles.editText}>
+                  Edit
+                </Text>
               </TouchableOpacity>
             )}
           </View>

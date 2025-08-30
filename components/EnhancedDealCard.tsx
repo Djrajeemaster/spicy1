@@ -6,6 +6,7 @@ import { useTheme } from '@/contexts/ThemeProvider';
 import { useCurrency } from '@/contexts/CurrencyProvider';
 import { formatTimeAgo } from '@/utils/time';
 import { router } from 'expo-router';
+import { canEditAnyDeal } from '@/utils/adminUtils';
 
 interface Deal {
   id: string;
@@ -76,6 +77,7 @@ export function EnhancedDealCard({ deal, isGuest, onVote, userRole, userId }: En
   };
 
   const isOwnDeal = deal.created_by === userId;
+  const canEdit = !isGuest && (isOwnDeal || canEditAnyDeal(userRole));
 
   const getTimeRemaining = () => {
     if (!deal.expiry_date) return null;
@@ -294,7 +296,7 @@ export function EnhancedDealCard({ deal, isGuest, onVote, userRole, userId }: En
 
       {/* Enhanced Get Deal Button */}
       <View style={[styles.actionContainer, { borderTopColor: colors.border }, isDesktop && styles.desktopActionContainer]}>
-        {isOwnDeal && !isGuest && (
+        {canEdit && (
           <TouchableOpacity 
             style={styles.editButton}
             onPress={(e) => { 

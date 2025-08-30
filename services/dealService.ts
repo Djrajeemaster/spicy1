@@ -11,6 +11,17 @@ export type DealWithRelations = Database['public']['Tables']['deals']['Row'] & {
   user_vote?: 'up' | 'down' | null;
 };
 
+// Helper function to check if user can edit a deal
+export const canEditDeal = (deal: DealWithRelations, userId?: string, userRole?: string): boolean => {
+  if (!userId) return false;
+  
+  // Super admin and admin can edit any deal (support both formats)
+  if (userRole === 'super_admin' || userRole === 'superadmin' || userRole === 'admin') return true;
+  
+  // Regular users can only edit their own deals
+  return deal.created_by === userId;
+};
+
 class DealService {
   getDeals(options: { sortBy?: string; limit?: number } = {}, userId?: string) {
     return safeAsync(async () => {
@@ -78,17 +89,59 @@ class DealService {
     }, 'DealService.createDeal');
   }
 
-  updateDeal(dealId: string, dealData: any) {
+  updateDeal(dealId: string, dealData: DealUpdate, userId?: string, userRole?: string) {
     return safeAsync(async () => {
+      // Only allow updates if user is the creator, admin, or super_admin
+      if (userRole !== 'admin' && userRole !== 'super_admin' && userId) {
+        // Check if user owns the deal
+        const { data: existingDeal, error: checkError } = await supabase
+          .from('deals')
+          .select('created_by')
+          .eq('id', dealId)
+          .single();
+        
+        if (checkError) throw checkError;
+        if ((existingDeal as any).created_by !== userId) {
+          throw new Error('You can only edit your own deals');
+        }
+      }
+
       const { data, error } = await (supabase
         .from('deals') as any)
-        .update(dealData)
+        .update({
+          ...dealData,
+          updated_at: new Date().toISOString()
+        })
         .eq('id', dealId)
         .select()
         .single();
+      
       if (error) throw error;
       return data;
     }, 'DealService.updateDeal');
+  }
+
+  // Admin-specific method to update any deal
+  adminUpdateDeal(dealId: string, dealData: DealUpdate, adminUserId: string, adminRole: string) {
+    return safeAsync(async () => {
+      // Verify admin permissions
+      if (adminRole !== 'admin' && adminRole !== 'super_admin') {
+        throw new Error('Insufficient permissions to edit deals');
+      }
+
+      const { data, error } = await (supabase
+        .from('deals') as any)
+        .update({
+          ...dealData,
+          updated_at: new Date().toISOString()
+        })
+        .eq('id', dealId)
+        .select()
+        .single();
+      
+      if (error) throw error;
+      return data;
+    }, 'DealService.adminUpdateDeal');
   }
 
   deleteDeal(dealId: string) {

@@ -1,9 +1,11 @@
 import React from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, Image } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
-import { Heart, Share2, Bookmark, Clock, TrendingUp, Star, MapPin, Eye, MessageCircle, ChevronUp, ChevronDown } from 'lucide-react-native';
+import { Heart, Share2, Bookmark, Clock, TrendingUp, Star, MapPin, Eye, MessageCircle, ChevronUp, ChevronDown, Edit3 } from 'lucide-react-native';
+import { router } from 'expo-router';
 
 import { UserRole } from '@/types/user';
+import { canEditAnyDeal } from '@/utils/adminUtils';
 
 // Define Deal interface based on existing structure
 interface Deal {
@@ -22,6 +24,7 @@ interface Deal {
   is_verified?: boolean;
   user_vote?: 'up' | 'down' | null;
   images?: string[];
+  created_by?: string;
   store?: {
     name: string;
   };
@@ -65,6 +68,13 @@ export default function DealListCard({ deal, isGuest, onVote, userRole, userId }
     const hoursAgo = (Date.now() - new Date(deal.created_at).getTime()) / (1000 * 60 * 60);
     return hoursAgo <= 24 && votesUp > 5;
   })();
+
+  const handleEdit = () => {
+    router.push(`/edit-deal/${deal.id}`);
+  };
+
+  const isOwnDeal = deal.created_by === userId;
+  const canEdit = !isGuest && (isOwnDeal || canEditAnyDeal(userRole));
 
   return (
     <View style={styles.container}>
@@ -196,6 +206,11 @@ export default function DealListCard({ deal, isGuest, onVote, userRole, userId }
 
               {/* Action buttons */}
               <View style={styles.actionButtons}>
+                {canEdit && (
+                  <TouchableOpacity style={styles.actionButton} onPress={handleEdit}>
+                    <Edit3 size={18} color="#6366f1" />
+                  </TouchableOpacity>
+                )}
                 <TouchableOpacity style={styles.actionButton}>
                   <Heart size={18} color="#64748b" />
                 </TouchableOpacity>

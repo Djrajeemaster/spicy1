@@ -1,11 +1,12 @@
 import React, { useState } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, Alert, Share, Image, useWindowDimensions, Platform } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, Alert, Share, Image, useWindowDimensions, Platform, Animated } from 'react-native';
 import { Heart, Share2, Bookmark, Clock, TrendingUp, Star, MapPin, Eye, Edit3 } from 'lucide-react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useTheme } from '@/contexts/ThemeProvider';
 import { useCurrency } from '@/contexts/CurrencyProvider';
 import { formatTimeAgo } from '@/utils/time';
 import { router } from 'expo-router';
+import { canEditAnyDeal } from '@/utils/adminUtils';
 
 interface Deal {
   id: string;
@@ -55,6 +56,7 @@ export function EnhancedDealCardV2({ deal, isGuest, onVote, userRole, userId }: 
   };
 
   const isOwnDeal = deal.created_by === userId;
+  const canEdit = !isGuest && (isOwnDeal || canEditAnyDeal(userRole));
 
   const handleShare = async () => {
     try {
@@ -273,7 +275,7 @@ export function EnhancedDealCardV2({ deal, isGuest, onVote, userRole, userId }: 
 
       {/* Enhanced Action Button */}
       <View style={[styles.actionContainer, { borderTopColor: colors.border }]}>
-        {isOwnDeal && !isGuest && (
+        {canEdit && (
           <TouchableOpacity 
             style={styles.editButton}
             onPress={(e) => { 
@@ -286,7 +288,7 @@ export function EnhancedDealCardV2({ deal, isGuest, onVote, userRole, userId }: 
           </TouchableOpacity>
         )}
         <TouchableOpacity 
-          style={[styles.getDealButton, isOwnDeal && !isGuest && { marginLeft: 8 }]}
+          style={[styles.getDealButton, canEdit && { marginLeft: 8 }]}
           onPress={(e) => { 
             e.stopPropagation(); 
             router.push(`/deal-details?id=${deal.id}&title=${encodeURIComponent(deal.title)}&price=${deal.price}`); 
