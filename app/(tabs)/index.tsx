@@ -44,23 +44,36 @@ const RADIUS_OPTIONS = [1, 5, 10, 25];
 export default function HomeScreen() {
   const scrollY = useRef(new Animated.Value(0)).current;
   const [showFilterBar, setShowFilterBar] = useState(true);
+  const subHeaderOpacity = useRef(new Animated.Value(1)).current;
 
   useEffect(() => {
     const listener = scrollY.addListener(({ value }) => {
-      setShowFilterBar(value <= 20);
+      if (value <= 20) {
+        setShowFilterBar(true);
+        Animated.timing(subHeaderOpacity, {
+          toValue: 1,
+          duration: 250,
+          useNativeDriver: true,
+        }).start();
+      } else {
+        setShowFilterBar(false);
+        Animated.timing(subHeaderOpacity, {
+          toValue: 0,
+          duration: 250,
+          useNativeDriver: true,
+        }).start();
+      }
     });
     return () => {
       scrollY.removeListener(listener);
     };
-  }, [scrollY]);
+  }, [scrollY, subHeaderOpacity]);
   // Scroll tracking for header animation
   // Animation for subheader (sorting/filter options)
-  const subHeaderOpacity = useRef(new Animated.Value(1)).current;
 
   useEffect(() => {
-    // Remove fading effect: keep subHeaderOpacity at 1
-    subHeaderOpacity.setValue(1);
-  }, [subHeaderOpacity]);
+    // No-op: handled by scrollY listener above
+  }, []);
   const { theme, colors } = useTheme();
   const [deals, setDeals] = useState<any[]>([]);
   const [filteredDeals, setFilteredDeals] = useState<any[]>([]);
@@ -604,290 +617,265 @@ export default function HomeScreen() {
       style={[styles.container, { backgroundColor: colors.background }]}
       edges={['top']}
     >
-      <Header
-        onPostPress={navigateToPost}
-        onAlertsPress={() => router.push('/alerts')}
-        searchQuery={searchQuery}
-        onSearchChange={setSearchQuery}
-        onLocationToggle={handleLocationToggle}
-        locationEnabled={locationEnabled}
-        showFilters={showFilters}
-        onFiltersToggle={() => setShowFilters(!showFilters)}
-        filtersActive={hasActiveFilters()}
-        scrollY={scrollY}
-  />
+      {/* Main Header: always visible, do not fade out on scroll */}
+      <View style={{ zIndex: 200, position: 'relative', width: '100%' }}>
+        <Header
+          onPostPress={navigateToPost}
+          onAlertsPress={() => router.push('/alerts')}
+          searchQuery={searchQuery}
+          onSearchChange={setSearchQuery}
+          onLocationToggle={handleLocationToggle}
+          locationEnabled={locationEnabled}
+          showFilters={showFilters}
+          onFiltersToggle={() => setShowFilters(!showFilters)}
+          filtersActive={hasActiveFilters()}
+          /* Remove scrollY prop so header does not fade */
+        />
+      </View>
 
   {/* Sub-header with functional filters for Desktop, now includes stats and view options */}
   {isDesktop && showFilterBar && (
-        <Animated.View
-          style={[
-            styles.subHeader,
-            {
-              backgroundColor: '#4f46e5',
-              alignItems: 'flex-start',
-              overflow: 'hidden',
-              position: 'relative',
-              top: undefined,
-              zIndex: 100,
-              padding: 0,
-              minHeight: 48, // Reduced height for sub-header
-              height: 48 // Smaller than main header
-            }
-          ]}
-        >
-          {/* Top row: filter controls and sort pills */}
-          <View style={{ flexDirection: 'row', alignItems: 'center', flexWrap: 'nowrap', width: '100%', gap: 8, margin: 0, paddingTop: 0, paddingBottom: 0, minHeight: 0, height: 'auto' }}>
-            {/* Left Filters */}
-            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 16 }}>
-              <View style={styles.subHeaderLeft}>
-                <TouchableOpacity style={styles.subHeaderDropdown} onPress={() => setOpenDropdown(openDropdown === 'categories' ? null : 'categories')}>
-                  <Text style={styles.subHeaderValue}>
-                    {selectedCategories.includes('all') || selectedCategories.length === 0
-                      ? '🔥 All Categories'
-                      : `🔥 ${availableCategories.find(c => c.id === selectedCategories[0])?.name || 'Selected'}`
-                    }
-                  </Text>
-                  <Text style={styles.dropdownArrowSmall}>▼</Text>
-                </TouchableOpacity>
-              </View>
-              <View style={styles.subHeaderMiddle}>
-                <TouchableOpacity style={styles.subHeaderDropdown} onPress={() => setOpenDropdown(openDropdown === 'stores' ? null : 'stores')}>
-                  <Text style={styles.subHeaderValue}>
-                    {selectedStores.includes('all') || selectedStores.length === 0
-                      ? '🏪 All Stores'
-                      : `🏪 ${availableStores.find(s => s.id === selectedStores[0])?.name || 'Selected'}`
-                    }
-                  </Text>
-                  <Text style={styles.dropdownArrowSmall}>▼</Text>
-                </TouchableOpacity>
-              </View>
-              <View style={styles.subHeaderMiddle}>
-                <TouchableOpacity style={styles.subHeaderDropdown} onPress={async () => {
-                  if (!locationEnabled) {
-                    await handleLocationToggle();
-                    return;
-                  }
-                  setOpenDropdown(openDropdown === 'location' ? null : 'location');
-                }}>
-                  <Text style={styles.subHeaderValue}>
-                    {!locationEnabled
-                      ? '📍 Enable Location'
-                      : selectedRadius === null
-                        ? '📍 All Locations'
-                        : `📍 Within ${selectedRadius}km`
-                    }
-                  </Text>
-                  <Text style={styles.dropdownArrowSmall}>▼</Text>
-                </TouchableOpacity>
-              </View>
-            </View>
-
-            {/* Center Stats */}
-            <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'center', flex: 1, gap: 12 }}>
-              <Text style={{ color: '#fff', fontSize: 12, fontWeight: '500' }}>🔥 {filteredDeals.length.toLocaleString()} active deals</Text>
-              <View style={{ width: 1, height: 14, backgroundColor: '#b3b3ff' }} />
-              <Text style={{ color: '#fff', fontSize: 12, fontWeight: '500' }}>🔥 {filteredDeals.filter(deal => {
-                const hoursAgo = (Date.now() - new Date(deal.created_at).getTime()) / (1000 * 60 * 60);
-                return hoursAgo <= 24 && (deal.votes_up || 0) > 5;
-              }).length} trending now</Text>
-              <View style={{ width: 1, height: 14, backgroundColor: '#b3b3ff' }} />
-              <Text style={{ color: '#fff', fontSize: 12, fontWeight: '500' }}>⚡ {filteredDeals.filter(deal => {
-                const expiry = deal.expiry_date || deal.expires_at;
-                if (!expiry) return false;
-                const expiresIn = new Date(expiry).getTime() - Date.now();
-                const hoursLeft = expiresIn / (1000 * 60 * 60);
-                return hoursLeft > 0 && hoursLeft <= 24;
-              }).length} expiring soon</Text>
-            </View>
-
-            {/* Right Sort Pills */}
-            <View style={[styles.sortPillsDisplay, { margin: 0, padding: 0, flexDirection: 'row', alignItems: 'center', marginLeft: 'auto', gap: 8 }]}> 
-              {/* Grid/List Toggle */}
-              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 0, marginRight: 8 }}>
-                <TouchableOpacity
-                  style={{
-                    backgroundColor: viewMode === 'grid' ? '#fff' : 'transparent',
-                    borderRadius: 14,
-                    paddingVertical: 2,
-                    paddingHorizontal: 8,
-                    borderWidth: viewMode === 'grid' ? 2 : 1,
-                    borderColor: viewMode === 'grid' ? '#6366f1' : '#e5e7eb',
-                    marginRight: 2,
-                    alignItems: 'center',
-                    justifyContent: 'center',
-                    ...(isDesktop ? { cursor: 'pointer' } : {}),
-                  }}
-                  onPress={() => setViewMode('grid')}
-                  activeOpacity={0.85}
-                >
-                  <Text style={{ color: viewMode === 'grid' ? '#6366f1' : '#fff', fontWeight: '700', fontSize: 13 }}>▦</Text>
-                </TouchableOpacity>
-                <TouchableOpacity
-                  style={{
-                    backgroundColor: viewMode === 'list' ? '#fff' : 'transparent',
-                    borderRadius: 14,
-                    paddingVertical: 2,
-                    paddingHorizontal: 8,
-                    borderWidth: viewMode === 'list' ? 2 : 1,
-                    borderColor: viewMode === 'list' ? '#6366f1' : '#e5e7eb',
-                    marginLeft: 2,
-                    alignItems: 'center',
-                    justifyContent: 'center',
-                    ...(isDesktop ? { cursor: 'pointer' } : {}),
-                  }}
-                  onPress={() => setViewMode('list')}
-                  activeOpacity={0.85}
-                >
-                  <Text style={{ color: viewMode === 'list' ? '#6366f1' : '#fff', fontWeight: '700', fontSize: 13 }}>≡</Text>
-                </TouchableOpacity>
-              </View>
-              {/* Sort Pills */}
-              <View style={{
-                flexDirection: 'row',
-                justifyContent: 'center',
-                alignItems: 'center',
-                gap: 6,
-                paddingVertical: 0,
-                paddingHorizontal: 0,
-              }}>
-                {[
-                  { key: 'newest', label: 'Newest', icon: '🕐' },
-                  { key: 'popular', label: 'Popular', icon: '🔥' },
-                  { key: 'price_low', label: 'Low Price', icon: '💰' },
-                  { key: 'price_high', label: 'High Price', icon: '💎' },
-                  { key: 'expiring', label: 'Expiring', icon: '⏰' }
-                ].map(option => (
-                  <TouchableOpacity
-                    key={option.key}
-                    style={{
-                      backgroundColor: sortBy === option.key ? '#fff' : '#f3f4f6',
-                      borderRadius: 14,
-                      paddingVertical: 4,
-                      paddingHorizontal: 10,
-                      marginHorizontal: 2,
-                      borderWidth: sortBy === option.key ? 2 : 1,
-                      borderColor: sortBy === option.key ? '#6366f1' : '#e5e7eb',
-                      minWidth: 60,
-                      alignItems: 'center',
-                      justifyContent: 'center',
-                      ...(isDesktop ? { cursor: 'pointer' } : {}),
-                    }}
-                    onPress={() => setSortBy(option.key as typeof sortBy)}
-                    activeOpacity={0.85}
-                  >
-                    <Text style={{
-                      color: sortBy === option.key ? '#6366f1' : '#6366f1',
-                      fontWeight: sortBy === option.key ? '700' : '500',
-                      fontSize: 13,
-                      display: 'flex',
-                      flexDirection: 'row',
-                      alignItems: 'center',
-                    }}>
-                      <Text style={{ marginRight: 5 }}>{option.icon}</Text>
-                      {option.label}
-                    </Text>
-                  </TouchableOpacity>
-                ))}
-              </View>
-            </View>
+    <Animated.View
+      style={[
+        styles.subHeader,
+        {
+          backgroundColor: '#131312be',
+          alignItems: 'flex-start',
+          overflow: 'hidden',
+          position: 'relative',
+          top: undefined,
+          zIndex: 100,
+          padding: 0,
+          minHeight: 48,
+          height: 48,
+          opacity: subHeaderOpacity,
+          pointerEvents: showFilterBar ? 'auto' : 'none',
+        },
+      ]}
+    >
+      {/* Top row: filter controls and sort pills */}
+      <View style={{ flexDirection: 'row', alignItems: 'center', flexWrap: 'nowrap', width: '100%', gap: 8, margin: 0, paddingTop: 0, paddingBottom: 0, minHeight: 0, height: 'auto' }}>
+        {/* Left Filters */}
+        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 16 }}>
+          <View style={styles.subHeaderLeft}>
+            <TouchableOpacity style={styles.subHeaderDropdown} onPress={() => setOpenDropdown(openDropdown === 'categories' ? null : 'categories')}>
+              <Text style={styles.subHeaderValue}>
+                {selectedCategories.includes('all') || selectedCategories.length === 0
+                  ? '🔥 All Categories'
+                  : `🔥 ${availableCategories.find(c => c.id === selectedCategories[0])?.name || 'Selected'}`
+                }
+              </Text>
+              <Text style={styles.dropdownArrowSmall}>▼</Text>
+            </TouchableOpacity>
           </View>
-  </Animated.View>
-      )}
+          <View style={styles.subHeaderMiddle}>
+            <TouchableOpacity style={styles.subHeaderDropdown} onPress={() => setOpenDropdown(openDropdown === 'stores' ? null : 'stores')}>
+              <Text style={styles.subHeaderValue}>
+                {selectedStores.includes('all') || selectedStores.length === 0
+                  ? '🏪 All Stores'
+                  : `🏪 ${availableStores.find(s => s.id === selectedStores[0])?.name || 'Selected'}`
+                }
+              </Text>
+              <Text style={styles.dropdownArrowSmall}>▼</Text>
+            </TouchableOpacity>
+          </View>
+          <View style={styles.subHeaderMiddle}>
+            <TouchableOpacity style={styles.subHeaderDropdown} onPress={async () => {
+              if (!locationEnabled) {
+                await handleLocationToggle();
+                return;
+              }
+              setOpenDropdown(openDropdown === 'location' ? null : 'location');
+            }}>
+              <Text style={styles.subHeaderValue}>
+                {!locationEnabled
+                  ? '📍 Enable Location'
+                  : selectedRadius === null
+                    ? '📍 All Locations'
+                    : `📍 Within ${selectedRadius}km`
+                }
+              </Text>
+              <Text style={styles.dropdownArrowSmall}>▼</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
 
-      {/* Sub-header Dropdown Backdrop */}
-      {openDropdown && isDesktop && (
-        <TouchableOpacity 
-          style={styles.subHeaderDropdownBackdrop}
-          onPress={() => setOpenDropdown(null)}
-          activeOpacity={1}
-        />
-      )}
+        {/* Center Stats */}
+        <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'center', flex: 1, gap: 12 }}>
+          <Text style={{ color: '#fff', fontSize: 12, fontWeight: '500' }}>🔥 {filteredDeals.length.toLocaleString()} active deals</Text>
+          <View style={{ width: 1, height: 14, backgroundColor: '#b3b3ff' }} />
+          <Text style={{ color: '#fff', fontSize: 12, fontWeight: '500' }}>🔥 {filteredDeals.filter(deal => {
+            const hoursAgo = (Date.now() - new Date(deal.created_at).getTime()) / (1000 * 60 * 60);
+            return hoursAgo <= 24 && (deal.votes_up || 0) > 5;
+          }).length} trending now</Text>
+          <View style={{ width: 1, height: 14, backgroundColor: '#b3b3ff' }} />
+          <Text style={{ color: '#fff', fontSize: 12, fontWeight: '500' }}>⚡ {filteredDeals.filter(deal => {
+            const expiry = deal.expiry_date || deal.expires_at;
+            if (!expiry) return false;
+            const expiresIn = new Date(expiry).getTime() - Date.now();
+            const hoursLeft = expiresIn / (1000 * 60 * 60);
+            return hoursLeft > 0 && hoursLeft <= 24;
+          }).length} expiring soon</Text>
+        </View>
 
-      {/* Filter Backdrop for Desktop */}
-      {showFilters && isDesktop && (
-        <TouchableOpacity 
-          style={styles.filterBackdrop}
-          onPress={() => {
-            setShowFilters(false);
-            setOpenDropdown(null);
-          }}
-          activeOpacity={1}
-        />
-      )}
+        {/* Right Sort Pills */}
+        <View style={[styles.sortPillsDisplay, { margin: 0, padding: 0, flexDirection: 'row', alignItems: 'center', marginLeft: 'auto', gap: 8 }]}> 
+          {/* Grid/List Toggle */}
+          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 0, marginRight: 8 }}>
+            <TouchableOpacity
+              style={{
+                backgroundColor: viewMode === 'grid' ? '#fff' : 'transparent',
+                borderRadius: 14,
+                paddingVertical: 2,
+                paddingHorizontal: 8,
+                borderWidth: viewMode === 'grid' ? 2 : 1,
+                borderColor: viewMode === 'grid' ? '#6366f1' : '#e5e7eb',
+                marginRight: 2,
+                alignItems: 'center',
+                justifyContent: 'center',
+                ...(isDesktop ? { cursor: 'pointer' } : {}),
+              }}
+              onPress={() => setViewMode('grid')}
+              activeOpacity={0.85}
+            >
+              <Text style={{ color: viewMode === 'grid' ? '#6366f1' : '#fff', fontWeight: '700', fontSize: 13 }}>▦</Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={{
+                backgroundColor: viewMode === 'list' ? '#fff' : 'transparent',
+                borderRadius: 14,
+                paddingVertical: 2,
+                paddingHorizontal: 8,
+                borderWidth: viewMode === 'list' ? 2 : 1,
+                borderColor: viewMode === 'list' ? '#6366f1' : '#e5e7eb',
+                marginLeft: 2,
+                alignItems: 'center',
+                justifyContent: 'center',
+                ...(isDesktop ? { cursor: 'pointer' } : {}),
+              }}
+              onPress={() => setViewMode('list')}
+              activeOpacity={0.85}
+            >
+              <Text style={{ color: viewMode === 'list' ? '#6366f1' : '#fff', fontWeight: '700', fontSize: 13 }}>≡</Text>
+            </TouchableOpacity>
+          </View>
+          {/* Sort Pills */}
+          <View style={{
+            flexDirection: 'row',
+            justifyContent: 'center',
+            alignItems: 'center',
+            gap: 6,
+            paddingVertical: 0,
+            paddingHorizontal: 0,
+          }}>
+            {[
+              { key: 'newest', label: 'Newest', icon: '🕐' },
+              { key: 'popular', label: 'Popular', icon: '🔥' },
+              { key: 'price_low', label: 'Low Price', icon: '💰' },
+              { key: 'price_high', label: 'High Price', icon: '💎' },
+              { key: 'expiring', label: 'Expiring', icon: '⏰' }
+            ].map(option => (
+              <TouchableOpacity
+                key={option.key}
+                style={{
+                  backgroundColor: sortBy === option.key ? '#e0e7ff' : 'transparent', // subtle light blue for selected
+                  borderRadius: 14,
+                  paddingVertical: 4,
+                  paddingHorizontal: 10,
+                  marginHorizontal: 2,
+                  borderWidth: sortBy === option.key ? 2 : 1,
+                  borderColor: sortBy === option.key ? '#6366f1' : '#e5e7eb', // bold border for selected
+                  minWidth: 60,
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  ...(isDesktop ? { cursor: 'pointer' } : {}),
+                }}
+                onPress={() => setSortBy(option.key as typeof sortBy)}
+                activeOpacity={0.85}
+              >
+                <Text style={{
+                  color: sortBy === option.key ? '#210458ff' : '#f9f9f9ff', // dark for selected, medium gray for unselected
+                  fontWeight: sortBy === option.key ? '700' : '500',
+                  fontSize: 13,
+                  display: 'flex',
+                  flexDirection: 'row',
+                  alignItems: 'center',
+                }}>
+                  <Text style={{ marginRight: 5 }}>{option.icon}</Text>
+                  {option.label}
+                </Text>
+              </TouchableOpacity>
+            ))}
+          </View>
+        </View>
+      </View> {/* Close main row */}
+    </Animated.View>
+  )}
 
-      {/* Dropdown Backdrop - closes dropdowns when clicking outside */}
-      {openDropdown && isDesktop && (
-        <TouchableOpacity 
-          style={styles.dropdownBackdrop}
-          onPress={() => setOpenDropdown(null)}
-          activeOpacity={1}
-        />
-      )}
+  {/* Sub-header Dropdown Backdrop */}
+  {openDropdown && isDesktop && (
+    <TouchableOpacity 
+      style={styles.subHeaderDropdownBackdrop}
+      onPress={() => setOpenDropdown(null)}
+      activeOpacity={1}
+    />
+  )}
 
-      {/* Filters Panel */}
-      {showFilters && (
-        <View style={[styles.filterSection, isDesktop && styles.filterSectionDesktop]}>
-          <ScrollView 
-            style={styles.filterScrollView}
-            showsVerticalScrollIndicator={false}
-            contentContainerStyle={styles.filterContent}
-            onTouchStart={() => setOpenDropdown(null)}
-          >
-            {/* Sort Options */}
-            <View style={[styles.sortContainer, { zIndex: 3000 }]}>
-              <Text style={styles.filterLabel}>Sort By</Text>
-              {isDesktop ? (
-                <View style={[styles.dropdownContainer, { zIndex: 3000 }]}>
-                  <TouchableOpacity 
-                    style={styles.dropdown}
-                    onPress={() => {
-                      const newDropdown = openDropdown === 'sort' ? null : 'sort';
-                      setOpenDropdown(newDropdown);
-                    }}
-                  >
-                    <Text style={styles.dropdownText}>
-                      {sortBy === 'newest' ? '🕐 Newest' :
-                       sortBy === 'popular' ? '🔥 Popular' :
-                       sortBy === 'price_low' ? '💰 Price: Low' :
-                       sortBy === 'price_high' ? '💎 Price: High' :
-                       sortBy === 'expiring' ? '⏰ Expiring Soon' :
-                       '🕐 Newest'}
-                    </Text>
-                    <Text style={[styles.dropdownArrow, openDropdown === 'sort' && styles.dropdownArrowOpen]}>▼</Text>
-                  </TouchableOpacity>
-                  {openDropdown === 'sort' && (
-                    <View style={styles.dropdownMenu}>
-                      <ScrollView style={styles.dropdownScrollView} nestedScrollEnabled>
-                        {[
-                          { key: 'newest', label: 'Newest', emoji: '🕐' },
-                          { key: 'popular', label: 'Popular', emoji: '🔥' },
-                          { key: 'price_low', label: 'Price: Low', emoji: '💰' },
-                          { key: 'price_high', label: 'Price: High', emoji: '💎' },
-                          { key: 'expiring', label: 'Expiring Soon', emoji: '⏰' },
-                        ].map(option => (
-                          <TouchableOpacity
-                            key={option.key}
-                            style={[styles.dropdownItem, sortBy === option.key && styles.dropdownItemActive]}
-                            onPress={() => {
-                              setSortBy(option.key as any);
-                              setOpenDropdown(null);
-                            }}
-                          >
-                            <Text style={[styles.dropdownItemText, sortBy === option.key && styles.dropdownItemTextActive]}>
-                              {option.emoji} {option.label}
-                            </Text>
-                          </TouchableOpacity>
-                        ))}
-                      </ScrollView>
-                    </View>
-                  )}
-                </View>
-              ) : (
-                <ScrollView 
-                  horizontal 
-                  showsHorizontalScrollIndicator={false}
-                >
-                  <View style={styles.sortOptions}>
+  {/* Filter Backdrop for Desktop */}
+  {showFilters && isDesktop && (
+    <TouchableOpacity 
+      style={styles.filterBackdrop}
+      onPress={() => {
+        setShowFilters(false);
+        setOpenDropdown(null);
+      }}
+      activeOpacity={1}
+    />
+  )}
+
+  {/* Dropdown Backdrop - closes dropdowns when clicking outside */}
+  {openDropdown && isDesktop && (
+    <TouchableOpacity 
+      style={styles.dropdownBackdrop}
+      onPress={() => setOpenDropdown(null)}
+      activeOpacity={1}
+    />
+  )}
+
+  {/* Filters Panel */}
+  {showFilters && (
+    <View style={[styles.filterSection, isDesktop && styles.filterSectionDesktop]}>
+      <ScrollView 
+        style={styles.filterScrollView}
+        showsVerticalScrollIndicator={false}
+        contentContainerStyle={styles.filterContent}
+        onTouchStart={() => setOpenDropdown(null)}
+      >
+        {/* Sort Options */}
+        <View style={[styles.sortContainer, { zIndex: 3000 }]}>
+          <Text style={styles.filterLabel}>Sort By</Text>
+          {isDesktop ? (
+            <View style={[styles.dropdownContainer, { zIndex: 3000 }]}>
+              <TouchableOpacity 
+                style={styles.dropdown}
+                onPress={() => {
+                  const newDropdown = openDropdown === 'sort' ? null : 'sort';
+                  setOpenDropdown(newDropdown);
+                }}
+              >
+                <Text style={styles.dropdownText}>
+                  {sortBy === 'newest' ? '🕐 Newest' :
+                   sortBy === 'popular' ? '🔥 Popular' :
+                   sortBy === 'price_low' ? '💰 Price: Low' :
+                   sortBy === 'price_high' ? '💎 Price: High' :
+                   sortBy === 'expiring' ? '⏰ Expiring Soon' :
+                   '🕐 Newest'}
+                </Text>
+                <Text style={[styles.dropdownArrow, openDropdown === 'sort' && styles.dropdownArrowOpen]}>▼</Text>
+              </TouchableOpacity>
+              {openDropdown === 'sort' && (
+                <View style={styles.dropdownMenu}>
+                  <ScrollView style={styles.dropdownScrollView} nestedScrollEnabled>
                     {[
                       { key: 'newest', label: 'Newest', emoji: '🕐' },
                       { key: 'popular', label: 'Popular', emoji: '🔥' },
@@ -897,302 +885,332 @@ export default function HomeScreen() {
                     ].map(option => (
                       <TouchableOpacity
                         key={option.key}
-                        style={styles.sortOptionWrapper}
-                        onPress={() => setSortBy(option.key as any)}
+                        style={[styles.dropdownItem, sortBy === option.key && styles.dropdownItemActive]}
+                        onPress={() => {
+                          setSortBy(option.key as any);
+                          setOpenDropdown(null);
+                        }}
                       >
-                        {sortBy === option.key ? (
-                          <LinearGradient
-                            colors={['#6366f1', '#4f46e5']}
-                            style={styles.sortOption}
-                          >
-                            <Text style={styles.sortEmoji}>{option.emoji}</Text>
-                            <Text style={styles.sortOptionTextActive}>{option.label}</Text>
-                          </LinearGradient>
-                        ) : (
-                          <View style={styles.sortOptionInactive}>
-                            <Text style={styles.sortEmojiInactive}>{option.emoji}</Text>
-                            <Text style={styles.sortOptionText}>{option.label}</Text>
-                          </View>
-                        )}
+                        <Text style={[styles.dropdownItemText, sortBy === option.key && styles.dropdownItemTextActive]}>
+                          {option.emoji} {option.label}
+                        </Text>
                       </TouchableOpacity>
                     ))}
-                  </View>
-                </ScrollView>
+                  </ScrollView>
+                </View>
               )}
             </View>
-
-            {/* Advanced Filters */}
-            <View style={styles.advancedFilters}>
-              {/* Price Range */}
-              <Text style={styles.filterLabel}>Price Range</Text>
-              <View style={styles.priceInputs}>
-                <View style={styles.inputWithIcon}>
-                  <DollarSign size={16} color="#6366f1" style={styles.inputIcon} />
-                  <TextInput
-                    style={styles.filterInput}
-                    placeholder="Min"
-                    value={minPrice}
-                    onChangeText={setMinPrice}
-                    keyboardType="numeric"
-                    placeholderTextColor="#94a3b8"
-                    onFocus={() => setOpenDropdown(null)}
-                  />
-                </View>
-                <Text style={styles.priceSeparator}>—</Text>
-                <View style={styles.inputWithIcon}>
-                  <DollarSign size={16} color="#6366f1" style={styles.inputIcon} />
-                  <TextInput
-                    style={styles.filterInput}
-                    placeholder="Max"
-                    value={maxPrice}
-                    onChangeText={setMaxPrice}
-                    keyboardType="numeric"
-                    placeholderTextColor="#94a3b8"
-                    onFocus={() => setOpenDropdown(null)}
-                  />
-                </View>
-              </View>
-
-              {/* Minimum Discount */}
-              <Text style={styles.filterLabel}>Minimum Discount (%)</Text>
-              <View style={styles.inputWithIcon}>
-                <Percent size={16} color="#6366f1" style={styles.inputIcon} />
-                <TextInput
-                  style={styles.filterInput}
-                  placeholder="e.g. 20"
-                  value={minDiscount}
-                  onChangeText={setMinDiscount}
-                  keyboardType="numeric"
-                  placeholderTextColor="#94a3b8"
-                  onFocus={() => setOpenDropdown(null)}
-                />
-              </View>
-
-              {/* Category Filter */}
-              <Text style={styles.filterLabel}>Categories</Text>
-              {isDesktop ? (
-                <View style={[styles.dropdownContainer, { zIndex: 2000 }]}>
-                  <TouchableOpacity 
-                    style={styles.dropdown}
-                    onPress={() => {
-                      const newDropdown = openDropdown === 'categories' ? null : 'categories';
-                      setOpenDropdown(newDropdown);
-                    }}
+          ) : (
+            <ScrollView 
+              horizontal 
+              showsHorizontalScrollIndicator={false}
+            >
+              <View style={styles.sortOptions}>
+                {[
+                  { key: 'newest', label: 'Newest', emoji: '🕐' },
+                  { key: 'popular', label: 'Popular', emoji: '🔥' },
+                  { key: 'price_low', label: 'Price: Low', emoji: '💰' },
+                  { key: 'price_high', label: 'Price: High', emoji: '💎' },
+                  { key: 'expiring', label: 'Expiring Soon', emoji: '⏰' },
+                ].map(option => (
+                  <TouchableOpacity
+                    key={option.key}
+                    style={styles.sortOptionWrapper}
+                    onPress={() => setSortBy(option.key as any)}
                   >
-                    <Text style={styles.dropdownText}>
-                      {selectedCategories.includes('all') || selectedCategories.length === 0 
-                        ? 'All Categories' 
-                        : selectedCategories.length === 1 
-                        ? availableCategories.find(cat => cat.id.toString() === selectedCategories[0])?.name || 'All Categories'
-                        : `${selectedCategories.length} Categories Selected`
-                      }
-                    </Text>
-                    <Text style={[styles.dropdownArrow, openDropdown === 'categories' && styles.dropdownArrowOpen]}>▼</Text>
+                    {sortBy === option.key ? (
+                      <LinearGradient
+                        colors={['#6366f1', '#4f46e5']}
+                        style={styles.sortOption}
+                      >
+                        <Text style={styles.sortEmoji}>{option.emoji}</Text>
+                        <Text style={styles.sortOptionTextActive}>{option.label}</Text>
+                      </LinearGradient>
+                    ) : (
+                      <View style={styles.sortOptionInactive}>
+                        <Text style={styles.sortEmojiInactive}>{option.emoji}</Text>
+                        <Text style={styles.sortOptionText}>{option.label}</Text>
+                      </View>
+                    )}
                   </TouchableOpacity>
-                  {openDropdown === 'categories' && (
-                    <View style={styles.dropdownMenu}>
-                      <ScrollView style={styles.dropdownScrollView} nestedScrollEnabled>
-                        <TouchableOpacity
-                          style={[styles.dropdownItem, (selectedCategories.includes('all') || selectedCategories.length === 0) && styles.dropdownItemActive]}
-                          onPress={() => {
-                            setSelectedCategories(['all']);
-                            setOpenDropdown(null);
-                          }}
-                        >
-                          <Text style={[styles.dropdownItemText, (selectedCategories.includes('all') || selectedCategories.length === 0) && styles.dropdownItemTextActive]}>
-                            🔥 All Categories
-                          </Text>
-                        </TouchableOpacity>
-                        {availableCategories.filter(category => category.id !== 'all').map((category, index, filteredCategories) => (
-                          <TouchableOpacity
-                            key={category.id}
-                            style={[
-                              styles.dropdownItem, 
-                              selectedCategories.includes(category.id.toString()) && !selectedCategories.includes('all') && styles.dropdownItemActive,
-                              index === filteredCategories.length - 1 && { borderBottomWidth: 0 }
-                            ]}
-                            onPress={() => {
-                              toggleCategory(category.id.toString());
-                              setOpenDropdown(null);
-                            }}
-                          >
-                            <Text style={[styles.dropdownItemText, selectedCategories.includes(category.id.toString()) && !selectedCategories.includes('all') && styles.dropdownItemTextActive]}>
-                              {category.emoji} {category.name}
-                            </Text>
-                          </TouchableOpacity>
-                        ))}
-                      </ScrollView>
-                    </View>
-                  )}
-                </View>
-              ) : (
-                <ScrollView 
-                  horizontal 
-                  showsHorizontalScrollIndicator={false} 
-                  style={styles.storeFilterScroll}
-                >
-                  <View style={styles.storeOptions}>
-                    {availableCategories.map(category => (
+                ))}
+              </View>
+            </ScrollView>
+          )}
+        </View>
+
+        {/* Advanced Filters */}
+        <View style={styles.advancedFilters}>
+          {/* Price Range */}
+          <Text style={styles.filterLabel}>Price Range</Text>
+          <View style={styles.priceInputs}>
+            <View style={styles.inputWithIcon}>
+              <DollarSign size={16} color="#6366f1" style={styles.inputIcon} />
+              <TextInput
+                style={styles.filterInput}
+                placeholder="Min"
+                value={minPrice}
+                onChangeText={setMinPrice}
+                keyboardType="numeric"
+                placeholderTextColor="#94a3b8"
+                onFocus={() => setOpenDropdown(null)}
+              />
+            </View>
+            <Text style={styles.priceSeparator}>—</Text>
+            <View style={styles.inputWithIcon}>
+              <DollarSign size={16} color="#6366f1" style={styles.inputIcon} />
+              <TextInput
+                style={styles.filterInput}
+                placeholder="Max"
+                value={maxPrice}
+                onChangeText={setMaxPrice}
+                keyboardType="numeric"
+                placeholderTextColor="#94a3b8"
+                onFocus={() => setOpenDropdown(null)}
+              />
+            </View>
+          </View>
+
+          {/* Minimum Discount */}
+          <Text style={styles.filterLabel}>Minimum Discount (%)</Text>
+          <View style={styles.inputWithIcon}>
+            <Percent size={16} color="#6366f1" style={styles.inputIcon} />
+            <TextInput
+              style={styles.filterInput}
+              placeholder="e.g. 20"
+              value={minDiscount}
+              onChangeText={setMinDiscount}
+              keyboardType="numeric"
+              placeholderTextColor="#94a3b8"
+              onFocus={() => setOpenDropdown(null)}
+            />
+          </View>
+
+          {/* Category Filter */}
+          <Text style={styles.filterLabel}>Categories</Text>
+          {isDesktop ? (
+            <View style={[styles.dropdownContainer, { zIndex: 2000 }]}>
+              <TouchableOpacity 
+                style={styles.dropdown}
+                onPress={() => {
+                  const newDropdown = openDropdown === 'categories' ? null : 'categories';
+                  setOpenDropdown(newDropdown);
+                }}
+              >
+                <Text style={styles.dropdownText}>
+                  {selectedCategories.includes('all') || selectedCategories.length === 0 
+                    ? 'All Categories' 
+                    : selectedCategories.length === 1 
+                    ? availableCategories.find(cat => cat.id.toString() === selectedCategories[0])?.name || 'All Categories'
+                    : `${selectedCategories.length} Categories Selected`
+                }
+                </Text>
+                <Text style={[styles.dropdownArrow, openDropdown === 'categories' && styles.dropdownArrowOpen]}>▼</Text>
+              </TouchableOpacity>
+              {openDropdown === 'categories' && (
+                <View style={styles.dropdownMenu}>
+                  <ScrollView style={styles.dropdownScrollView} nestedScrollEnabled>
+                    <TouchableOpacity
+                      style={[styles.dropdownItem, (selectedCategories.includes('all') || selectedCategories.length === 0) && styles.dropdownItemActive]}
+                      onPress={() => {
+                        setSelectedCategories(['all']);
+                        setOpenDropdown(null);
+                      }}
+                    >
+                      <Text style={[styles.dropdownItemText, (selectedCategories.includes('all') || selectedCategories.length === 0) && styles.dropdownItemTextActive]}>
+                        🔥 All Categories
+                      </Text>
+                    </TouchableOpacity>
+                    {availableCategories.filter(category => category.id !== 'all').map((category, index, filteredCategories) => (
                       <TouchableOpacity
                         key={category.id}
-                        style={styles.storeOptionWrapper}
-                        onPress={() => toggleCategory(category.id.toString())}
+                        style={[
+                          styles.dropdownItem, 
+                          selectedCategories.includes(category.id.toString()) && !selectedCategories.includes('all') && styles.dropdownItemActive,
+                          index === filteredCategories.length - 1 && { borderBottomWidth: 0 }
+                        ]}
+                        onPress={() => {
+                          toggleCategory(category.id.toString());
+                          setOpenDropdown(null);
+                        }}
                       >
-                        {selectedCategories.includes(category.id.toString()) ? (
-                          <LinearGradient
-                            colors={['#6366f1', '#4f46e5']}
-                            style={styles.storeOption}
-                          >
-                            <Text style={styles.storeOptionTextActive}>
-                              {category.emoji} {category.name}
-                            </Text>
-                          </LinearGradient>
-                        ) : (
-                          <View style={styles.storeOptionInactive}>
-                            <Text style={styles.storeOptionText}>
-                              {category.emoji} {category.name}
-                            </Text>
-                          </View>
-                        )}
+                        <Text style={[styles.dropdownItemText, selectedCategories.includes(category.id.toString()) && !selectedCategories.includes('all') && styles.dropdownItemTextActive]}>
+                          {category.emoji} {category.name}
+                        </Text>
                       </TouchableOpacity>
                     ))}
-                  </View>
-                </ScrollView>
-              )}
-
-              {/* Store Filter */}
-              <Text style={styles.filterLabel}>Stores</Text>
-              {isDesktop ? (
-                <View style={[styles.dropdownContainer, { zIndex: 1000 }]}>
-                  <TouchableOpacity 
-                    style={styles.dropdown}
-                    onPress={() => {
-                      const newDropdown = openDropdown === 'stores' ? null : 'stores';
-                      setOpenDropdown(newDropdown);
-                    }}
-                  >
-                    <Text style={styles.dropdownText}>
-                      {selectedStores.includes('all') || selectedStores.length === 0 
-                        ? 'All Stores' 
-                        : selectedStores.length === 1 
-                        ? availableStores.find(store => store.id.toString() === selectedStores[0])?.name || 'All Stores'
-                        : `${selectedStores.length} Stores Selected`
-                      }
-                    </Text>
-                    <Text style={[styles.dropdownArrow, openDropdown === 'stores' && styles.dropdownArrowOpen]}>▼</Text>
-                  </TouchableOpacity>
-                  {openDropdown === 'stores' && (
-                    <View style={styles.dropdownMenu}>
-                      <ScrollView style={styles.dropdownScrollView} nestedScrollEnabled>
-                        <TouchableOpacity
-                          style={[styles.dropdownItem, (selectedStores.includes('all') || selectedStores.length === 0) && styles.dropdownItemActive]}
-                          onPress={() => {
-                            setSelectedStores(['all']);
-                            setOpenDropdown(null);
-                          }}
-                        >
-                          <Text style={[styles.dropdownItemText, (selectedStores.includes('all') || selectedStores.length === 0) && styles.dropdownItemTextActive]}>
-                            🏪 All Stores
-                          </Text>
-                        </TouchableOpacity>
-                        {availableStores.filter(store => store.id !== 'all').map((store, index, filteredStores) => (
-                          <TouchableOpacity
-                            key={store.id}
-                            style={[
-                              styles.dropdownItem, 
-                              selectedStores.includes(store.id.toString()) && !selectedStores.includes('all') && styles.dropdownItemActive,
-                              index === filteredStores.length - 1 && { borderBottomWidth: 0 }
-                            ]}
-                            onPress={() => {
-                              toggleStore(store.id.toString());
-                              setOpenDropdown(null);
-                            }}
-                          >
-                            <Text style={[styles.dropdownItemText, selectedStores.includes(store.id.toString()) && !selectedStores.includes('all') && styles.dropdownItemTextActive]}>
-                              {store.name}
-                            </Text>
-                          </TouchableOpacity>
-                        ))}
-                      </ScrollView>
-                    </View>
-                  )}
+                  </ScrollView>
                 </View>
-              ) : (
-                <ScrollView 
-                  horizontal 
-                  showsHorizontalScrollIndicator={false} 
-                  style={styles.storeFilterScroll}
-                >
-                  <View style={styles.storeOptions}>
-                    {availableStores.map(store => (
+              )}
+            </View>
+          ) : (
+            <ScrollView 
+              horizontal 
+              showsHorizontalScrollIndicator={false} 
+              style={styles.storeFilterScroll}
+            >
+              <View style={styles.storeOptions}>
+                {availableCategories.map(category => (
+                  <TouchableOpacity
+                    key={category.id}
+                    style={styles.storeOptionWrapper}
+                    onPress={() => toggleCategory(category.id.toString())}
+                  >
+                    {selectedCategories.includes(category.id.toString()) ? (
+                      <LinearGradient
+                        colors={['#6366f1', '#4f46e5']}
+                        style={styles.storeOption}
+                      >
+                        <Text style={styles.storeOptionTextActive}>
+                          {category.emoji} {category.name}
+                        </Text>
+                      </LinearGradient>
+                    ) : (
+                      <View style={styles.storeOptionInactive}>
+                        <Text style={styles.storeOptionText}>
+                          {category.emoji} {category.name}
+                        </Text>
+                      </View>
+                    )}
+                  </TouchableOpacity>
+                ))}
+              </View>
+            </ScrollView>
+          )}
+
+          {/* Store Filter */}
+          <Text style={styles.filterLabel}>Stores</Text>
+          {isDesktop ? (
+            <View style={[styles.dropdownContainer, { zIndex: 1000 }]}>
+              <TouchableOpacity 
+                style={styles.dropdown}
+                onPress={() => {
+                  const newDropdown = openDropdown === 'stores' ? null : 'stores';
+                  setOpenDropdown(newDropdown);
+                }}
+              >
+                <Text style={styles.dropdownText}>
+                  {selectedStores.includes('all') || selectedStores.length === 0 
+                    ? 'All Stores' 
+                    : selectedStores.length === 1 
+                    ? availableStores.find(store => store.id.toString() === selectedStores[0])?.name || 'All Stores'
+                    : `${selectedStores.length} Stores Selected`
+                }
+                </Text>
+                <Text style={[styles.dropdownArrow, openDropdown === 'stores' && styles.dropdownArrowOpen]}>▼</Text>
+              </TouchableOpacity>
+              {openDropdown === 'stores' && (
+                <View style={styles.dropdownMenu}>
+                  <ScrollView style={styles.dropdownScrollView} nestedScrollEnabled>
+                    <TouchableOpacity
+                      style={[styles.dropdownItem, (selectedStores.includes('all') || selectedStores.length === 0) && styles.dropdownItemActive]}
+                      onPress={() => {
+                        setSelectedStores(['all']);
+                        setOpenDropdown(null);
+                      }}
+                    >
+                      <Text style={[styles.dropdownItemText, (selectedStores.includes('all') || selectedStores.length === 0) && styles.dropdownItemTextActive]}>
+                        🏪 All Stores
+                      </Text>
+                    </TouchableOpacity>
+                    {availableStores.filter(store => store.id !== 'all').map((store, index, filteredStores) => (
                       <TouchableOpacity
                         key={store.id}
-                        style={styles.storeOptionWrapper}
-                        onPress={() => toggleStore(store.id.toString())}
+                        style={[
+                          styles.dropdownItem, 
+                          selectedStores.includes(store.id.toString()) && !selectedStores.includes('all') && styles.dropdownItemActive,
+                          index === filteredStores.length - 1 && { borderBottomWidth: 0 }
+                        ]}
+                        onPress={() => {
+                          toggleStore(store.id.toString());
+                          setOpenDropdown(null);
+                        }}
                       >
-                        {selectedStores.includes(store.id.toString()) ? (
-                          <LinearGradient
-                            colors={['#6366f1', '#4f46e5']}
-                            style={styles.storeOption}
-                          >
-                            <Text style={styles.storeOptionTextActive}>{store.name}</Text>
-                          </LinearGradient>
-                        ) : (
-                          <View style={styles.storeOptionInactive}>
-                            <Text style={styles.storeOptionText}>{store.name}</Text>
-                          </View>
-                        )}
+                        <Text style={[styles.dropdownItemText, selectedStores.includes(store.id.toString()) && !selectedStores.includes('all') && styles.dropdownItemTextActive]}>
+                          {store.name}
+                        </Text>
                       </TouchableOpacity>
                     ))}
-                  </View>
-                </ScrollView>
-              )}
-
-              {/* Location Options */}
-              {locationEnabled && (
-                <>
-                  <Text style={styles.filterLabel}>Search Radius</Text>
-                  <ScrollView 
-                    horizontal 
-                    showsHorizontalScrollIndicator={false}
-                    style={styles.storeFilterScroll}
-                  >
-                    <View style={styles.storeOptions}>
-                      {RADIUS_OPTIONS.map(radius => (
-                        <TouchableOpacity
-                          key={radius}
-                          style={styles.storeOptionWrapper}
-                          onPress={() => setSelectedRadius(radius)}
-                        >
-                          {selectedRadius === radius ? (
-                            <LinearGradient
-                              colors={['#10b981', '#059669']}
-                              style={styles.storeOption}
-                            >
-                              <Text style={styles.storeOptionTextActive}>{radius} mi</Text>
-                            </LinearGradient>
-                          ) : (
-                            <View style={styles.storeOptionInactive}>
-                              <Text style={styles.storeOptionText}>{radius} mi</Text>
-                            </View>
-                          )}
-                        </TouchableOpacity>
-                      ))}
-                    </View>
                   </ScrollView>
-                </>
+                </View>
               )}
-
-              {/* Action Buttons */}
-              <View style={styles.filterActions}>
-                <TouchableOpacity style={styles.resetButton} onPress={resetFilters}>
-                  <Text style={styles.resetButtonText}>Reset Filters</Text>
-                </TouchableOpacity>
-              </View>
             </View>
-          </ScrollView>
+          ) : (
+            <ScrollView 
+              horizontal 
+              showsHorizontalScrollIndicator={false} 
+              style={styles.storeFilterScroll}
+            >
+              <View style={styles.storeOptions}>
+                {availableStores.map(store => (
+                  <TouchableOpacity
+                    key={store.id}
+                    style={styles.storeOptionWrapper}
+                    onPress={() => toggleStore(store.id.toString())}
+                  >
+                    {selectedStores.includes(store.id.toString()) ? (
+                      <LinearGradient
+                        colors={['#6366f1', '#4f46e5']}
+                        style={styles.storeOption}
+                      >
+                        <Text style={styles.storeOptionTextActive}>{store.name}</Text>
+                      </LinearGradient>
+                    ) : (
+                      <View style={styles.storeOptionInactive}>
+                        <Text style={styles.storeOptionText}>{store.name}</Text>
+                      </View>
+                    )}
+                  </TouchableOpacity>
+                ))}
+              </View>
+            </ScrollView>
+          )}
+
+          {/* Location Options */}
+          {locationEnabled && (
+            <>
+              <Text style={styles.filterLabel}>Search Radius</Text>
+              <ScrollView 
+                horizontal 
+                showsHorizontalScrollIndicator={false}
+                style={styles.storeFilterScroll}
+              >
+                <View style={styles.storeOptions}>
+                  {RADIUS_OPTIONS.map(radius => (
+                    <TouchableOpacity
+                      key={radius}
+                      style={styles.storeOptionWrapper}
+                      onPress={() => setSelectedRadius(radius)}
+                    >
+                      {selectedRadius === radius ? (
+                        <LinearGradient
+                          colors={['#10b981', '#059669']}
+                          style={styles.storeOption}
+                        >
+                          <Text style={styles.storeOptionTextActive}>{radius} mi</Text>
+                        </LinearGradient>
+                      ) : (
+                        <View style={styles.storeOptionInactive}>
+                          <Text style={styles.storeOptionText}>{radius} mi</Text>
+                        </View>
+                      )}
+                    </TouchableOpacity>
+                  ))}
+                </View>
+              </ScrollView>
+            </>
+          )}
+
+          {/* Action Buttons */}
+          <View style={styles.filterActions}>
+            <TouchableOpacity style={styles.resetButton} onPress={resetFilters}>
+              <Text style={styles.resetButtonText}>Reset Filters</Text>
+            </TouchableOpacity>
+          </View>
         </View>
-      )}
+      </ScrollView>
+    </View>
+  )}
 
 
 
@@ -1950,14 +1968,14 @@ const styles = StyleSheet.create({
   subHeaderDropdownText: {
     fontSize: 14,
     fontWeight: '500',
-    color: '#374151',
+       color: '#374151',
   },
   
   // Sub-header backdrop
   subHeaderDropdownBackdrop: {
     position: 'absolute',
     top: 0,
-    left: 0,
+       left: 0,
     right: 0,
     bottom: 0,
     backgroundColor: 'transparent',
@@ -1977,6 +1995,7 @@ const styles = StyleSheet.create({
     pointerEvents: 'box-none',
   },
 });
+
 
 // Sample data (unchanged)
 function getSampleDeals() {
