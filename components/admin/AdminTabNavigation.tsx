@@ -7,6 +7,7 @@ export type AdminTab = 'dashboard' | 'users' | 'deals' | 'banners' | 'categories
 interface AdminTabNavigationProps {
   activeTab: AdminTab;
   onTabChange: (tab: AdminTab) => void;
+  userRole?: string;
 }
 
 const tabs = [
@@ -21,33 +22,36 @@ const tabs = [
   { id: 'categories' as AdminTab, name: 'Categories', icon: Tag },
   { id: 'stores' as AdminTab, name: 'Stores', icon: Store },
   { id: 'affiliates' as AdminTab, name: 'Affiliates', icon: DollarSign },
-  { id: 'settings' as AdminTab, name: 'Settings', icon: Settings },
   { id: 'reports' as AdminTab, name: 'Reports', icon: AlertTriangle },
 ];
 
 export const AdminTabNavigation: React.FC<AdminTabNavigationProps> = ({ 
   activeTab, 
-  onTabChange 
+  onTabChange,
+  userRole
 }) => {
   return (
     <View style={styles.tabNavigation}>
       <ScrollView horizontal showsHorizontalScrollIndicator={false}>
         <View style={styles.tabContainer}>
-          {tabs.map(tab => (
-            <TouchableOpacity
-              key={tab.id}
-              style={[styles.tab, activeTab === tab.id && styles.tabActive]}
-              onPress={() => onTabChange(tab.id)}
-              accessibilityRole="tab"
-              accessibilityState={{ selected: activeTab === tab.id }}
-              accessibilityLabel={`${tab.name} tab`}
-            >
-              <tab.icon size={18} color={activeTab === tab.id ? '#FFFFFF' : '#64748b'} />
-              <Text style={[styles.tabText, activeTab === tab.id && styles.tabTextActive]}>
-                {tab.name}
-              </Text>
-            </TouchableOpacity>
-          ))}
+          {tabs.map(tab => {
+            if (tab.id === 'settings' && userRole !== 'superadmin') return null;
+            return (
+              <TouchableOpacity
+                key={tab.id}
+                style={[styles.tab, activeTab === tab.id && styles.tabActive]}
+                onPress={() => onTabChange(tab.id)}
+                accessibilityRole="tab"
+                accessibilityState={{ selected: activeTab === tab.id }}
+                accessibilityLabel={`${tab.name} tab`}
+              >
+                <tab.icon size={18} color={activeTab === tab.id ? '#FFFFFF' : '#64748b'} />
+                <Text style={[styles.tabText, activeTab === tab.id && styles.tabTextActive]}>
+                  {tab.name}
+                </Text>
+              </TouchableOpacity>
+            );
+          })}
         </View>
       </ScrollView>
     </View>

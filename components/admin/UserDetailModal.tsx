@@ -26,6 +26,7 @@ import {
   MessageSquare,
   ThumbsUp,
   Eye,
+  ArrowLeft,
 } from 'lucide-react-native';
 import { adminUserService, BanUserRequest, UserActionRequest } from '@/services/adminUserService';
 import { elevate } from '@/services/adminElevation';
@@ -58,6 +59,7 @@ interface UserStats {
 }
 
 export default function UserDetailModal({ visible, onClose, userId, onUserUpdated }: UserDetailModalProps) {
+  const [tempPassword, setTempPassword] = useState<string | null>(null);
   const { profile: currentAdminProfile } = useAuth();
   const [userStats, setUserStats] = useState<UserStats | null>(null);
   const [loading, setLoading] = useState(false);
@@ -180,8 +182,16 @@ export default function UserDetailModal({ visible, onClose, userId, onUserUpdate
           break;
         case 'resetPassword':
           result = await adminUserService.resetUserPassword(baseRequest);
+          console.log('🔑 Password reset response:', result);
           if (result.tempPassword) {
+            setTempPassword(result.tempPassword);
             Alert.alert('Password Reset', `Temporary password: ${result.tempPassword}`);
+          } else if (result.success && result.message) {
+            setTempPassword(null);
+            Alert.alert('Password Reset', `${result.message}\n(No temporary password returned)`);
+          } else {
+            setTempPassword(null);
+            Alert.alert('Password Reset', 'Password reset completed, but no temporary password was returned.');
           }
           break;
         case 'changeRole':
@@ -219,6 +229,19 @@ export default function UserDetailModal({ visible, onClose, userId, onUserUpdate
   };
 
   const renderActionForm = () => {
+    // Show temp password if available
+    if (tempPassword) {
+      return (
+        <View style={[styles.actionForm, { marginBottom: 16 }]}> 
+          <Text style={styles.actionFormTitle}>Temporary Password</Text>
+          <Text selectable style={{ fontSize: 18, fontWeight: 'bold', color: '#dc2626', marginVertical: 8, textAlign: 'center' }}>{tempPassword}</Text>
+          <Text style={{ color: '#6b7280', textAlign: 'center', marginBottom: 12 }}>Copy and share this password with the user. They should change it after login.</Text>
+          <TouchableOpacity style={styles.confirmBtn} onPress={() => setTempPassword(null)}>
+            <Text style={styles.confirmBtnText}>Hide Password</Text>
+          </TouchableOpacity>
+        </View>
+      );
+    }
     if (!showActionForm) return null;
 
     return (
@@ -352,11 +375,25 @@ export default function UserDetailModal({ visible, onClose, userId, onUserUpdate
 
     const { stats } = userStats;
     
+    // Prevent any admin actions on superadmin accounts
+    if (userStats?.user.role === 'superadmin') {
+      return (
+        <View style={styles.actionsGrid}>
+          <Text style={styles.sectionTitle}>User Actions</Text>
+          <View style={styles.actionGrid}>
+            <Text style={{ color: '#ef4444', fontWeight: 'bold', textAlign: 'center', marginVertical: 16 }}>
+              Superadmin accounts cannot be managed, banned, suspended, or deleted.
+            </Text>
+          </View>
+        </View>
+      );
+    }
+    // ...existing code for other roles...
     return (
       <View style={styles.actionsGrid}>
         <Text style={styles.sectionTitle}>User Actions</Text>
-        
         <View style={styles.actionGrid}>
+          {/* Ban/Unban and Suspend/Unsuspend available to all admins */}
           {!stats.is_banned ? (
             <TouchableOpacity
               style={[styles.actionBtn, styles.dangerBtn]}
@@ -389,33 +426,38 @@ export default function UserDetailModal({ visible, onClose, userId, onUserUpdate
               onPress={() => setShowActionForm('unsuspend')}
             >
               <CheckCircle size={16} color="#fff" />
-              <Text style={styles.actionBtnText}>Unsuspend</Text>
+              <Text style={styles.actionBtnText}>Unsuspend User</Text>
             </TouchableOpacity>
           )}
 
-          <TouchableOpacity
-            style={[styles.actionBtn, styles.infoBtn]}
-            onPress={() => setShowActionForm('resetPassword')}
-          >
-            <Key size={16} color="#fff" />
-            <Text style={styles.actionBtnText}>Reset Password</Text>
-          </TouchableOpacity>
+          {/* Superadmin-only actions */}
+          {isSuperAdmin && (
+            <>
+              <TouchableOpacity
+                style={[styles.actionBtn, styles.infoBtn]}
+                onPress={() => setShowActionForm('resetPassword')}
+              >
+                <Key size={16} color="#fff" />
+                <Text style={styles.actionBtnText}>Reset Password</Text>
+              </TouchableOpacity>
 
-          <TouchableOpacity
-            style={[styles.actionBtn, styles.warningBtn]}
-            onPress={() => setShowActionForm('changeRole')}
-          >
-            <User size={16} color="#fff" />
-            <Text style={styles.actionBtnText}>Change Role</Text>
-          </TouchableOpacity>
+              <TouchableOpacity
+                style={[styles.actionBtn, styles.warningBtn]}
+                onPress={() => setShowActionForm('changeRole')}
+              >
+                <User size={16} color="#fff" />
+                <Text style={styles.actionBtnText}>Change Role</Text>
+              </TouchableOpacity>
 
-          <TouchableOpacity
-            style={[styles.actionBtn, styles.dangerBtn]}
-            onPress={() => setShowActionForm('delete')}
-          >
-            <Trash2 size={16} color="#fff" />
-            <Text style={styles.actionBtnText}>Delete</Text>
-          </TouchableOpacity>
+              <TouchableOpacity
+                style={[styles.actionBtn, styles.dangerBtn]}
+                onPress={() => setShowActionForm('delete')}
+              >
+                <Trash2 size={16} color="#fff" />
+                <Text style={styles.actionBtnText}>Delete</Text>
+              </TouchableOpacity>
+            </>
+          )}
         </View>
       </View>
     );
@@ -425,15 +467,10 @@ export default function UserDetailModal({ visible, onClose, userId, onUserUpdate
     <Modal visible={visible} animationType="slide" presentationStyle="pageSheet">
       <View style={styles.container}>
         <View style={styles.header}>
+          <TouchableOpacity onPress={onClose} style={styles.backButton}>
+            <ArrowLeft size={24} color="#6b7280" />
+          </TouchableOpacity>
           <Text style={styles.title}>User Details</Text>
-          <View style={styles.headerActions}>
-            <TouchableOpacity onPress={debugAuth} style={styles.debugBtn}>
-              <Text style={styles.debugBtnText}>Debug</Text>
-            </TouchableOpacity>
-            <TouchableOpacity onPress={onClose} style={styles.closeBtn}>
-              <X size={24} color="#6b7280" />
-            </TouchableOpacity>
-          </View>
         </View>
 
         {loading ? (
@@ -506,6 +543,15 @@ export default function UserDetailModal({ visible, onClose, userId, onUserUpdate
 }
 
 const styles = StyleSheet.create({
+  backButton: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: 'rgba(0,0,0,0.08)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginRight: 12,
+  },
   container: {
     flex: 1,
     backgroundColor: '#f8fafc',

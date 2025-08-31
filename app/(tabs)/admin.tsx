@@ -135,9 +135,9 @@ export default function AdminScreen() {
   return (
     <View style={styles.container}>
       <AdminHeader currentUserRole={currentUserRole} />
-      <AdminTabNavigation activeTab={activeTab} onTabChange={setActiveTab} />
+      <AdminTabNavigation activeTab={activeTab} onTabChange={setActiveTab} userRole={currentUserRole} />
       <ScrollView style={styles.content} showsVerticalScrollIndicator={false}>
-        {renderContent()}
+        {activeTab === 'settings' && currentUserRole !== 'superadmin' ? null : renderContent()}
         <View style={styles.bottomPadding} />
       </ScrollView>
     </View>

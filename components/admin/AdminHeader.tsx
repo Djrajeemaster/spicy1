@@ -88,7 +88,7 @@ export const AdminHeader: React.FC<AdminHeaderProps> = ({ currentUserRole }) => 
 
 const styles = StyleSheet.create({
   header: {
-    paddingTop: 50,
+    paddingTop: 10,
     paddingBottom: 16,
     paddingHorizontal: 16,
   },

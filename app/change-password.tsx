@@ -18,6 +18,7 @@ import { router } from 'expo-router';
 import { supabase } from '@/lib/supabase';
 
 export default function ChangePasswordScreen() {
+  const [successBanner, setSuccessBanner] = useState(false);
   const [currentPassword, setCurrentPassword] = useState('');
   const [newPassword, setNewPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
@@ -89,15 +90,17 @@ export default function ChangePasswordScreen() {
       });
 
       if (updateError) {
+        setSuccessBanner(false);
         Alert.alert('Error', `Failed to update password: ${updateError.message}`);
       } else {
-        Alert.alert(
-          'Success',
-          'Password updated successfully!',
-          [{ text: 'OK', onPress: () => router.back() }]
-        );
+        setSuccessBanner(true);
+        setTimeout(() => {
+          setSuccessBanner(false);
+          router.back();
+        }, 2000);
       }
     } catch (error) {
+      setSuccessBanner(false);
       console.error('Error changing password:', error);
       Alert.alert('Error', 'An unexpected error occurred. Please try again.');
     } finally {
@@ -108,6 +111,11 @@ export default function ChangePasswordScreen() {
   return (
     <View style={styles.container}>
       <LinearGradient colors={['#667eea', '#764ba2']} style={styles.gradient}>
+        {successBanner && (
+          <View style={{backgroundColor: '#10b981', padding: 12, alignItems: 'center'}}>
+            <Text style={{color: '#fff', fontWeight: 'bold'}}>Password updated successfully!</Text>
+          </View>
+        )}
         <SafeAreaView style={styles.safeArea} edges={['top']}>
           <View style={styles.header}>
             <TouchableOpacity style={styles.backButton} onPress={() => router.back()}>
