@@ -256,7 +256,7 @@ export function Header({
                   }],
                   height: filtersOpacity.interpolate({
                     inputRange: [0, 1],
-                    outputRange: [0, 48],
+                    outputRange: [0, 50], // Increased by 2 points
                   }),
                   overflow: 'hidden',
                   flexDirection: 'row',
@@ -359,7 +359,7 @@ export function Header({
         {!isDesktopWeb && showFullSearch && (
           <Animated.View style={{
             paddingHorizontal: 8,
-            paddingBottom: 4,
+            paddingBottom: 6, // Increased by 2 points
             opacity: searchOpacity,
             transform: [{
               translateY: searchOpacity.interpolate({
@@ -369,7 +369,7 @@ export function Header({
             }],
             height: searchOpacity.interpolate({
               inputRange: [0, 1],
-              outputRange: [0, 40],
+              outputRange: [0, 42], // Increased by 2 points
             }),
             overflow: 'hidden',
           }}>
@@ -500,10 +500,10 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    paddingHorizontal: 8,
-    paddingVertical: 6, // Ultra slim
-    minHeight: 48,
-    height: 48,
+    paddingHorizontal: 16,
+    paddingVertical: 18, // Increased vertical padding
+    minHeight: 72,
+    height: 72,
   },
   mainRowDesktop: {
     justifyContent: 'flex-start', // Desktop with search: flex-start for flex distribution
@@ -520,16 +520,16 @@ const styles = StyleSheet.create({
   },
   logoContainer: { flexDirection: 'row', alignItems: 'center' },
   logo: {
-    width: 28, height: 28, borderRadius: 8, marginRight: 8,
+    width: 40, height: 40, borderRadius: 12, marginRight: 12,
     justifyContent: 'center', alignItems: 'center',
     shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.15, shadowRadius: 2, elevation: 2,
   },
-  appName: { fontSize: 18, fontWeight: '800', color: '#FFFFFF', letterSpacing: -0.5 },
+  appName: { fontSize: 24, fontWeight: '800', color: '#FFFFFF', letterSpacing: -0.5 },
   rightSection: { 
     flexDirection: 'row', 
     alignItems: 'center',
-    // Mobile default - no flex constraints but ensure elements don't get cut off
-    justifyContent: 'flex-end',
+    justifyContent: 'center', // Center all right section contents vertically
+    gap: 12,
   },
   rightSectionDesktop: {
     flex: 3, // Give more flex space to the right section for search on desktop
@@ -538,16 +538,16 @@ const styles = StyleSheet.create({
 
   iconButton: { padding: 4, marginRight: 4 },
   adminButton: { borderRadius: 12, overflow: 'hidden', marginRight: 2 },
-  adminButtonGradient: { paddingHorizontal: 8, paddingVertical: 4 },
+  adminButtonGradient: { paddingHorizontal: 18, paddingVertical: 8, borderRadius: 24, justifyContent: 'center', alignItems: 'center', minHeight: 40, marginRight: 2 },
   adminButtonText: { color: '#FFFFFF', fontSize: 11, fontWeight: '700' },
 
-  postButton: { borderRadius: 12, overflow: 'hidden', marginRight: 2 },
-  postButtonGradient: { paddingHorizontal: 10, paddingVertical: 4 },
+  postButton: { borderRadius: 24, overflow: 'hidden', marginRight: 2, minHeight: 40, justifyContent: 'center', alignItems: 'center', paddingHorizontal: 18 },
+  postButtonGradient: { paddingHorizontal: 18, paddingVertical: 8, borderRadius: 24, justifyContent: 'center', alignItems: 'center', minHeight: 40 },
   postButtonText: { color: '#FFFFFF', fontSize: 11, fontWeight: '700' },
   disabledButton: { opacity: 0.6 },
 
-  alertButton: { marginRight: 2 },
-  alertIconContainer: { position: 'relative', padding: 4 },
+  alertButton: { marginRight: 4, width: 48, height: 48, borderRadius: 16, justifyContent: 'center', alignItems: 'center' },
+  alertIconContainer: { position: 'relative', width: 48, height: 48, justifyContent: 'center', alignItems: 'center' },
   alertBadge: {
     position: 'absolute', top: 0, right: 0, backgroundColor: '#ef4444',
     borderRadius: 8, minWidth: 14, height: 14, justifyContent: 'center', alignItems: 'center',
@@ -561,11 +561,11 @@ const styles = StyleSheet.create({
 
 
 
-  userButton: { flexDirection: 'row', alignItems: 'center', marginLeft: 2 },
+  userButton: { flexDirection: 'row', alignItems: 'center', marginLeft: 4, width: 48, height: 48, borderRadius: 16, justifyContent: 'center' },
   avatar: {
-    width: 24, height: 24, borderRadius: 12, justifyContent: 'center', alignItems: 'center',
-    marginRight: 4, shadowColor: '#000', shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.15, shadowRadius: 2, elevation: 2,
+  width: 36, height: 36, borderRadius: 18, justifyContent: 'center', alignItems: 'center',
+  marginRight: 4, shadowColor: '#000', shadowOffset: { width: 0, height: 1 },
+  shadowOpacity: 0.15, shadowRadius: 2, elevation: 2,
   },
   avatarText: { color: '#FFFFFF', fontSize: 12, fontWeight: '700' },
 
@@ -591,7 +591,7 @@ const styles = StyleSheet.create({
   clearButton: { fontSize: 14, color: 'rgba(255, 255, 255, 0.7)', paddingHorizontal: 4 },
 
   filterButton: { borderRadius: 10, overflow: 'hidden', marginRight: 4 },
-  filterGradient: { width: 28, height: 28, justifyContent: 'center', alignItems: 'center', position: 'relative' },
+  filterGradient: { width: 44, height: 44, justifyContent: 'center', alignItems: 'center', position: 'relative' },
   filterActiveDot: {
     position: 'absolute',
     top: 4,
@@ -604,7 +604,7 @@ const styles = StyleSheet.create({
     borderColor: '#FFFFFF',
   },
   locationButton: { borderRadius: 10, overflow: 'hidden' },
-  locationGradient: { width: 28, height: 28, justifyContent: 'center', alignItems: 'center' },
+  locationGradient: { width: 44, height: 44, justifyContent: 'center', alignItems: 'center' },
 
   // Desktop search styles
   desktopSearchContainer: {
@@ -615,24 +615,26 @@ const styles = StyleSheet.create({
     minWidth: 400,
   },
   desktopSearchBar: {
-    flex: 1,
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: 'rgba(255, 255, 255, 0.10)',
-    borderRadius: 12,
-    paddingHorizontal: 8,
-    height: 32,
-    marginRight: 4,
-    borderWidth: 1,
-    borderColor: 'rgba(255, 255, 255, 0.15)',
-    minWidth: 300,
+  flex: 1,
+  flexDirection: 'row',
+  alignItems: 'center',
+  backgroundColor: 'rgba(255, 255, 255, 0.10)',
+  borderRadius: 16,
+  paddingHorizontal: 12,
+  height: 48,
+  marginRight: 8,
+  borderWidth: 1,
+  borderColor: 'rgba(255, 255, 255, 0.15)',
+  minWidth: 300,
   },
   desktopSearchInput: {
-    flex: 1,
-    fontSize: 13,
-    color: '#FFFFFF',
-    fontWeight: '500',
-    paddingVertical: 4,
+  flex: 1,
+  fontSize: 15,
+  color: '#1e293b',
+  fontWeight: '500',
+  paddingVertical: 10,
+  backgroundColor: '#FFFFFF',
+  borderRadius: 16,
   },
   desktopFilterButton: {
     borderRadius: 10,
@@ -640,8 +642,10 @@ const styles = StyleSheet.create({
     marginRight: 2,
   },
   desktopFilterGradient: {
-    width: 28,
-    height: 28,
+  width: 48,
+  height: 48,
+  borderRadius: 16,
+  marginHorizontal: 4,
     justifyContent: 'center',
     alignItems: 'center',
     position: 'relative',
@@ -652,8 +656,10 @@ const styles = StyleSheet.create({
     marginRight: 4,
   },
   desktopLocationGradient: {
-    width: 28,
-    height: 28,
+  width: 48,
+  height: 48,
+  borderRadius: 16,
+  marginHorizontal: 4,
     justifyContent: 'center',
     alignItems: 'center',
   },

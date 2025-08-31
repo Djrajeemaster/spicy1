@@ -48,20 +48,9 @@ export default function HomeScreen() {
   const subHeaderOpacity = useRef(new Animated.Value(1)).current;
 
   useEffect(() => {
-    const listener = scrollY.addListener(({ value }) => {
-      const threshold = 100;
-      const progress = Math.min(value / threshold, 1);
-      const elementsOpacity = 1 - progress;
-      Animated.timing(subHeaderOpacity, {
-        toValue: elementsOpacity,
-        duration: 0,
-        useNativeDriver: true,
-      }).start();
-    });
-    return () => {
-      scrollY.removeListener(listener);
-    };
-  }, [subHeaderOpacity, scrollY]);
+    // Remove fading effect: keep subHeaderOpacity at 1
+    subHeaderOpacity.setValue(1);
+  }, [subHeaderOpacity]);
   const { theme, colors } = useTheme();
   const [deals, setDeals] = useState<any[]>([]);
   const [filteredDeals, setFilteredDeals] = useState<any[]>([]);
@@ -620,123 +609,72 @@ export default function HomeScreen() {
         <Animated.View
           style={[
             styles.subHeader,
-            {
-              opacity: subHeaderOpacity,
-              transform: [{
-                translateY: subHeaderOpacity.interpolate({
-                  inputRange: [0, 1],
-                  outputRange: [-30, 0],
-                })
-              }],
-              height: subHeaderOpacity.interpolate({
-                inputRange: [0, 1],
-                outputRange: [0, 56],
-              }),
-              paddingVertical: subHeaderOpacity.interpolate({
-                inputRange: [0, 1],
-                outputRange: [0, 6],
-              }),
-              backgroundColor: subHeaderOpacity.interpolate({
-                inputRange: [0, 1],
-                outputRange: ['rgba(0,0,0,0)', '#4f46e5'],
-              }),
-              overflow: 'hidden',
-            },
+            { backgroundColor: '#4f46e5', alignItems: 'flex-start', overflow: 'hidden', position: 'sticky', top: 0, zIndex: 100 }
           ]}
         >
-          <View style={styles.subHeaderContent}>
-            <View style={styles.subHeaderLeft}>
-              <Text style={styles.subHeaderTitle}>Category:</Text>
-              <TouchableOpacity 
-                style={styles.subHeaderDropdown}
-                onPress={() => setOpenDropdown(openDropdown === 'categories' ? null : 'categories')}
-              >
-                <Text style={styles.subHeaderValue}>
-                  {selectedCategories.includes('all') || selectedCategories.length === 0 
-                    ? '🔥 All Categories' 
-                    : `🔥 ${availableCategories.find(c => c.id === selectedCategories[0])?.name || 'Selected'}`
-                  }
-                </Text>
-                <Text style={styles.dropdownArrowSmall}>▼</Text>
-              </TouchableOpacity>
-            </View>
-            
-            <View style={styles.subHeaderMiddle}>
-              <Text style={styles.subHeaderTitle}>Store:</Text>
-              <TouchableOpacity 
-                style={styles.subHeaderDropdown}
-                onPress={() => setOpenDropdown(openDropdown === 'stores' ? null : 'stores')}
-              >
-                <Text style={styles.subHeaderValue}>
-                  {selectedStores.includes('all') || selectedStores.length === 0 
-                    ? '🏪 All Stores' 
-                    : `🏪 ${availableStores.find(s => s.id === selectedStores[0])?.name || 'Selected'}`
-                  }
-                </Text>
-                <Text style={styles.dropdownArrowSmall}>▼</Text>
-              </TouchableOpacity>
-            </View>
-            
-            <View style={styles.subHeaderMiddle}>
-              <Text style={styles.subHeaderTitle}>Location:</Text>
-              <TouchableOpacity 
-                style={styles.subHeaderDropdown}
-                onPress={async () => {
-                  console.log('Location dropdown clicked. locationEnabled:', locationEnabled, 'userLocation:', userLocation);
-                  // If location is not enabled, request permission first
+          <View style={{flexDirection: 'row', alignItems: 'center', flexWrap: 'nowrap', width: '100%', gap: 8, margin: 0, padding: 0, marginTop: 0, marginBottom: 0, paddingTop: 0, paddingBottom: 0, minHeight: 0, height: 'auto'}}>
+            <View style={{flexDirection: 'row', alignItems: 'flex-start', gap: 8, marginTop: 0, marginBottom: 0, paddingTop: 0, paddingBottom: 0}}>
+              <View style={styles.subHeaderLeft}>
+                <Text style={styles.subHeaderTitle}>Category:</Text>
+                <TouchableOpacity style={styles.subHeaderDropdown} onPress={() => setOpenDropdown(openDropdown === 'categories' ? null : 'categories')}>
+                  <Text style={styles.subHeaderValue}>
+                    {selectedCategories.includes('all') || selectedCategories.length === 0 
+                      ? '🔥 All Categories' 
+                      : `🔥 ${availableCategories.find(c => c.id === selectedCategories[0])?.name || 'Selected'}`
+                    }
+                  </Text>
+                  <Text style={styles.dropdownArrowSmall}>▼</Text>
+                </TouchableOpacity>
+              </View>
+              <View style={styles.subHeaderMiddle}>
+                <Text style={styles.subHeaderTitle}>Store:</Text>
+                <TouchableOpacity style={styles.subHeaderDropdown} onPress={() => setOpenDropdown(openDropdown === 'stores' ? null : 'stores')}>
+                  <Text style={styles.subHeaderValue}>
+                    {selectedStores.includes('all') || selectedStores.length === 0 
+                      ? '🏪 All Stores' 
+                      : `🏪 ${availableStores.find(s => s.id === selectedStores[0])?.name || 'Selected'}`
+                    }
+                  </Text>
+                  <Text style={styles.dropdownArrowSmall}>▼</Text>
+                </TouchableOpacity>
+              </View>
+              <View style={styles.subHeaderMiddle}>
+                <Text style={styles.subHeaderTitle}>Location:</Text>
+                <TouchableOpacity style={styles.subHeaderDropdown} onPress={async () => {
                   if (!locationEnabled) {
                     await handleLocationToggle();
                     return;
                   }
-                  // If location is enabled, show dropdown
                   setOpenDropdown(openDropdown === 'location' ? null : 'location');
-                }}
-              >
-                <Text style={styles.subHeaderValue}>
-                  {!locationEnabled 
-                    ? '📍 Enable Location' 
-                    : selectedRadius === null 
-                      ? '📍 All Locations' 
-                      : `📍 Within ${selectedRadius}km`
-                  }
-                </Text>
-                <Text style={styles.dropdownArrowSmall}>▼</Text>
-              </TouchableOpacity>
-            </View>
-            
-            <View style={styles.subHeaderRight}>
-              <View style={styles.sortPillsDisplay}>
-                <TouchableOpacity 
-                  style={[styles.sortPillSmall, sortBy === 'newest' && styles.sortPillActive]}
-                  onPress={() => setSortBy('newest')}
-                >
-                  <Text style={[styles.sortPillInactiveText, sortBy === 'newest' && styles.sortPillActiveText]}>🔥 Hot</Text>
-                </TouchableOpacity>
-                <TouchableOpacity 
-                  style={[styles.sortPillSmall, sortBy === 'popular' && styles.sortPillActive]}
-                  onPress={() => setSortBy('popular')}
-                >
-                  <Text style={[styles.sortPillInactiveText, sortBy === 'popular' && styles.sortPillActiveText]}>⭐ Popular</Text>
-                </TouchableOpacity>
-                <TouchableOpacity 
-                  style={[styles.sortPillSmall, sortBy === 'newest' && styles.sortPillActive]}
-                  onPress={() => setSortBy('newest')}
-                >
-                  <Text style={[styles.sortPillInactiveText, sortBy === 'newest' && styles.sortPillActiveText]}>📄 Newest</Text>
-                </TouchableOpacity>
-                <TouchableOpacity 
-                  style={[styles.sortPillSmall, (sortBy === 'price_low' || sortBy === 'price_high') && styles.sortPillActive]}
-                  onPress={() => setSortBy('price_low')}
-                >
-                  <Text style={[styles.sortPillInactiveText, (sortBy === 'price_low' || sortBy === 'price_high') && styles.sortPillActiveText]}>💰 Price</Text>
-                </TouchableOpacity>
-                <TouchableOpacity 
-                  style={[styles.sortPillSmall, sortBy === 'expiring' && styles.sortPillActive]}
-                  onPress={() => setSortBy('expiring')}
-                >
-                  <Text style={[styles.sortPillInactiveText, sortBy === 'expiring' && styles.sortPillActiveText]}>⏰ Expiring</Text>
+                }}>
+                  <Text style={styles.subHeaderValue}>
+                    {!locationEnabled 
+                      ? '📍 Enable Location' 
+                      : selectedRadius === null 
+                        ? '📍 All Locations' 
+                        : `📍 Within ${selectedRadius}km`
+                    }
+                  </Text>
+                  <Text style={styles.dropdownArrowSmall}>▼</Text>
                 </TouchableOpacity>
               </View>
+            </View>
+            <View style={[styles.sortPillsDisplay, {margin: 0, padding: 0, flexDirection: 'row', alignItems: 'center', marginLeft: 'auto'}]}> 
+              <TouchableOpacity style={[styles.sortPillSmall, sortBy === 'newest' && styles.sortPillActive, {alignSelf: 'flex-start'}]} onPress={() => setSortBy('newest')}>
+                <Text style={[styles.sortPillInactiveText, sortBy === 'newest' && styles.sortPillActiveText]}>🔥 Hot</Text>
+              </TouchableOpacity>
+              <TouchableOpacity style={[styles.sortPillSmall, sortBy === 'popular' && styles.sortPillActive, {alignSelf: 'flex-start'}]} onPress={() => setSortBy('popular')}>
+                <Text style={[styles.sortPillInactiveText, sortBy === 'popular' && styles.sortPillActiveText]}>⭐ Popular</Text>
+              </TouchableOpacity>
+              <TouchableOpacity style={[styles.sortPillSmall, sortBy === 'newest' && styles.sortPillActive, {alignSelf: 'flex-start'}]} onPress={() => setSortBy('newest')}>
+                <Text style={[styles.sortPillInactiveText, sortBy === 'newest' && styles.sortPillActiveText]}>📄 Newest</Text>
+              </TouchableOpacity>
+              <TouchableOpacity style={[styles.sortPillSmall, (sortBy === 'price_low' || sortBy === 'price_high') && styles.sortPillActive, {alignSelf: 'flex-start'}]} onPress={() => setSortBy('price_low')}>
+                <Text style={[styles.sortPillInactiveText, (sortBy === 'price_low' || sortBy === 'price_high') && styles.sortPillActiveText]}>💰 Price</Text>
+              </TouchableOpacity>
+              <TouchableOpacity style={[styles.sortPillSmall, sortBy === 'expiring' && styles.sortPillActive, {alignSelf: 'flex-start'}]} onPress={() => setSortBy('expiring')}>
+                <Text style={[styles.sortPillInactiveText, sortBy === 'expiring' && styles.sortPillActiveText]}>⏰ Expiring</Text>
+              </TouchableOpacity>
             </View>
           </View>
         </Animated.View>
@@ -1533,8 +1471,8 @@ const styles = StyleSheet.create({
     flexDirection: 'row', 
     justifyContent: 'space-between', 
     alignItems: 'center',
-    paddingHorizontal: 24, 
-    paddingVertical: 4, 
+  paddingHorizontal: 12,
+  paddingVertical: 2,
     backgroundColor: '#a78bfa', 
     marginHorizontal: 0,
     marginBottom: 0,
@@ -1555,7 +1493,7 @@ const styles = StyleSheet.create({
   emptyStateSubtext: { fontSize: 15, color: '#94a3b8', textAlign: 'center', lineHeight: 22, marginBottom: 20 },
   clearSearchButton: { backgroundColor: '#6366f1', paddingHorizontal: 24, paddingVertical: 12, borderRadius: 20 },
   clearSearchText: { color: '#FFFFFF', fontSize: 14, fontWeight: '700' },
-  bannersContainer: { marginHorizontal: 16, marginBottom: 8 },
+  bannersContainer: { marginHorizontal: 16 },
   bannerCard: { 
     marginBottom: 12, 
     borderRadius: 16, 
@@ -1593,11 +1531,9 @@ const styles = StyleSheet.create({
   bannerCta: {
     backgroundColor: 'rgba(255, 255, 255, 0.2)',
     paddingHorizontal: 16,
-    paddingVertical: 8,
-    borderRadius: 20,
-    borderWidth: 1,
-    borderColor: 'rgba(255, 255, 255, 0.3)',
-    alignSelf: 'flex-start',
+  paddingVertical: 8,
+  borderRadius: 20,
+  minHeight: 18,
   },
   bannerCtaText: {
     color: '#fff',
@@ -1744,8 +1680,9 @@ const styles = StyleSheet.create({
   
   // Stats section styles
   statsContainer: {
-    flexDirection: 'row',
-    alignItems: 'center',
+  flexDirection: 'row',
+  alignItems: 'center',
+  gap: 8,
   },
   statItem: {
     flexDirection: 'row',
@@ -1798,63 +1735,98 @@ const styles = StyleSheet.create({
   
   // Sub-header styles
   subHeader: {
-  paddingHorizontal: 20,
-  borderBottomWidth: 1,
-  borderBottomColor: 'rgba(255, 255, 255, 0.1)',
-  shadowColor: '#000',
-  shadowOffset: { width: 0, height: 1 },
-  shadowOpacity: 0.05,
-  shadowRadius: 2,
-  elevation: 50,
+  paddingHorizontal: 0,
+  marginBottom: 0,
+  borderBottomWidth: 0,
+  marginTop: 0,
+  paddingTop: 0,
+  paddingBottom: 0,
+  borderWidth: 0,
+  backgroundColor: 'transparent',
+  shadowColor: 'transparent',
+  shadowOffset: { width: 0, height: 0 },
+  shadowOpacity: 0,
+  shadowRadius: 0,
+  elevation: 0,
   zIndex: 50,
   position: 'relative',
+  overflow: 'visible',
+  alignItems: 'center',
+  justifyContent: 'center',
+    minHeight: 39,
+    height: 39,
+  paddingTop: 1,
+  paddingBottom: 1,
   },
   subHeaderContent: {
-    flexDirection: 'row',
-    justifyContent: 'center',
-    alignItems: 'center',
-    flexWrap: 'wrap',
-    gap: 24,
+  flexDirection: 'row',
+  justifyContent: 'center',
+  alignItems: 'center',
+  flexWrap: 'nowrap',
+  gap: 8,
+  paddingVertical: 0,
   },
   subHeaderLeft: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-    position: 'relative',
-    zIndex: 9999,
+  flexDirection: 'row',
+  alignItems: 'center',
+  gap: 8,
+  position: 'relative',
+  zIndex: 9999,
+  height: 48,
+  borderRadius: 16,
+  paddingHorizontal: 8,
   },
   subHeaderMiddle: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-    position: 'relative',
-    zIndex: 9998,
+  flexDirection: 'row',
+  alignItems: 'center',
+  gap: 8,
+  position: 'relative',
+  zIndex: 9998,
+  height: 48,
+  borderRadius: 16,
+  paddingHorizontal: 8,
   },
   subHeaderRight: {
-    flex: 1,
-    alignItems: 'flex-end',
+  flex: 1,
+  alignItems: 'center',
+  justifyContent: 'center',
+  paddingVertical: 0,
   },
   subHeaderTitle: {
-    color: 'rgba(255, 255, 255, 0.8)',
-    fontSize: 12,
-    fontWeight: '500',
+  color: 'rgba(255, 255, 255, 0.8)',
+  fontSize: 12,
+  fontWeight: '500',
+  lineHeight: 16,
   },
   subHeaderValue: {
-    color: '#ffffff',
-    fontSize: 13,
-    fontWeight: '600',
+  color: '#ffffff',
+  fontSize: 13,
+  fontWeight: '600',
+  lineHeight: 16,
   },
   sortPillsDisplay: {
-    flexDirection: 'row',
-    gap: 6,
+  flexDirection: 'row',
+  gap: 6,
+  marginTop: 0,
+  marginBottom: 0,
+  borderBottomWidth: 0,
+  paddingTop: 0,
+  paddingBottom: 0,
+  paddingHorizontal: 0,
+  borderWidth: 0,
+  backgroundColor: 'transparent',
+  minHeight: 0,
+  alignItems: 'center',
+  justifyContent: 'center',
   },
   sortPillSmall: {
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-    borderRadius: 12,
-    backgroundColor: 'rgba(255, 255, 255, 0.15)',
-    borderWidth: 1,
-    borderColor: 'rgba(255, 255, 255, 0.2)',
+  paddingHorizontal: 8,
+  paddingVertical: 4,
+  borderRadius: 12,
+  backgroundColor: 'rgba(255, 255, 255, 0.15)',
+  borderWidth: 1,
+  borderColor: 'rgba(255, 255, 255, 0.2)',
+  marginBottom: 0,
   },
   sortPillActive: {
     backgroundColor: '#ffffff',
@@ -1867,7 +1839,7 @@ const styles = StyleSheet.create({
   },
   sortPillInactiveText: {
     color: 'rgba(255, 255, 255, 0.8)',
-    fontSize: 11,
+  fontSize: 10,
     fontWeight: '500',
   },
   
@@ -1875,7 +1847,7 @@ const styles = StyleSheet.create({
   subHeaderDropdown: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 4,
+  gap: 2,
     position: 'relative',
     zIndex: 99999,
   },
@@ -1899,12 +1871,12 @@ const styles = StyleSheet.create({
     elevation: 99999,
     zIndex: 99999,
     minWidth: 160,
-    marginTop: 4,
+  marginTop: 2,
     maxHeight: 200,
   },
   subHeaderDropdownItem: {
-    paddingHorizontal: 16,
-    paddingVertical: 10,
+  paddingHorizontal: 10,
+  paddingVertical: 6,
     borderBottomWidth: 1,
     borderBottomColor: '#f8fafc',
   },
