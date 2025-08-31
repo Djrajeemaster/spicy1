@@ -13,6 +13,7 @@ interface ThreadProps {
   nodes: CommentNode[];
   onPosted: () => void;
   depth?: number;
+  onGuestAction?: () => void;
 }
 
 const isUuid = (v: string) =>
@@ -91,6 +92,8 @@ function NewCommentForm({ dealId, onPosted }: { dealId: string; onPosted: () => 
   const { user } = useAuth();
   const [content, setContent] = useState('');
   const [isPosting, setIsPosting] = useState(false);
+  // Accept onGuestAction as prop
+  const onGuestAction = (arguments as any).onGuestAction;
 
   const postComment = async () => {
     if (!user?.id || !content.trim() || isPosting) return;
@@ -113,6 +116,7 @@ function NewCommentForm({ dealId, onPosted }: { dealId: string; onPosted: () => 
   };
 
   if (!user) {
+    if (onGuestAction) onGuestAction();
     return (
       <View style={styles.signInPrompt}>
         <Text style={styles.signInText}>
@@ -140,7 +144,7 @@ function NewCommentForm({ dealId, onPosted }: { dealId: string; onPosted: () => 
 export default function CommentThread({ dealId, nodes, onPosted, depth = 0 }: ThreadProps) {
   return (
     <View>
-      <NewCommentForm dealId={dealId} onPosted={onPosted} />
+      <NewCommentForm dealId={dealId} onPosted={onPosted} onGuestAction={arguments[0]?.onGuestAction} />
       {nodes.map((n: any) => (
         <CommentItem key={n.id} node={n} dealId={dealId} onPosted={onPosted} depth={depth} />
       ))}

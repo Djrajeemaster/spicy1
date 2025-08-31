@@ -13,12 +13,15 @@ import { handleBackNavigation } from '@/utils/navigation';
 import { useAuth } from '@/contexts/AuthProvider';
 import { useCurrency } from '@/contexts/CurrencyProvider';
 import { formatTimeAgo } from '@/utils/time';
+import GuestPromptModal from '@/components/GuestPromptModal';
 import CommentThread from '@/components/CommentThread';
 import DealDetailsSkeleton from '@/components/DealDetailsSkeleton';
 import { DealCard } from '@/components/DealCard';
 import { commentService, CommentNode } from '@/services/commentService';
 
 export default function DealDetailsScreen() {
+  const [guestPromptVisible, setGuestPromptVisible] = useState(false);
+  const [guestPromptAction, setGuestPromptAction] = useState<string>('');
   const { id } = useLocalSearchParams<{ id: string }>();
   const { width } = useWindowDimensions();
   const isDesktop = Platform.OS === 'web' && width >= 768;
@@ -104,7 +107,16 @@ export default function DealDetailsScreen() {
   };
 
   const handleVote = useCallback(async (voteType: 'up' | 'down') => {
-    if (!user || !deal) return;
+    if (!user) {
+      if (isDesktop) {
+        setGuestPromptAction('vote on deals');
+        setGuestPromptVisible(true);
+      } else {
+        Alert.alert('Sign In Required', 'Please sign in to vote on deals');
+      }
+      return;
+    }
+    if (!deal) return;
     const originalVote = userVote;
     const newVote = originalVote === voteType ? null : voteType;
     setUserVote(newVote);
@@ -124,7 +136,12 @@ export default function DealDetailsScreen() {
 
   const handleSave = async () => {
     if (!user) {
-      Alert.alert('Sign In Required', 'Please sign in to save deals');
+      if (isDesktop) {
+        setGuestPromptAction('save deals');
+        setGuestPromptVisible(true);
+      } else {
+        Alert.alert('Sign In Required', 'Please sign in to save deals');
+      }
       return;
     }
     
@@ -343,6 +360,11 @@ export default function DealDetailsScreen() {
 
   return (
     <SafeAreaView style={styles.container} edges={['top']}>
+      <GuestPromptModal
+        visible={guestPromptVisible}
+        onClose={() => setGuestPromptVisible(false)}
+        action={guestPromptAction}
+      />
       <ScrollView style={styles.scrollView} contentContainerStyle={styles.scrollContainer}>
         {!isDesktop && (
           <ImageBackground source={{ uri: selectedImage || 'https://placehold.co/600x400' }} style={styles.headerImageBackground}>
@@ -392,7 +414,16 @@ export default function DealDetailsScreen() {
               {!isDesktop && <EnhancedActionCard />}
 
               <View style={styles.descriptionSection}><Text style={styles.sectionTitle}>Description</Text><Text style={styles.descriptionText}>{deal.description}</Text></View>
-              <View style={styles.commentsSection}><Text style={styles.sectionTitle}>Comments ({comments.length})</Text><CommentThread dealId={id!} nodes={comments} onPosted={loadData} /></View>
+              <View style={styles.commentsSection}>
+                <Text style={styles.sectionTitle}>Comments ({comments.length})</Text>
+                <CommentThread 
+                  dealId={id!} 
+                  nodes={comments} 
+                  onPosted={loadData} 
+                  isGuest={!user}
+                  onGuestAction={() => Alert.alert('Sign In Required', 'Please sign in to comment on deals')}
+                />
+              </View>
             </View>
 
             {isDesktop && <View style={styles.desktopActionColumn}><EnhancedActionCard /></View>}

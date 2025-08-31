@@ -7,7 +7,25 @@ import { useAuth } from '@/contexts/AuthProvider';
 export default function ModeratorDashboard() {
   const [reports, setReports] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
-  const { user } = useAuth();
+  const { user, profile, loading: authLoading } = useAuth();
+  const currentUserRole = profile?.role || 'guest';
+
+  // Redirect unauthenticated users to login
+  if (!authLoading && !user) {
+    // @ts-ignore
+    if (typeof window !== 'undefined') window.location.href = '/sign-in';
+    return null;
+  }
+
+  // Restrict access to non-moderators
+  if (currentUserRole !== 'moderator' && currentUserRole !== 'superadmin' && currentUserRole !== 'admin') {
+    return (
+      <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: '#f8fafc' }}>
+        <Text style={{ color: '#dc2626', fontWeight: 'bold', fontSize: 18 }}>Access Denied</Text>
+        <Text style={{ marginTop: 8 }}>You do not have permission to view this page.</Text>
+      </View>
+    );
+  }
 
   useEffect(() => {
     async function fetchReports() {

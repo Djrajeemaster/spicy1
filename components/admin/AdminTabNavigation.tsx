@@ -23,6 +23,7 @@ const tabs = [
   { id: 'stores' as AdminTab, name: 'Stores', icon: Store },
   { id: 'affiliates' as AdminTab, name: 'Affiliates', icon: DollarSign },
   { id: 'reports' as AdminTab, name: 'Reports', icon: AlertTriangle },
+  { id: 'settings' as AdminTab, name: 'Settings', icon: Settings },
 ];
 
 export const AdminTabNavigation: React.FC<AdminTabNavigationProps> = ({ 

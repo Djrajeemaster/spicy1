@@ -529,7 +529,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row', 
     alignItems: 'center',
     justifyContent: 'center', // Center all right section contents vertically
-    gap: 12,
+    gap: 6,
   },
   rightSectionDesktop: {
     flex: 3, // Give more flex space to the right section for search on desktop
@@ -537,16 +537,16 @@ const styles = StyleSheet.create({
   },
 
   iconButton: { padding: 4, marginRight: 4 },
-  adminButton: { borderRadius: 12, overflow: 'hidden', marginRight: 2 },
-  adminButtonGradient: { paddingHorizontal: 18, paddingVertical: 8, borderRadius: 24, justifyContent: 'center', alignItems: 'center', minHeight: 40, marginRight: 2 },
+  adminButton: { borderRadius: 12, overflow: 'hidden', marginRight: 8 },
+  adminButtonGradient: { paddingHorizontal: 18, paddingVertical: 8, borderRadius: 24, justifyContent: 'center', alignItems: 'center', minHeight: 40, marginRight: 8 },
   adminButtonText: { color: '#FFFFFF', fontSize: 11, fontWeight: '700' },
 
-  postButton: { borderRadius: 24, overflow: 'hidden', marginRight: 2, minHeight: 40, justifyContent: 'center', alignItems: 'center', paddingHorizontal: 18 },
+  postButton: { borderRadius: 24, overflow: 'hidden', marginRight: 8, minHeight: 40, justifyContent: 'center', alignItems: 'center', paddingHorizontal: 18 },
   postButtonGradient: { paddingHorizontal: 18, paddingVertical: 8, borderRadius: 24, justifyContent: 'center', alignItems: 'center', minHeight: 40 },
   postButtonText: { color: '#FFFFFF', fontSize: 11, fontWeight: '700' },
   disabledButton: { opacity: 0.6 },
 
-  alertButton: { marginRight: 4, width: 48, height: 48, borderRadius: 16, justifyContent: 'center', alignItems: 'center' },
+  alertButton: { marginRight: 8, width: 48, height: 48, borderRadius: 16, justifyContent: 'center', alignItems: 'center' },
   alertIconContainer: { position: 'relative', width: 48, height: 48, justifyContent: 'center', alignItems: 'center' },
   alertBadge: {
     position: 'absolute', top: 0, right: 0, backgroundColor: '#ef4444',
@@ -561,7 +561,7 @@ const styles = StyleSheet.create({
 
 
 
-  userButton: { flexDirection: 'row', alignItems: 'center', marginLeft: 4, width: 48, height: 48, borderRadius: 16, justifyContent: 'center' },
+  userButton: { flexDirection: 'row', alignItems: 'center', marginLeft: 8, width: 48, height: 48, borderRadius: 16, justifyContent: 'center' },
   avatar: {
   width: 36, height: 36, borderRadius: 18, justifyContent: 'center', alignItems: 'center',
   marginRight: 4, shadowColor: '#000', shadowOffset: { width: 0, height: 1 },

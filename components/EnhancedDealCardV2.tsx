@@ -44,7 +44,14 @@ export function EnhancedDealCardV2({ deal, isGuest, onVote, userRole, userId }: 
 
   const handleSave = async () => {
     if (isGuest || !userId) {
-      Alert.alert('Sign In Required', 'Please sign in to save deals');
+      Alert.alert(
+        'Sign In Required',
+        'Please sign in or create an account to save deals.',
+        [
+          { text: 'Cancel', style: 'cancel' },
+          { text: 'Sign In', onPress: () => router.push('/sign-in') },
+        ]
+      );
       return;
     }
     setIsSaved(true);
@@ -71,10 +78,32 @@ export function EnhancedDealCardV2({ deal, isGuest, onVote, userRole, userId }: 
 
   const handleLike = async () => {
     if (isGuest || !userId) {
-      Alert.alert('Sign In Required', 'Please sign in to like deals');
+      Alert.alert(
+        'Sign In Required',
+        'Please sign in or create an account to like deals.',
+        [
+          { text: 'Cancel', style: 'cancel' },
+          { text: 'Sign In', onPress: () => router.push('/sign-in') },
+        ]
+      );
       return;
     }
     setIsLiked(!isLiked);
+  };
+
+  const handleVote = async (voteType: 'up' | 'down') => {
+    if (isGuest || !userId) {
+      Alert.alert(
+        'Sign In Required',
+        'Please sign in or create an account to vote on deals.',
+        [
+          { text: 'Cancel', style: 'cancel' },
+          { text: 'Sign In', onPress: () => router.push('/sign-in') },
+        ]
+      );
+      return;
+    }
+    onVote(Number(deal.id), voteType);
   };
 
   const getTimeRemaining = () => {

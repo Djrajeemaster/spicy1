@@ -43,6 +43,16 @@ const RADIUS_OPTIONS = [1, 5, 10, 25];
 
 export default function HomeScreen() {
   const scrollY = useRef(new Animated.Value(0)).current;
+  const [showFilterBar, setShowFilterBar] = useState(true);
+
+  useEffect(() => {
+    const listener = scrollY.addListener(({ value }) => {
+      setShowFilterBar(value <= 20);
+    });
+    return () => {
+      scrollY.removeListener(listener);
+    };
+  }, [scrollY]);
   // Scroll tracking for header animation
   // Animation for subheader (sorting/filter options)
   const subHeaderOpacity = useRef(new Animated.Value(1)).current;
@@ -590,7 +600,10 @@ export default function HomeScreen() {
   ) : 1;
 
   return (
-    <SafeAreaView style={[styles.container, { backgroundColor: colors.background }]} edges={['top']}>
+    <SafeAreaView
+      style={[styles.container, { backgroundColor: colors.background }]}
+      edges={['top']}
+    >
       <Header
         onPostPress={navigateToPost}
         onAlertsPress={() => router.push('/alerts')}
@@ -602,18 +615,29 @@ export default function HomeScreen() {
         onFiltersToggle={() => setShowFilters(!showFilters)}
         filtersActive={hasActiveFilters()}
         scrollY={scrollY}
-      />
+  />
 
-      {/* Sub-header with functional filters for Desktop, animated out on scroll */}
-      {isDesktop && (
+  {/* Sub-header with functional filters for Desktop, now includes stats and view options */}
+  {isDesktop && showFilterBar && (
         <Animated.View
           style={[
             styles.subHeader,
-            { backgroundColor: '#4f46e5', alignItems: 'flex-start', overflow: 'hidden', position: 'sticky', top: 0, zIndex: 100 }
+            {
+              backgroundColor: '#4f46e5',
+              alignItems: 'flex-start',
+              overflow: 'hidden',
+              position: 'relative',
+              top: undefined,
+              zIndex: 100,
+              padding: 0,
+              minHeight: 80, // Further increased height for filter bar
+              height: 80
+            }
           ]}
         >
-          <View style={{flexDirection: 'row', alignItems: 'center', flexWrap: 'nowrap', width: '100%', gap: 8, margin: 0, padding: 0, marginTop: 0, marginBottom: 0, paddingTop: 0, paddingBottom: 0, minHeight: 0, height: 'auto'}}>
-            <View style={{flexDirection: 'row', alignItems: 'flex-start', gap: 8, marginTop: 0, marginBottom: 0, paddingTop: 0, paddingBottom: 0}}>
+          {/* Top row: filter controls and sort pills */}
+          <View style={{flexDirection: 'row', alignItems: 'center', flexWrap: 'nowrap', width: '100%', gap: 8, margin: 0, paddingTop: 2, paddingBottom: 2, minHeight: 0, height: 'auto'}}>
+            <View style={{flexDirection: 'row', alignItems: 'center', gap: 16}}>
               <View style={styles.subHeaderLeft}>
                 <Text style={styles.subHeaderTitle}>Category:</Text>
                 <TouchableOpacity style={styles.subHeaderDropdown} onPress={() => setOpenDropdown(openDropdown === 'categories' ? null : 'categories')}>
@@ -660,20 +684,56 @@ export default function HomeScreen() {
               </View>
             </View>
             <View style={[styles.sortPillsDisplay, {margin: 0, padding: 0, flexDirection: 'row', alignItems: 'center', marginLeft: 'auto'}]}> 
-              <TouchableOpacity style={[styles.sortPillSmall, sortBy === 'newest' && styles.sortPillActive, {alignSelf: 'flex-start'}]} onPress={() => setSortBy('newest')}>
-                <Text style={[styles.sortPillInactiveText, sortBy === 'newest' && styles.sortPillActiveText]}>🔥 Hot</Text>
+              {/* Center and expand sort pills */}
+              <View style={{flex: 1, flexDirection: 'row', justifyContent: 'center', alignItems: 'center', gap: 8}}>
+                <TouchableOpacity style={[styles.sortPillSmall, sortBy === 'newest' && styles.sortPillActive]} onPress={() => setSortBy('newest')}>
+                  <Text style={[styles.sortPillInactiveText, sortBy === 'newest' && styles.sortPillActiveText]}>🔥 Hot</Text>
+                </TouchableOpacity>
+                <TouchableOpacity style={[styles.sortPillSmall, sortBy === 'popular' && styles.sortPillActive]} onPress={() => setSortBy('popular')}>
+                  <Text style={[styles.sortPillInactiveText, sortBy === 'popular' && styles.sortPillActiveText]}>⭐ Popular</Text>
+                </TouchableOpacity>
+                <TouchableOpacity style={[styles.sortPillSmall, sortBy === 'newest' && styles.sortPillActive]} onPress={() => setSortBy('newest')}>
+                  <Text style={[styles.sortPillInactiveText, sortBy === 'newest' && styles.sortPillActiveText]}>📄 Newest</Text>
+                </TouchableOpacity>
+                <TouchableOpacity style={[styles.sortPillSmall, (sortBy === 'price_low' || sortBy === 'price_high') && styles.sortPillActive]} onPress={() => setSortBy('price_low')}>
+                  <Text style={[styles.sortPillInactiveText, (sortBy === 'price_low' || sortBy === 'price_high') && styles.sortPillActiveText]}>💰 Price</Text>
+                </TouchableOpacity>
+                <TouchableOpacity style={[styles.sortPillSmall, sortBy === 'expiring' && styles.sortPillActive]} onPress={() => setSortBy('expiring')}>
+                  <Text style={[styles.sortPillInactiveText, sortBy === 'expiring' && styles.sortPillActiveText]}>⏰ Expiring</Text>
+                </TouchableOpacity>
+              </View>
+          </View>
+        </View>
+          {/* Unified stats and view toggle row */}
+          <View style={{flexDirection: 'row', alignItems: 'center', backgroundColor: '#4f46e5', width: '100%', paddingTop: 2, paddingBottom: 2, borderRadius: 0, margin: 0, minHeight: 0, height: 'auto'}}>
+            {/* Stats */}
+            <Text style={{color: '#fff', fontSize: 13, fontWeight: '500', marginRight: 16}}>🔥 {filteredDeals.length.toLocaleString()} active deals</Text>
+            <View style={{width: 1, height: 18, backgroundColor: '#b3b3ff', marginRight: 16}} />
+            <Text style={{color: '#fff', fontSize: 13, fontWeight: '500', marginRight: 16}}>🔥 {filteredDeals.filter(deal => {
+              const hoursAgo = (Date.now() - new Date(deal.created_at).getTime()) / (1000 * 60 * 60);
+              return hoursAgo <= 24 && (deal.votes_up || 0) > 5;
+            }).length} trending now</Text>
+            <View style={{width: 1, height: 18, backgroundColor: '#b3b3ff', marginRight: 16}} />
+            <Text style={{color: '#fff', fontSize: 13, fontWeight: '500'}}>⚡ {filteredDeals.filter(deal => {
+              const expiry = deal.expiry_date || deal.expires_at;
+              if (!expiry) return false;
+              const expiresIn = new Date(expiry).getTime() - Date.now();
+              const hoursLeft = expiresIn / (1000 * 60 * 60);
+              return hoursLeft > 0 && hoursLeft <= 24;
+            }).length} expiring soon</Text>
+            {/* View toggle flush right */}
+            <View style={{flexDirection: 'row', alignItems: 'center', marginLeft: 'auto', gap: 4}}>
+              <TouchableOpacity 
+                style={{backgroundColor: viewMode === 'grid' ? '#fff' : 'transparent', borderRadius: 8, paddingVertical: 2, paddingHorizontal: 10, marginRight: 2, borderWidth: viewMode === 'grid' ? 0 : 1, borderColor: '#fff'}}
+                onPress={() => setViewMode('grid')}
+              >
+                <Text style={{color: viewMode === 'grid' ? '#4f46e5' : '#fff', fontWeight: '600', fontSize: 13}}>Grid</Text>
               </TouchableOpacity>
-              <TouchableOpacity style={[styles.sortPillSmall, sortBy === 'popular' && styles.sortPillActive, {alignSelf: 'flex-start'}]} onPress={() => setSortBy('popular')}>
-                <Text style={[styles.sortPillInactiveText, sortBy === 'popular' && styles.sortPillActiveText]}>⭐ Popular</Text>
-              </TouchableOpacity>
-              <TouchableOpacity style={[styles.sortPillSmall, sortBy === 'newest' && styles.sortPillActive, {alignSelf: 'flex-start'}]} onPress={() => setSortBy('newest')}>
-                <Text style={[styles.sortPillInactiveText, sortBy === 'newest' && styles.sortPillActiveText]}>📄 Newest</Text>
-              </TouchableOpacity>
-              <TouchableOpacity style={[styles.sortPillSmall, (sortBy === 'price_low' || sortBy === 'price_high') && styles.sortPillActive, {alignSelf: 'flex-start'}]} onPress={() => setSortBy('price_low')}>
-                <Text style={[styles.sortPillInactiveText, (sortBy === 'price_low' || sortBy === 'price_high') && styles.sortPillActiveText]}>💰 Price</Text>
-              </TouchableOpacity>
-              <TouchableOpacity style={[styles.sortPillSmall, sortBy === 'expiring' && styles.sortPillActive, {alignSelf: 'flex-start'}]} onPress={() => setSortBy('expiring')}>
-                <Text style={[styles.sortPillInactiveText, sortBy === 'expiring' && styles.sortPillActiveText]}>⏰ Expiring</Text>
+              <TouchableOpacity 
+                style={{backgroundColor: viewMode === 'list' ? '#fff' : 'transparent', borderRadius: 8, paddingVertical: 2, paddingHorizontal: 10, borderWidth: viewMode === 'list' ? 0 : 1, borderColor: '#fff'}}
+                onPress={() => setViewMode('list')}
+              >
+                <Text style={{color: viewMode === 'list' ? '#4f46e5' : '#fff', fontWeight: '600', fontSize: 13}}>List</Text>
               </TouchableOpacity>
             </View>
           </View>
@@ -1152,52 +1212,6 @@ export default function HomeScreen() {
             )}
 
             {/* Stats Header Section for Desktop */}
-            {isDesktop && (
-              <View style={styles.statsHeader}>
-                <View style={styles.statsContainer}>
-                  <View style={styles.statItem}>
-                    <Text style={styles.statText}>
-                      🔥 {filteredDeals.length.toLocaleString()} active deals
-                    </Text>
-                  </View>
-                  <View style={styles.statDivider} />
-                  <View style={styles.statItem}>
-                    <Text style={styles.statText}>
-                      🔥 {filteredDeals.filter(deal => {
-                        const hoursAgo = (Date.now() - new Date(deal.created_at).getTime()) / (1000 * 60 * 60);
-                        return hoursAgo <= 24 && (deal.votes_up || 0) > 5;
-                      }).length} trending now
-                    </Text>
-                  </View>
-                  <View style={styles.statDivider} />
-                  <View style={styles.statItem}>
-                    <Text style={styles.statText}>
-                      ⚡ {filteredDeals.filter(deal => {
-                        const expiry = deal.expiry_date || deal.expires_at;
-                        if (!expiry) return false;
-                        const expiresIn = new Date(expiry).getTime() - Date.now();
-                        const hoursLeft = expiresIn / (1000 * 60 * 60);
-                        return hoursLeft > 0 && hoursLeft <= 24;
-                      }).length} expiring soon
-                    </Text>
-                  </View>
-                </View>
-                <View style={styles.viewToggle}>
-                  <TouchableOpacity 
-                    style={[styles.viewButton, viewMode === 'grid' && styles.viewButtonActive]}
-                    onPress={() => setViewMode('grid')}
-                  >
-                    <Text style={[styles.viewButtonText, viewMode === 'grid' && styles.viewButtonTextActive]}>🔲 Grid</Text>
-                  </TouchableOpacity>
-                  <TouchableOpacity 
-                    style={[styles.viewButton, viewMode === 'list' && styles.viewButtonActive]}
-                    onPress={() => setViewMode('list')}
-                  >
-                    <Text style={[styles.viewButtonText, viewMode === 'list' && styles.viewButtonTextActive]}>📄 List</Text>
-                  </TouchableOpacity>
-                </View>
-              </View>
-            )}
 
             {viewMode === 'list' ? (
               // List view - single column with list cards
@@ -1468,21 +1482,22 @@ const styles = StyleSheet.create({
   storeOptionTextActive: { fontSize: 14, fontWeight: '700', color: '#FFFFFF' },
   dealsContainer: { flex: 1 },
   statsHeader: {
-    flexDirection: 'row', 
-    justifyContent: 'space-between', 
+    flexDirection: 'row',
+    justifyContent: 'space-between',
     alignItems: 'center',
-  paddingHorizontal: 12,
-  paddingVertical: 2,
-    backgroundColor: '#a78bfa', 
+    paddingHorizontal: 6,
+    paddingVertical: 0,
+    backgroundColor: '#a78bfa',
     marginHorizontal: 0,
     marginBottom: 0,
     borderRadius: 0,
     borderWidth: 0,
-    minHeight: 24,
+    minHeight: 18,
+    height: 18,
   },
   statsItem: { flexDirection: 'row', alignItems: 'center' },
-  statsText: { fontSize: 12, fontWeight: '600', color: '#64748b', marginLeft: 6 },
-  trendingLink: { fontSize: 12, fontWeight: '700', color: '#6366f1' },
+  statsText: { fontSize: 10, fontWeight: '500', color: '#64748b', marginLeft: 4 },
+  trendingLink: { fontSize: 10, fontWeight: '600', color: '#6366f1' },
   locationBanner: { marginHorizontal: 16, marginBottom: 8, borderRadius: 12, overflow: 'hidden' },
   locationBannerGradient: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', paddingVertical: 12, paddingHorizontal: 16 },
   locationBannerText: { fontSize: 14, fontWeight: '700', color: '#FFFFFF', marginLeft: 8 },
@@ -1739,8 +1754,8 @@ const styles = StyleSheet.create({
   marginBottom: 0,
   borderBottomWidth: 0,
   marginTop: 0,
-  paddingTop: 0,
-  paddingBottom: 0,
+  paddingTop: 1,
+  paddingBottom: 1,
   borderWidth: 0,
   backgroundColor: 'transparent',
   shadowColor: 'transparent',
@@ -1755,8 +1770,6 @@ const styles = StyleSheet.create({
   justifyContent: 'center',
     minHeight: 39,
     height: 39,
-  paddingTop: 1,
-  paddingBottom: 1,
   },
   subHeaderContent: {
   flexDirection: 'row',

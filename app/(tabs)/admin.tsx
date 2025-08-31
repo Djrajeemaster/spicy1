@@ -2,7 +2,8 @@ import React, { useState, useCallback, useRef } from 'react';
 import { View, Text, StyleSheet, ScrollView, ActivityIndicator, TouchableOpacity, Alert } from 'react-native';
 import { useFocusEffect } from '@react-navigation/native';
 import { AdminHeader } from '@/components/admin/AdminHeader';
-import { AdminTabNavigation, AdminTab } from '@/components/admin/AdminTabNavigation';
+import { AdminTab } from '@/components/admin/AdminTabNavigation';
+import { AdminSidebar } from '@/components/admin/AdminSidebar';
 import { useAdminData } from '@/hooks/useAdminData';
 import { UserManagement } from '@/components/admin/UserManagement';
 import { DealManagement } from '@/components/admin/DealManagement';
@@ -23,8 +24,27 @@ import AdminAuditLog from '../admin/audit-log';
 
 export default function AdminScreen() {
   const [activeTab, setActiveTab] = useState<AdminTab>('dashboard');
-  const { profile } = useAuth();
+  const { profile, user, loading } = useAuth();
   const currentUserRole = profile?.role || 'guest';
+
+  // Redirect unauthenticated users to login
+  if (!loading && !user) {
+    router.replace('/sign-in');
+    return null;
+  }
+
+  // Restrict access to settings tab for non-superadmin
+  if (activeTab === 'settings' && currentUserRole !== 'superadmin') {
+    return (
+      <View style={styles.container}>
+        <AdminHeader currentUserRole={currentUserRole} />
+        <View style={styles.contentSection}>
+          <Text style={{ color: '#dc2626', fontWeight: 'bold', fontSize: 18 }}>Access Denied</Text>
+          <Text style={{ marginTop: 8 }}>You do not have permission to view this page.</Text>
+        </View>
+      </View>
+    );
+  }
 
   const {
     users,
@@ -33,7 +53,7 @@ export default function AdminScreen() {
     pendingDeals,
     systemSettings,
     adminStats,
-    loading,
+    loading: adminLoading,
     handleUserAction,
     handleDealAction,
     toggleCategory,
@@ -133,19 +153,25 @@ export default function AdminScreen() {
   };
 
   return (
-    <View style={styles.container}>
+    <View style={styles.sidebarLayout}>
       <AdminHeader currentUserRole={currentUserRole} />
-      <AdminTabNavigation activeTab={activeTab} onTabChange={setActiveTab} userRole={currentUserRole} />
-      <ScrollView style={styles.content} showsVerticalScrollIndicator={false}>
-        {activeTab === 'settings' && currentUserRole !== 'superadmin' ? null : renderContent()}
-        <View style={styles.bottomPadding} />
-      </ScrollView>
+      <View style={styles.mainRow}>
+        <View style={styles.sidebarWrapper}>
+          <AdminSidebar activeTab={activeTab} onTabChange={setActiveTab} userRole={currentUserRole} />
+        </View>
+        <ScrollView style={styles.content} showsVerticalScrollIndicator={false}>
+          {activeTab === 'settings' && currentUserRole !== 'superadmin' ? null : renderContent()}
+          <View style={styles.bottomPadding} />
+        </ScrollView>
+      </View>
     </View>
   );
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#f8fafc' },
+  sidebarLayout: { flex: 1, backgroundColor: '#f8fafc' },
+  mainRow: { flex: 1, flexDirection: 'row' },
+  sidebarWrapper: { width: 220, backgroundColor: '#fff', borderRightWidth: 1, borderRightColor: '#e2e8f0' },
   loadingContainer: { flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: '#f8fafc' },
   loadingText: { marginTop: 10, fontSize: 16, color: '#64748b' },
   content: { flex: 1 },
