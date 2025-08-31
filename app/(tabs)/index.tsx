@@ -630,20 +630,20 @@ export default function HomeScreen() {
               top: undefined,
               zIndex: 100,
               padding: 0,
-              minHeight: 80, // Further increased height for filter bar
-              height: 80
+              minHeight: 48, // Reduced height for sub-header
+              height: 48 // Smaller than main header
             }
           ]}
         >
           {/* Top row: filter controls and sort pills */}
-          <View style={{flexDirection: 'row', alignItems: 'center', flexWrap: 'nowrap', width: '100%', gap: 8, margin: 0, paddingTop: 2, paddingBottom: 2, minHeight: 0, height: 'auto'}}>
-            <View style={{flexDirection: 'row', alignItems: 'center', gap: 16}}>
+          <View style={{ flexDirection: 'row', alignItems: 'center', flexWrap: 'nowrap', width: '100%', gap: 8, margin: 0, paddingTop: 0, paddingBottom: 0, minHeight: 0, height: 'auto' }}>
+            {/* Left Filters */}
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 16 }}>
               <View style={styles.subHeaderLeft}>
-                <Text style={styles.subHeaderTitle}>Category:</Text>
                 <TouchableOpacity style={styles.subHeaderDropdown} onPress={() => setOpenDropdown(openDropdown === 'categories' ? null : 'categories')}>
                   <Text style={styles.subHeaderValue}>
-                    {selectedCategories.includes('all') || selectedCategories.length === 0 
-                      ? '🔥 All Categories' 
+                    {selectedCategories.includes('all') || selectedCategories.length === 0
+                      ? '🔥 All Categories'
                       : `🔥 ${availableCategories.find(c => c.id === selectedCategories[0])?.name || 'Selected'}`
                     }
                   </Text>
@@ -651,11 +651,10 @@ export default function HomeScreen() {
                 </TouchableOpacity>
               </View>
               <View style={styles.subHeaderMiddle}>
-                <Text style={styles.subHeaderTitle}>Store:</Text>
                 <TouchableOpacity style={styles.subHeaderDropdown} onPress={() => setOpenDropdown(openDropdown === 'stores' ? null : 'stores')}>
                   <Text style={styles.subHeaderValue}>
-                    {selectedStores.includes('all') || selectedStores.length === 0 
-                      ? '🏪 All Stores' 
+                    {selectedStores.includes('all') || selectedStores.length === 0
+                      ? '🏪 All Stores'
                       : `🏪 ${availableStores.find(s => s.id === selectedStores[0])?.name || 'Selected'}`
                     }
                   </Text>
@@ -663,7 +662,6 @@ export default function HomeScreen() {
                 </TouchableOpacity>
               </View>
               <View style={styles.subHeaderMiddle}>
-                <Text style={styles.subHeaderTitle}>Location:</Text>
                 <TouchableOpacity style={styles.subHeaderDropdown} onPress={async () => {
                   if (!locationEnabled) {
                     await handleLocationToggle();
@@ -672,10 +670,10 @@ export default function HomeScreen() {
                   setOpenDropdown(openDropdown === 'location' ? null : 'location');
                 }}>
                   <Text style={styles.subHeaderValue}>
-                    {!locationEnabled 
-                      ? '📍 Enable Location' 
-                      : selectedRadius === null 
-                        ? '📍 All Locations' 
+                    {!locationEnabled
+                      ? '📍 Enable Location'
+                      : selectedRadius === null
+                        ? '📍 All Locations'
                         : `📍 Within ${selectedRadius}km`
                     }
                   </Text>
@@ -683,61 +681,117 @@ export default function HomeScreen() {
                 </TouchableOpacity>
               </View>
             </View>
-            <View style={[styles.sortPillsDisplay, {margin: 0, padding: 0, flexDirection: 'row', alignItems: 'center', marginLeft: 'auto'}]}> 
-              {/* Center and expand sort pills */}
-              <View style={{flex: 1, flexDirection: 'row', justifyContent: 'center', alignItems: 'center', gap: 8}}>
-                <TouchableOpacity style={[styles.sortPillSmall, sortBy === 'newest' && styles.sortPillActive]} onPress={() => setSortBy('newest')}>
-                  <Text style={[styles.sortPillInactiveText, sortBy === 'newest' && styles.sortPillActiveText]}>🔥 Hot</Text>
+
+            {/* Center Stats */}
+            <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'center', flex: 1, gap: 12 }}>
+              <Text style={{ color: '#fff', fontSize: 12, fontWeight: '500' }}>🔥 {filteredDeals.length.toLocaleString()} active deals</Text>
+              <View style={{ width: 1, height: 14, backgroundColor: '#b3b3ff' }} />
+              <Text style={{ color: '#fff', fontSize: 12, fontWeight: '500' }}>🔥 {filteredDeals.filter(deal => {
+                const hoursAgo = (Date.now() - new Date(deal.created_at).getTime()) / (1000 * 60 * 60);
+                return hoursAgo <= 24 && (deal.votes_up || 0) > 5;
+              }).length} trending now</Text>
+              <View style={{ width: 1, height: 14, backgroundColor: '#b3b3ff' }} />
+              <Text style={{ color: '#fff', fontSize: 12, fontWeight: '500' }}>⚡ {filteredDeals.filter(deal => {
+                const expiry = deal.expiry_date || deal.expires_at;
+                if (!expiry) return false;
+                const expiresIn = new Date(expiry).getTime() - Date.now();
+                const hoursLeft = expiresIn / (1000 * 60 * 60);
+                return hoursLeft > 0 && hoursLeft <= 24;
+              }).length} expiring soon</Text>
+            </View>
+
+            {/* Right Sort Pills */}
+            <View style={[styles.sortPillsDisplay, { margin: 0, padding: 0, flexDirection: 'row', alignItems: 'center', marginLeft: 'auto', gap: 8 }]}> 
+              {/* Grid/List Toggle */}
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 0, marginRight: 8 }}>
+                <TouchableOpacity
+                  style={{
+                    backgroundColor: viewMode === 'grid' ? '#fff' : 'transparent',
+                    borderRadius: 14,
+                    paddingVertical: 2,
+                    paddingHorizontal: 8,
+                    borderWidth: viewMode === 'grid' ? 2 : 1,
+                    borderColor: viewMode === 'grid' ? '#6366f1' : '#e5e7eb',
+                    marginRight: 2,
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    ...(isDesktop ? { cursor: 'pointer' } : {}),
+                  }}
+                  onPress={() => setViewMode('grid')}
+                  activeOpacity={0.85}
+                >
+                  <Text style={{ color: viewMode === 'grid' ? '#6366f1' : '#fff', fontWeight: '700', fontSize: 13 }}>▦</Text>
                 </TouchableOpacity>
-                <TouchableOpacity style={[styles.sortPillSmall, sortBy === 'popular' && styles.sortPillActive]} onPress={() => setSortBy('popular')}>
-                  <Text style={[styles.sortPillInactiveText, sortBy === 'popular' && styles.sortPillActiveText]}>⭐ Popular</Text>
-                </TouchableOpacity>
-                <TouchableOpacity style={[styles.sortPillSmall, sortBy === 'newest' && styles.sortPillActive]} onPress={() => setSortBy('newest')}>
-                  <Text style={[styles.sortPillInactiveText, sortBy === 'newest' && styles.sortPillActiveText]}>📄 Newest</Text>
-                </TouchableOpacity>
-                <TouchableOpacity style={[styles.sortPillSmall, (sortBy === 'price_low' || sortBy === 'price_high') && styles.sortPillActive]} onPress={() => setSortBy('price_low')}>
-                  <Text style={[styles.sortPillInactiveText, (sortBy === 'price_low' || sortBy === 'price_high') && styles.sortPillActiveText]}>💰 Price</Text>
-                </TouchableOpacity>
-                <TouchableOpacity style={[styles.sortPillSmall, sortBy === 'expiring' && styles.sortPillActive]} onPress={() => setSortBy('expiring')}>
-                  <Text style={[styles.sortPillInactiveText, sortBy === 'expiring' && styles.sortPillActiveText]}>⏰ Expiring</Text>
+                <TouchableOpacity
+                  style={{
+                    backgroundColor: viewMode === 'list' ? '#fff' : 'transparent',
+                    borderRadius: 14,
+                    paddingVertical: 2,
+                    paddingHorizontal: 8,
+                    borderWidth: viewMode === 'list' ? 2 : 1,
+                    borderColor: viewMode === 'list' ? '#6366f1' : '#e5e7eb',
+                    marginLeft: 2,
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    ...(isDesktop ? { cursor: 'pointer' } : {}),
+                  }}
+                  onPress={() => setViewMode('list')}
+                  activeOpacity={0.85}
+                >
+                  <Text style={{ color: viewMode === 'list' ? '#6366f1' : '#fff', fontWeight: '700', fontSize: 13 }}>≡</Text>
                 </TouchableOpacity>
               </View>
-          </View>
-        </View>
-          {/* Unified stats and view toggle row */}
-          <View style={{flexDirection: 'row', alignItems: 'center', backgroundColor: '#4f46e5', width: '100%', paddingTop: 2, paddingBottom: 2, borderRadius: 0, margin: 0, minHeight: 0, height: 'auto'}}>
-            {/* Stats */}
-            <Text style={{color: '#fff', fontSize: 13, fontWeight: '500', marginRight: 16}}>🔥 {filteredDeals.length.toLocaleString()} active deals</Text>
-            <View style={{width: 1, height: 18, backgroundColor: '#b3b3ff', marginRight: 16}} />
-            <Text style={{color: '#fff', fontSize: 13, fontWeight: '500', marginRight: 16}}>🔥 {filteredDeals.filter(deal => {
-              const hoursAgo = (Date.now() - new Date(deal.created_at).getTime()) / (1000 * 60 * 60);
-              return hoursAgo <= 24 && (deal.votes_up || 0) > 5;
-            }).length} trending now</Text>
-            <View style={{width: 1, height: 18, backgroundColor: '#b3b3ff', marginRight: 16}} />
-            <Text style={{color: '#fff', fontSize: 13, fontWeight: '500'}}>⚡ {filteredDeals.filter(deal => {
-              const expiry = deal.expiry_date || deal.expires_at;
-              if (!expiry) return false;
-              const expiresIn = new Date(expiry).getTime() - Date.now();
-              const hoursLeft = expiresIn / (1000 * 60 * 60);
-              return hoursLeft > 0 && hoursLeft <= 24;
-            }).length} expiring soon</Text>
-            {/* View toggle flush right */}
-            <View style={{flexDirection: 'row', alignItems: 'center', marginLeft: 'auto', gap: 4}}>
-              <TouchableOpacity 
-                style={{backgroundColor: viewMode === 'grid' ? '#fff' : 'transparent', borderRadius: 8, paddingVertical: 2, paddingHorizontal: 10, marginRight: 2, borderWidth: viewMode === 'grid' ? 0 : 1, borderColor: '#fff'}}
-                onPress={() => setViewMode('grid')}
-              >
-                <Text style={{color: viewMode === 'grid' ? '#4f46e5' : '#fff', fontWeight: '600', fontSize: 13}}>Grid</Text>
-              </TouchableOpacity>
-              <TouchableOpacity 
-                style={{backgroundColor: viewMode === 'list' ? '#fff' : 'transparent', borderRadius: 8, paddingVertical: 2, paddingHorizontal: 10, borderWidth: viewMode === 'list' ? 0 : 1, borderColor: '#fff'}}
-                onPress={() => setViewMode('list')}
-              >
-                <Text style={{color: viewMode === 'list' ? '#4f46e5' : '#fff', fontWeight: '600', fontSize: 13}}>List</Text>
-              </TouchableOpacity>
+              {/* Sort Pills */}
+              <View style={{
+                flexDirection: 'row',
+                justifyContent: 'center',
+                alignItems: 'center',
+                gap: 6,
+                paddingVertical: 0,
+                paddingHorizontal: 0,
+              }}>
+                {[
+                  { key: 'newest', label: 'Newest', icon: '🕐' },
+                  { key: 'popular', label: 'Popular', icon: '🔥' },
+                  { key: 'price_low', label: 'Low Price', icon: '💰' },
+                  { key: 'price_high', label: 'High Price', icon: '💎' },
+                  { key: 'expiring', label: 'Expiring', icon: '⏰' }
+                ].map(option => (
+                  <TouchableOpacity
+                    key={option.key}
+                    style={{
+                      backgroundColor: sortBy === option.key ? '#fff' : '#f3f4f6',
+                      borderRadius: 14,
+                      paddingVertical: 4,
+                      paddingHorizontal: 10,
+                      marginHorizontal: 2,
+                      borderWidth: sortBy === option.key ? 2 : 1,
+                      borderColor: sortBy === option.key ? '#6366f1' : '#e5e7eb',
+                      minWidth: 60,
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      ...(isDesktop ? { cursor: 'pointer' } : {}),
+                    }}
+                    onPress={() => setSortBy(option.key as typeof sortBy)}
+                    activeOpacity={0.85}
+                  >
+                    <Text style={{
+                      color: sortBy === option.key ? '#6366f1' : '#6366f1',
+                      fontWeight: sortBy === option.key ? '700' : '500',
+                      fontSize: 13,
+                      display: 'flex',
+                      flexDirection: 'row',
+                      alignItems: 'center',
+                    }}>
+                      <Text style={{ marginRight: 5 }}>{option.icon}</Text>
+                      {option.label}
+                    </Text>
+                  </TouchableOpacity>
+                ))}
+              </View>
             </View>
           </View>
-        </Animated.View>
+  </Animated.View>
       )}
 
       {/* Sub-header Dropdown Backdrop */}
