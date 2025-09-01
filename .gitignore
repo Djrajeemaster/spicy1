@@ -30,6 +30,21 @@ yarn-error.*
 # local env files
 .env*.local
 .env
+.env.development
+.env.production
+
+# logs
+logs/
+*.log
+
+# ssl certificates
+ssl/
+*.pem
+*.key
+*.crt
+
+# docker
+docker-compose.override.yml
 
 # typescript
 *.tsbuildinfo

@@ -14,13 +14,16 @@ export default function TestAdminScreen() {
     }
 
     try {
-      const { error } = await (supabase
-        .from('users') as any)
-        .update({ role: 'admin' })
-        .eq('id', user.id);
+      const response = await fetch(`http://localhost:3000/api/users/${user.id}/role`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
+        body: JSON.stringify({ role: 'admin' })
+      });
 
-      if (error) {
-        Alert.alert('Error', `Failed to update role: ${error.message}`);
+      const data = await response.json();
+      if (!response.ok) {
+        Alert.alert('Error', data.error || 'Failed to update role');
       } else {
         Alert.alert('Success', 'User role updated to admin. Please refresh the app.');
       }
@@ -36,13 +39,16 @@ export default function TestAdminScreen() {
     }
 
     try {
-      const { error } = await (supabase
-        .from('users') as any)
-        .update({ role: 'super_admin' })
-        .eq('id', user.id);
+      const response = await fetch(`http://localhost:3000/api/users/${user.id}/role`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
+        body: JSON.stringify({ role: 'super_admin' })
+      });
 
-      if (error) {
-        Alert.alert('Error', `Failed to update role: ${error.message}`);
+      const data = await response.json();
+      if (!response.ok) {
+        Alert.alert('Error', data.error || 'Failed to update role');
       } else {
         Alert.alert('Success', 'User role updated to super admin. Please refresh the app.');
       }
@@ -58,13 +64,16 @@ export default function TestAdminScreen() {
     }
 
     try {
-      const { error } = await (supabase
-        .from('users') as any)
-        .update({ role: 'user' })
-        .eq('id', user.id);
+      const response = await fetch(`http://localhost:3000/api/users/${user.id}/role`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
+        body: JSON.stringify({ role: 'user' })
+      });
 
-      if (error) {
-        Alert.alert('Error', `Failed to update role: ${error.message}`);
+      const data = await response.json();
+      if (!response.ok) {
+        Alert.alert('Error', data.error || 'Failed to update role');
       } else {
         Alert.alert('Success', 'User role updated to regular user. Please refresh the app.');
       }

@@ -1,1 +1,0 @@
-/* SQL add mentions column */

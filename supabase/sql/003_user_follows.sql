@@ -1,1 +1,0 @@
-/* SQL for user_follows table */

@@ -183,7 +183,7 @@ export const UserManagement: React.FC<UserManagementProps> = ({ onAddUser }) => 
         limit: 30, 
         cursor: reset ? undefined : cursor || undefined 
       });
-      setUsers(prev => reset ? res.items : [...prev, ...res.items]);
+      setUsers(prev => reset ? (res.items || []) : [...(prev || []), ...(res.items || [])]);
       setCursor(res.next_cursor ?? null);
     } catch (error: any) {
       Alert.alert('Error', error.message || 'Failed to load users');
@@ -247,7 +247,7 @@ export const UserManagement: React.FC<UserManagementProps> = ({ onAddUser }) => 
   };
 
   const selectAllUsers = () => {
-    const allUserIds = new Set(users.map(user => user.id));
+    const allUserIds = new Set((users || []).map(user => user.id));
     setSelectedUsers(allUserIds);
   };
 
@@ -349,14 +349,14 @@ export const UserManagement: React.FC<UserManagementProps> = ({ onAddUser }) => 
       </View>
 
       {/* User List */}
-      {loading && users.length === 0 ? (
+      {loading && (users || []).length === 0 ? (
         <View style={styles.loadingContainer}>
           <ActivityIndicator size="large" color="#4f46e5" />
           <Text style={styles.loadingText}>Loading users...</Text>
         </View>
       ) : (
         <FlatList
-          data={users}
+          data={users || []}
           renderItem={renderUser}
           keyExtractor={(item) => item.id}
           onEndReached={() => cursor && !loading && loadUsers(false)}

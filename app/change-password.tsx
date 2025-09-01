@@ -76,21 +76,20 @@ export default function ChangePasswordScreen() {
 
     setLoading(true);
     try {
-      // Verify user is authenticated
-      const { data: user } = await supabase.auth.getUser();
-      if (!user.user) {
-        Alert.alert('Error', 'Please sign in again to change your password.');
-        return;
-      }
-
-      // Update password - Supabase will handle current password verification
-      const { error: updateError } = await supabase.auth.updateUser({
-        password: newPassword,
+      const response = await fetch('http://localhost:3000/api/auth/change-password', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
+        body: JSON.stringify({
+          currentPassword,
+          newPassword
+        })
       });
 
-      if (updateError) {
-        setSuccessBanner(false);
-        Alert.alert('Error', `Failed to update password: ${updateError.message}`);
+      const data = await response.json();
+
+      if (!response.ok) {
+        Alert.alert('Error', data.error || 'Failed to update password');
       } else {
         setSuccessBanner(true);
         setTimeout(() => {

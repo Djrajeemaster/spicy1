@@ -1,9 +1,0 @@
-# supabase/config.toml (merge schedules into your existing config if you have one)
-[functions.process-alerts]
-verify_jwt = false
-
-[schedules]
-# Run process-alerts every 5 minutes
-jobs = [
-  { name = "process-alerts", schedule = "*/5 * * * *", endpoint = "/functions/v1/process-alerts" }
-]

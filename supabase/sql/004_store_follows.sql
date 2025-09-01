@@ -1,1 +1,0 @@
-/* SQL for store_follows table */

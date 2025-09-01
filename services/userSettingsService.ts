@@ -30,7 +30,7 @@ class UserSettingsService {
       let settings: NotificationPreferences;
       
       if (Platform.OS === 'web') {
-        const stored = localStorage.getItem('spicy_notification_settings');
+        const stored = localStorage.getItem('savers_dream_notification_settings');
         settings = stored ? JSON.parse(stored) : {
           pushNotifications: true,
           emailNotifications: false,
@@ -71,7 +71,7 @@ class UserSettingsService {
       };
 
       if (Platform.OS === 'web') {
-        localStorage.setItem('spicy_notification_settings', JSON.stringify(updatedSettings));
+        localStorage.setItem('savers_dream_notification_settings', JSON.stringify(updatedSettings));
       }
       // TODO: Implement AsyncStorage for React Native
 
@@ -88,7 +88,7 @@ class UserSettingsService {
       let settings: UserSettings['privacy'];
       
       if (Platform.OS === 'web') {
-        const stored = localStorage.getItem('spicy_privacy_settings');
+        const stored = localStorage.getItem('savers_dream_privacy_settings');
         settings = stored ? JSON.parse(stored) : {
           profileVisible: true,
           showEmail: false,
@@ -129,7 +129,7 @@ class UserSettingsService {
       };
 
       if (Platform.OS === 'web') {
-        localStorage.setItem('spicy_privacy_settings', JSON.stringify(updatedSettings));
+        localStorage.setItem('savers_dream_privacy_settings', JSON.stringify(updatedSettings));
       }
       // TODO: Implement AsyncStorage for React Native
 
@@ -146,7 +146,7 @@ class UserSettingsService {
       let settings: UserSettings['app'];
       
       if (Platform.OS === 'web') {
-        const stored = localStorage.getItem('spicy_app_settings');
+        const stored = localStorage.getItem('savers_dream_app_settings');
         settings = stored ? JSON.parse(stored) : {
           darkMode: false,
           autoRefresh: true,
@@ -184,7 +184,7 @@ class UserSettingsService {
       };
 
       if (Platform.OS === 'web') {
-        localStorage.setItem('spicy_app_settings', JSON.stringify(updatedSettings));
+        localStorage.setItem('savers_dream_app_settings', JSON.stringify(updatedSettings));
       }
       // TODO: Implement AsyncStorage for React Native
 

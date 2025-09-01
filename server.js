@@ -653,7 +653,7 @@ app.post('/api/comments/:id/flag', async (req, res) => {
 // Create superadmin endpoint (for initial setup)
 app.post('/api/auth/create-superadmin', async (req, res) => {
   try {
-    const { email = 'admin@spicymug.com', password = 'admin123', username = 'superadmin' } = req.body;
+    const { email = 'admin@saversdream.com', password = 'admin123', username = 'superadmin' } = req.body;
     
     // Hash password
     const saltRounds = 10;
@@ -986,6 +986,60 @@ app.get('/api/admin/system-health', async (req, res) => {
   }
 });
 
+app.get('/api/admin/user-stats', async (req, res) => {
+  try {
+    const { user_id } = req.query;
+    
+    if (!user_id) {
+      return res.status(400).json({ error: 'user_id is required' });
+    }
+    
+    // Get user basic info
+    const { rows: userRows } = await pool.query(
+      'SELECT id, username, email, role, created_at, status FROM users WHERE id = $1',
+      [user_id]
+    );
+    
+    if (userRows.length === 0) {
+      return res.status(404).json({ error: 'User not found' });
+    }
+    
+    const user = userRows[0];
+    
+    // Get user stats
+    const [dealsResult, commentsResult, votesGivenResult, votesReceivedResult] = await Promise.all([
+      pool.query('SELECT COUNT(*) as count FROM deals WHERE created_by = $1', [user_id]),
+      pool.query('SELECT COUNT(*) as count FROM comments WHERE user_id = $1', [user_id]),
+      pool.query('SELECT COUNT(*) as count FROM votes WHERE user_id = $1', [user_id]),
+      pool.query('SELECT COUNT(*) as count FROM votes v JOIN deals d ON v.deal_id = d.id WHERE d.created_by = $1', [user_id])
+    ]);
+    
+    const accountAgeMs = Date.now() - new Date(user.created_at).getTime();
+    const accountAgeDays = Math.floor(accountAgeMs / (1000 * 60 * 60 * 24));
+    
+    const stats = {
+      user,
+      stats: {
+        total_deals: parseInt(dealsResult.rows[0]?.count || 0),
+        total_comments: parseInt(commentsResult.rows[0]?.count || 0),
+        total_votes_given: parseInt(votesGivenResult.rows[0]?.count || 0),
+        total_votes_received: parseInt(votesReceivedResult.rows[0]?.count || 0),
+        account_age_days: accountAgeDays,
+        last_activity: user.updated_at || user.created_at,
+        is_banned: user.status === 'banned',
+        is_suspended: user.status === 'suspended',
+        ban_expiry: null,
+        suspend_expiry: null
+      }
+    };
+    
+    res.json(stats);
+  } catch (err) {
+    console.error('Error fetching user stats:', err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
 // Follow endpoints
 // Follow a user
 app.post('/api/follows/user', async (req, res) => {
@@ -1189,6 +1243,848 @@ app.get('/api/follows/feed', async (req, res) => {
     res.json(transformedRows);
   } catch (err) {
     console.error('Error fetching following feed:', err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// Change password endpoint
+app.post('/api/auth/change-password', async (req, res) => {
+  try {
+    const sessionId = req.cookies.session_id;
+    if (!sessionId) {
+      return res.status(401).json({ error: 'Not authenticated' });
+    }
+
+    const { currentPassword, newPassword } = req.body;
+    
+    if (!currentPassword || !newPassword) {
+      return res.status(400).json({ error: 'Current and new passwords are required' });
+    }
+
+    // Get user from database
+    const { rows } = await pool.query(
+      'SELECT password_hash FROM users WHERE id = $1',
+      [sessionId]
+    );
+
+    if (rows.length === 0) {
+      return res.status(404).json({ error: 'User not found' });
+    }
+
+    // Verify current password
+    const validPassword = await bcrypt.compare(currentPassword, rows[0].password_hash);
+    if (!validPassword) {
+      return res.status(400).json({ error: 'Current password is incorrect' });
+    }
+
+    // Hash new password
+    const saltRounds = 10;
+    const newPasswordHash = await bcrypt.hash(newPassword, saltRounds);
+
+    // Update password
+    await pool.query(
+      'UPDATE users SET password_hash = $1, updated_at = NOW() WHERE id = $2',
+      [newPasswordHash, sessionId]
+    );
+
+    res.json({ message: 'Password updated successfully' });
+  } catch (err) {
+    console.error('Error changing password:', err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// Update user role endpoint
+app.put('/api/users/:id/role', async (req, res) => {
+  try {
+    const sessionId = req.cookies.session_id;
+    if (!sessionId) {
+      return res.status(401).json({ error: 'Not authenticated' });
+    }
+
+    const { id } = req.params;
+    const { role } = req.body;
+
+    // Check if user is admin (only admins can change roles)
+    const { rows: adminCheck } = await pool.query(
+      'SELECT role FROM users WHERE id = $1',
+      [sessionId]
+    );
+
+    if (adminCheck.length === 0 || !['admin', 'super_admin'].includes(adminCheck[0].role)) {
+      return res.status(403).json({ error: 'Insufficient permissions' });
+    }
+
+    // Update user role
+    const { rows } = await pool.query(
+      'UPDATE users SET role = $1, updated_at = NOW() WHERE id = $2 RETURNING id, username, email, role',
+      [role, id]
+    );
+
+    if (rows.length === 0) {
+      return res.status(404).json({ error: 'User not found' });
+    }
+
+    res.json(rows[0]);
+  } catch (err) {
+    console.error('Error updating user role:', err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// Store push token endpoint
+app.post('/api/push-tokens', async (req, res) => {
+  try {
+    const sessionId = req.cookies.session_id;
+    if (!sessionId) {
+      return res.status(401).json({ error: 'Not authenticated' });
+    }
+
+    const { token, platform, device_id, app_version } = req.body;
+    
+    await pool.query(
+      `INSERT INTO push_tokens (token, user_id, platform, device_id, app_version, disabled, created_at, updated_at) 
+       VALUES ($1, $2, $3, $4, $5, false, NOW(), NOW()) 
+       ON CONFLICT (token) DO UPDATE SET 
+       user_id = EXCLUDED.user_id, 
+       platform = EXCLUDED.platform, 
+       device_id = EXCLUDED.device_id, 
+       app_version = EXCLUDED.app_version, 
+       updated_at = NOW()`,
+      [token, sessionId, platform, device_id, app_version]
+    );
+
+    res.json({ success: true });
+  } catch (err) {
+    console.error('Error storing push token:', err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// Reports endpoints
+app.get('/api/reports', async (req, res) => {
+  try {
+    const { status } = req.query;
+    let query = 'SELECT * FROM user_reports';
+    const params = [];
+    
+    if (status) {
+      query += ' WHERE status = $1';
+      params.push(status);
+    }
+    
+    query += ' ORDER BY created_at DESC';
+    
+    const { rows } = await pool.query(query, params);
+    res.json(rows);
+  } catch (err) {
+    console.error('Error fetching reports:', err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.get('/api/user_reports', async (req, res) => {
+  try {
+    const { status } = req.query;
+    let query = 'SELECT * FROM user_reports';
+    const params = [];
+    
+    if (status) {
+      query += ' WHERE status = $1';
+      params.push(status);
+    }
+    
+    query += ' ORDER BY created_at DESC';
+    
+    const { rows } = await pool.query(query, params);
+    res.json(rows);
+  } catch (err) {
+    console.error('Error fetching user reports:', err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// Affiliate endpoints
+app.get('/api/affiliate-settings', async (req, res) => {
+  try {
+    const { rows } = await pool.query('SELECT * FROM affiliate_settings ORDER BY store_name ASC');
+    res.json(rows);
+  } catch (err) {
+    console.error('Error fetching affiliate settings:', err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.get('/api/affiliate-stats', async (req, res) => {
+  try {
+    const { rows } = await pool.query('SELECT store_name, country_code, is_active FROM affiliate_settings');
+    
+    const stats = {
+      total_stores: 0,
+      active_affiliates: 0,
+      total_countries: 0,
+      stores_by_country: {},
+    };
+    
+    if (rows) {
+      const uniqueStores = new Set();
+      const uniqueCountries = new Set();
+      
+      rows.forEach((setting) => {
+        uniqueStores.add(setting.store_name);
+        uniqueCountries.add(setting.country_code);
+        
+        if (setting.is_active) {
+          stats.active_affiliates++;
+        }
+        
+        if (!stats.stores_by_country[setting.country_code]) {
+          stats.stores_by_country[setting.country_code] = 0;
+        }
+        stats.stores_by_country[setting.country_code]++;
+      });
+      
+      stats.total_stores = uniqueStores.size;
+      stats.total_countries = uniqueCountries.size;
+    }
+    
+    res.json(stats);
+  } catch (err) {
+    console.error('Error fetching affiliate stats:', err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// Admin elevation endpoint
+app.post('/api/admin/elevate', async (req, res) => {
+  try {
+    const sessionId = req.cookies.session_id;
+    if (!sessionId) {
+      return res.status(401).json({ error: 'Not authenticated' });
+    }
+
+    // Check if user is admin
+    const { rows } = await pool.query(
+      'SELECT role FROM users WHERE id = $1',
+      [sessionId]
+    );
+
+    if (rows.length === 0 || !['admin', 'superadmin'].includes(rows[0].role)) {
+      return res.status(403).json({ error: 'Insufficient permissions' });
+    }
+
+    // Return elevation token (simplified for development) - note the service expects 'token' not 'elevationToken'
+    const token = `elevation_${sessionId}_${Date.now()}`;
+    res.json({ token });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// Get user stats for admin panel
+app.get('/api/admin/user-stats/:userId', async (req, res) => {
+  try {
+    const { userId } = req.params;
+    
+    // Get user basic info
+    const { rows: userRows } = await pool.query(
+      'SELECT id, username, email, role, created_at, status FROM users WHERE id = $1',
+      [userId]
+    );
+    
+    if (userRows.length === 0) {
+      return res.status(404).json({ error: 'User not found' });
+    }
+    
+    const user = userRows[0];
+    
+    // Get user stats
+    const [dealsResult, commentsResult, votesGivenResult, votesReceivedResult] = await Promise.all([
+      pool.query('SELECT COUNT(*) as count FROM deals WHERE created_by = $1', [userId]),
+      pool.query('SELECT COUNT(*) as count FROM comments WHERE user_id = $1', [userId]),
+      pool.query('SELECT COUNT(*) as count FROM votes WHERE user_id = $1', [userId]),
+      pool.query('SELECT COUNT(*) as count FROM votes v JOIN deals d ON v.deal_id = d.id WHERE d.created_by = $1', [userId])
+    ]);
+    
+    const accountAgeMs = Date.now() - new Date(user.created_at).getTime();
+    const accountAgeDays = Math.floor(accountAgeMs / (1000 * 60 * 60 * 24));
+    
+    const stats = {
+      user,
+      stats: {
+        total_deals: parseInt(dealsResult.rows[0]?.count || 0),
+        total_comments: parseInt(commentsResult.rows[0]?.count || 0),
+        total_votes_given: parseInt(votesGivenResult.rows[0]?.count || 0),
+        total_votes_received: parseInt(votesReceivedResult.rows[0]?.count || 0),
+        account_age_days: accountAgeDays,
+        last_activity: user.updated_at || user.created_at,
+        is_banned: user.status === 'banned',
+        is_suspended: user.status === 'suspended',
+        ban_expiry: null,
+        suspend_expiry: null
+      }
+    };
+    
+    res.json(stats);
+  } catch (err) {
+    console.error('Error fetching user stats:', err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// Admin user action endpoints
+app.post('/api/admin/admin-ban-user', async (req, res) => {
+  try {
+    const { user_id, reason, duration_days } = req.body;
+    await pool.query('UPDATE users SET status = $1 WHERE id = $2', ['banned', user_id]);
+    res.json({ success: true, message: 'User banned successfully' });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.post('/api/admin/admin-unban-user', async (req, res) => {
+  try {
+    const { user_id, reason } = req.body;
+    await pool.query('UPDATE users SET status = $1 WHERE id = $2', ['active', user_id]);
+    res.json({ success: true, message: 'User unbanned successfully' });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.post('/api/admin/admin-suspend-user', async (req, res) => {
+  try {
+    const { user_id, reason, duration_days } = req.body;
+    await pool.query('UPDATE users SET status = $1 WHERE id = $2', ['suspended', user_id]);
+    res.json({ success: true, message: 'User suspended successfully' });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.post('/api/admin/admin-unsuspend-user', async (req, res) => {
+  try {
+    const { user_id, reason } = req.body;
+    await pool.query('UPDATE users SET status = $1 WHERE id = $2', ['active', user_id]);
+    res.json({ success: true, message: 'User unsuspended successfully' });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.post('/api/admin/admin-change-role', async (req, res) => {
+  try {
+    const { user_id, new_role, reason } = req.body;
+    await pool.query('UPDATE users SET role = $1 WHERE id = $2', [new_role, user_id]);
+    res.json({ success: true, message: 'User role changed successfully' });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.post('/api/admin/admin-delete-user', async (req, res) => {
+  try {
+    const { user_id, reason, hard_delete } = req.body;
+    if (hard_delete) {
+      await pool.query('DELETE FROM users WHERE id = $1', [user_id]);
+    } else {
+      await pool.query('UPDATE users SET status = $1 WHERE id = $2', ['deleted', user_id]);
+    }
+    res.json({ success: true, message: 'User deleted successfully' });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.post('/api/admin/admin-restore-user', async (req, res) => {
+  try {
+    const { user_id, reason } = req.body;
+    await pool.query('UPDATE users SET status = $1 WHERE id = $2', ['active', user_id]);
+    res.json({ success: true, message: 'User restored successfully' });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.post('/api/admin/admin-reset-password', async (req, res) => {
+  try {
+    const { user_id, reason } = req.body;
+    const tempPassword = Math.random().toString(36).slice(-8);
+    const saltRounds = 10;
+    const password_hash = await bcrypt.hash(tempPassword, saltRounds);
+    
+    await pool.query('UPDATE users SET password_hash = $1 WHERE id = $2', [password_hash, user_id]);
+    res.json({ success: true, message: 'Password reset successfully', tempPassword });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.post('/api/admin/admin-verify-user', async (req, res) => {
+  try {
+    const { user_id, reason } = req.body;
+    await pool.query('UPDATE users SET role = $1 WHERE id = $2', ['verified', user_id]);
+    res.json({ success: true, message: 'User verified successfully' });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.post('/api/admin/admin-unverify-user', async (req, res) => {
+  try {
+    const { user_id, reason } = req.body;
+    await pool.query('UPDATE users SET role = $1 WHERE id = $2', ['user', user_id]);
+    res.json({ success: true, message: 'User unverified successfully' });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.post('/api/admin/admin-bulk-user-action', async (req, res) => {
+  try {
+    const { user_ids, action, reason, duration } = req.body;
+    // Simplified bulk action implementation
+    for (const userId of user_ids) {
+      if (action === 'ban') {
+        await pool.query('UPDATE users SET status = $1 WHERE id = $2', ['banned', userId]);
+      } else if (action === 'suspend') {
+        await pool.query('UPDATE users SET status = $1 WHERE id = $2', ['suspended', userId]);
+      }
+    }
+    res.json({ success: true, message: `Bulk ${action} completed successfully` });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// Missing report endpoints
+app.post('/api/reports', async (req, res) => {
+  try {
+    const { target_type, target_id, reporter_id, reason, description } = req.body;
+    const { rows } = await pool.query(
+      'INSERT INTO user_reports (target_type, target_id, reporter_id, reason, description, status, created_at) VALUES ($1, $2, $3, $4, $5, $6, NOW()) RETURNING *',
+      [target_type, target_id, reporter_id, reason, description, 'pending']
+    );
+    res.status(201).json(rows[0]);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.put('/api/reports/:id', async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { status, adminNotes } = req.body;
+    const { rows } = await pool.query(
+      'UPDATE user_reports SET status = $1, admin_notes = $2, updated_at = NOW() WHERE id = $3 RETURNING *',
+      [status, adminNotes, id]
+    );
+    if (rows.length === 0) {
+      return res.status(404).json({ error: 'Report not found' });
+    }
+    res.json(rows[0]);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.delete('/api/reports/:id', async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { rows } = await pool.query('DELETE FROM user_reports WHERE id = $1 RETURNING id', [id]);
+    if (rows.length === 0) {
+      return res.status(404).json({ error: 'Report not found' });
+    }
+    res.json({ success: true });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.get('/api/reports/deal/:dealId', async (req, res) => {
+  try {
+    const { dealId } = req.params;
+    const { rows } = await pool.query(
+      'SELECT * FROM user_reports WHERE target_type = $1 AND target_id = $2 ORDER BY created_at DESC',
+      ['deal', dealId]
+    );
+    res.json(rows);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// Missing admin dashboard endpoints
+app.get('/api/admin/recent-activities', async (req, res) => {
+  try {
+    const { rows } = await pool.query(
+      'SELECT * FROM admin_actions ORDER BY created_at DESC LIMIT 10'
+    );
+    res.json(rows);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.get('/api/admin/system-alerts', async (req, res) => {
+  try {
+    res.json([{ id: '1', type: 'info', message: 'System operational', created_at: new Date().toISOString() }]);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.get('/api/admin/top-users', async (req, res) => {
+  try {
+    const { limit = 10 } = req.query;
+    const { rows } = await pool.query(
+      `SELECT u.id, u.username, u.reputation, 
+       COUNT(DISTINCT d.id) as deal_count, 
+       COUNT(DISTINCT c.id) as comment_count
+       FROM users u 
+       LEFT JOIN deals d ON u.id = d.created_by 
+       LEFT JOIN comments c ON u.id = c.user_id 
+       GROUP BY u.id, u.username, u.reputation 
+       ORDER BY u.reputation DESC NULLS LAST 
+       LIMIT $1`,
+      [parseInt(limit)]
+    );
+    res.json(rows);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// Category endpoints
+app.get('/api/categories/:id', async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { rows } = await pool.query('SELECT * FROM categories WHERE id = $1', [id]);
+    if (rows.length === 0) {
+      return res.status(404).json({ error: 'Category not found' });
+    }
+    res.json(rows[0]);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.post('/api/categories', async (req, res) => {
+  try {
+    const { name, emoji, description, is_active } = req.body;
+    const { rows } = await pool.query(
+      'INSERT INTO categories (name, emoji, description, is_active, created_at) VALUES ($1, $2, $3, $4, NOW()) RETURNING *',
+      [name, emoji, description, is_active !== false]
+    );
+    res.status(201).json(rows[0]);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.put('/api/categories/:id', async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { name, emoji, description, is_active } = req.body;
+    const { rows } = await pool.query(
+      'UPDATE categories SET name = $1, emoji = $2, description = $3, is_active = $4, updated_at = NOW() WHERE id = $5 RETURNING *',
+      [name, emoji, description, is_active, id]
+    );
+    if (rows.length === 0) {
+      return res.status(404).json({ error: 'Category not found' });
+    }
+    res.json(rows[0]);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.delete('/api/categories/:id', async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { rows } = await pool.query('DELETE FROM categories WHERE id = $1 RETURNING id', [id]);
+    if (rows.length === 0) {
+      return res.status(404).json({ error: 'Category not found' });
+    }
+    res.json({ success: true });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// Store endpoints
+app.get('/api/stores/:id', async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { rows } = await pool.query('SELECT * FROM stores WHERE id = $1', [id]);
+    if (rows.length === 0) {
+      return res.status(404).json({ error: 'Store not found' });
+    }
+    res.json(rows[0]);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.get('/api/stores/slug/:slug', async (req, res) => {
+  try {
+    const { slug } = req.params;
+    const { rows } = await pool.query('SELECT * FROM stores WHERE slug = $1', [slug]);
+    if (rows.length === 0) {
+      return res.status(404).json({ error: 'Store not found' });
+    }
+    res.json(rows[0]);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.post('/api/stores', async (req, res) => {
+  try {
+    const { name, slug, logo_url, website_url, description } = req.body;
+    const { rows } = await pool.query(
+      'INSERT INTO stores (name, slug, logo_url, website_url, description, created_at) VALUES ($1, $2, $3, $4, $5, NOW()) RETURNING *',
+      [name, slug, logo_url, website_url, description]
+    );
+    res.status(201).json(rows[0]);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.put('/api/stores/:id', async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { name, slug, logo_url, website_url, description } = req.body;
+    const { rows } = await pool.query(
+      'UPDATE stores SET name = $1, slug = $2, logo_url = $3, website_url = $4, description = $5, updated_at = NOW() WHERE id = $6 RETURNING *',
+      [name, slug, logo_url, website_url, description, id]
+    );
+    if (rows.length === 0) {
+      return res.status(404).json({ error: 'Store not found' });
+    }
+    res.json(rows[0]);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.delete('/api/stores/:id', async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { rows } = await pool.query('DELETE FROM stores WHERE id = $1 RETURNING id', [id]);
+    if (rows.length === 0) {
+      return res.status(404).json({ error: 'Store not found' });
+    }
+    res.json({ success: true });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// Banner endpoints
+app.post('/api/banners', async (req, res) => {
+  try {
+    const { title, description, image_url, is_active, priority } = req.body;
+    const { rows } = await pool.query(
+      'INSERT INTO banners (title, description, image_url, is_active, priority, created_at) VALUES ($1, $2, $3, $4, $5, NOW()) RETURNING *',
+      [title, description, image_url, is_active !== false, priority || 0]
+    );
+    res.status(201).json(rows[0]);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.put('/api/banners/:id', async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { title, description, image_url, is_active, priority } = req.body;
+    const { rows } = await pool.query(
+      'UPDATE banners SET title = $1, description = $2, image_url = $3, is_active = $4, priority = $5, updated_at = NOW() WHERE id = $6 RETURNING *',
+      [title, description, image_url, is_active, priority, id]
+    );
+    if (rows.length === 0) {
+      return res.status(404).json({ error: 'Banner not found' });
+    }
+    res.json(rows[0]);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.delete('/api/banners/:id', async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { rows } = await pool.query('DELETE FROM banners WHERE id = $1 RETURNING id', [id]);
+    if (rows.length === 0) {
+      return res.status(404).json({ error: 'Banner not found' });
+    }
+    res.json({ success: true });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// Push notification endpoint
+app.post('/api/push/send', async (req, res) => {
+  try {
+    const { user_id, title, body, data } = req.body;
+    // Mock implementation - in production, integrate with push service
+    console.log(`Push notification to user ${user_id}: ${title} - ${body}`);
+    res.json({ success: true, message: 'Push notification sent' });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// Gamification endpoints
+app.get('/api/gamification/stats/:userId', async (req, res) => {
+  try {
+    const { userId } = req.params;
+    // Mock gamification stats
+    const stats = {
+      user_id: userId,
+      total_points: 150,
+      deals_posted: 5,
+      deals_saved: 12,
+      comments_made: 8,
+      upvotes_received: 25,
+      login_streak: 3,
+      level: 2,
+      badges: []
+    };
+    res.json(stats);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.post('/api/gamification/award-points', async (req, res) => {
+  try {
+    const { userId, points, action } = req.body;
+    console.log(`Awarded ${points} points to user ${userId} for ${action}`);
+    res.json({ success: true });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.post('/api/gamification/award-badge', async (req, res) => {
+  try {
+    const { userId, badgeId } = req.body;
+    console.log(`Awarded badge ${badgeId} to user ${userId}`);
+    res.json({ success: true });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.get('/api/gamification/leaderboard', async (req, res) => {
+  try {
+    const { limit = 10 } = req.query;
+    // Mock leaderboard data
+    const leaderboard = Array.from({ length: parseInt(limit) }, (_, i) => ({
+      user_id: `user_${i + 1}`,
+      username: `User${i + 1}`,
+      total_points: 1000 - (i * 50),
+      level: Math.floor((1000 - (i * 50)) / 100) + 1,
+      rank: i + 1
+    }));
+    res.json(leaderboard);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// Collection endpoints
+app.get('/api/collections', async (req, res) => {
+  try {
+    const { userId } = req.query;
+    const { rows } = await pool.query(
+      'SELECT * FROM collections WHERE user_id = $1 ORDER BY created_at DESC',
+      [userId]
+    );
+    res.json(rows);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.post('/api/collections', async (req, res) => {
+  try {
+    const { name, description, userId, isPublic } = req.body;
+    const { rows } = await pool.query(
+      'INSERT INTO collections (name, description, user_id, is_public, created_at) VALUES ($1, $2, $3, $4, NOW()) RETURNING *',
+      [name, description, userId, isPublic || false]
+    );
+    res.status(201).json(rows[0]);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.get('/api/collections/:id/deals', async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { rows } = await pool.query(
+      `SELECT cd.*, d.title, d.description, d.price, d.image_url 
+       FROM collection_deals cd 
+       JOIN deals d ON cd.deal_id = d.id 
+       WHERE cd.collection_id = $1 
+       ORDER BY cd.added_at DESC`,
+      [id]
+    );
+    res.json(rows);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.post('/api/collections/:id/deals', async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { dealId } = req.body;
+    const { rows } = await pool.query(
+      'INSERT INTO collection_deals (collection_id, deal_id, added_at) VALUES ($1, $2, NOW()) RETURNING *',
+      [id, dealId]
+    );
+    res.status(201).json(rows[0]);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.delete('/api/collections/:id/deals/:dealId', async (req, res) => {
+  try {
+    const { id, dealId } = req.params;
+    const { rows } = await pool.query(
+      'DELETE FROM collection_deals WHERE collection_id = $1 AND deal_id = $2 RETURNING *',
+      [id, dealId]
+    );
+    if (rows.length === 0) {
+      return res.status(404).json({ error: 'Deal not found in collection' });
+    }
+    res.json({ success: true });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.delete('/api/collections/:id', async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { userId } = req.query;
+    const { rows } = await pool.query(
+      'DELETE FROM collections WHERE id = $1 AND user_id = $2 RETURNING id',
+      [id, userId]
+    );
+    if (rows.length === 0) {
+      return res.status(404).json({ error: 'Collection not found or unauthorized' });
+    }
+    res.json({ success: true });
+  } catch (err) {
     res.status(500).json({ error: err.message });
   }
 });

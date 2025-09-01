@@ -394,7 +394,7 @@ export default function UserDetailModal({ visible, onClose, userId, onUserUpdate
         <Text style={styles.sectionTitle}>User Actions</Text>
         <View style={styles.actionGrid}>
           {/* Ban/Unban and Suspend/Unsuspend available to all admins */}
-          {!stats.is_banned ? (
+          {!stats?.is_banned ? (
             <TouchableOpacity
               style={[styles.actionBtn, styles.dangerBtn]}
               onPress={() => setShowActionForm('ban')}
@@ -412,7 +412,7 @@ export default function UserDetailModal({ visible, onClose, userId, onUserUpdate
             </TouchableOpacity>
           )}
 
-          {!stats.is_suspended ? (
+          {!stats?.is_suspended ? (
             <TouchableOpacity
               style={[styles.actionBtn, styles.warningBtn]}
               onPress={() => setShowActionForm('suspend')}
@@ -490,8 +490,8 @@ export default function UserDetailModal({ visible, onClose, userId, onUserUpdate
                   <Text style={styles.username}>{userStats.user.username}</Text>
                   <Text style={styles.email}>{userStats.user.email}</Text>
                   <View style={styles.statusRow}>
-                    <Text style={[styles.status, userStats.stats.is_banned && styles.statusBanned]}>
-                      {userStats.stats.is_banned ? 'BANNED' : userStats.stats.is_suspended ? 'SUSPENDED' : 'ACTIVE'}
+                    <Text style={[styles.status, userStats.stats?.is_banned && styles.statusBanned]}>
+                      {userStats.stats?.is_banned ? 'BANNED' : userStats.stats?.is_suspended ? 'SUSPENDED' : 'ACTIVE'}
                     </Text>
                     <Text style={styles.role}>{userStats.user.role}</Text>
                   </View>
@@ -505,22 +505,22 @@ export default function UserDetailModal({ visible, onClose, userId, onUserUpdate
               <View style={styles.statsRow}>
                 <View style={styles.statItem}>
                   <MessageSquare size={20} color="#0ea5e9" />
-                  <Text style={styles.statValue}>{userStats.stats.total_deals}</Text>
+                  <Text style={styles.statValue}>{userStats.stats?.total_deals || 0}</Text>
                   <Text style={styles.statLabel}>Deals</Text>
                 </View>
                 <View style={styles.statItem}>
                   <MessageSquare size={20} color="#10b981" />
-                  <Text style={styles.statValue}>{userStats.stats.total_comments}</Text>
+                  <Text style={styles.statValue}>{userStats.stats?.total_comments || 0}</Text>
                   <Text style={styles.statLabel}>Comments</Text>
                 </View>
                 <View style={styles.statItem}>
                   <ThumbsUp size={20} color="#f59e0b" />
-                  <Text style={styles.statValue}>{userStats.stats.total_votes_received}</Text>
+                  <Text style={styles.statValue}>{userStats.stats?.total_votes_received || 0}</Text>
                   <Text style={styles.statLabel}>Upvotes</Text>
                 </View>
                 <View style={styles.statItem}>
                   <Calendar size={20} color="#8b5cf6" />
-                  <Text style={styles.statValue}>{userStats.stats.account_age_days}</Text>
+                  <Text style={styles.statValue}>{userStats.stats?.account_age_days || 0}</Text>
                   <Text style={styles.statLabel}>Days</Text>
                 </View>
               </View>

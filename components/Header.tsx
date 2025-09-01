@@ -207,7 +207,7 @@ export function Header({
                 <Sparkles size={18} color="#FFFFFF" />
               </LinearGradient>
               {/* Show full text only on desktop, just icon on mobile */}
-              {isDesktopWeb && <Text style={styles.appName}>SpicyBeats</Text>}
+              {isDesktopWeb && <Text style={styles.appName}>SaversDream</Text>}
             </TouchableOpacity>
           </View>
 
@@ -453,7 +453,7 @@ export function Header({
           <View style={styles.modalCard}>
             <Text style={styles.modalTitle}>Sign Out</Text>
             <Text style={styles.modalMessage}>
-              Are you sure you want to sign out of SpicyBeats?
+              Are you sure you want to sign out of SaversDream?
             </Text>
 
             {signOutError ? (

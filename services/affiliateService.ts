@@ -22,29 +22,22 @@ class AffiliateService {
     is_active?: boolean;
     search?: string;
   }) {
-    let query = (supabase as any)
-      .from('affiliate_settings')
-      .select('*')
-      .order('store_name', { ascending: true })
-      .order('country_code', { ascending: true });
-
-    if (filters?.store_name) {
-      query = query.eq('store_name', filters.store_name);
+    try {
+      const response = await fetch('http://localhost:3000/api/affiliate-settings', {
+        credentials: 'include'
+      });
+      
+      if (!response.ok) {
+        throw new Error(`Failed to fetch affiliate settings: ${response.status}`);
+      }
+      
+      const data = await response.json();
+      return { data, error: null };
+    } catch (error) {
+      return { data: null, error };
     }
 
-    if (filters?.country_code) {
-      query = query.eq('country_code', filters.country_code);
-    }
 
-    if (filters?.is_active !== undefined) {
-      query = query.eq('is_active', filters.is_active);
-    }
-
-    if (filters?.search) {
-      query = query.or(`store_name.ilike.%${filters.search}%,notes.ilike.%${filters.search}%`);
-    }
-
-    return query;
   }
 
   /**
@@ -109,13 +102,15 @@ class AffiliateService {
    */
   async getAffiliateStats(): Promise<{ data: AffiliateStats | null; error: any }> {
     try {
-      const { data: settings, error } = await (supabase as any)
-        .from('affiliate_settings')
-        .select('store_name, country_code, is_active');
-
-      if (error) {
-        return { data: null, error };
+      const response = await fetch('http://localhost:3000/api/affiliate-stats', {
+        credentials: 'include'
+      });
+      
+      if (!response.ok) {
+        throw new Error(`Failed to fetch affiliate stats: ${response.status}`);
       }
+      
+      const settings = await response.json();
 
       const stats: AffiliateStats = {
         total_stores: 0,
@@ -124,7 +119,7 @@ class AffiliateService {
         stores_by_country: {},
       };
 
-      if (settings) {
+      if (Array.isArray(settings)) {
         const uniqueStores = new Set();
         const uniqueCountries = new Set();
 

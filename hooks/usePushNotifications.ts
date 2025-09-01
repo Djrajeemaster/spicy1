@@ -87,10 +87,13 @@ export function usePushNotifications() {
           disabled: false,
         };
 
-        await supabase
-          .from('push_tokens')
-          .upsert(row as any, { onConflict: 'token' })
-          .throwOnError();
+        // Store push token via backend API
+        await fetch('http://localhost:3000/api/push-tokens', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          credentials: 'include',
+          body: JSON.stringify(row)
+        });
       } catch (e) {
         console.error('Push init error:', e);
       }
