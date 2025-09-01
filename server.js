@@ -653,26 +653,37 @@ app.post('/api/comments/:id/flag', async (req, res) => {
 // Create superadmin endpoint (for initial setup)
 app.post('/api/auth/create-superadmin', async (req, res) => {
   try {
-    const { email = 'admin@saversdream.com', password = 'admin123', username = 'superadmin' } = req.body;
+    const { email = 'admin@example.com', password = 'admin123', username = 'admin' } = req.body;
     
     // Hash password
     const saltRounds = 10;
     const password_hash = await bcrypt.hash(password, saltRounds);
     
+    // First, add password_hash column if it doesn't exist
+    try {
+      await pool.query('ALTER TABLE users ADD COLUMN IF NOT EXISTS password_hash TEXT');
+    } catch (err) {
+      // Column might already exist, ignore error
+    }
+    
+    // Generate UUID for the user
+    const userId = require('crypto').randomUUID();
+    
     // Create or update superadmin user
     const { rows } = await pool.query(
-      `INSERT INTO users (username, email, password_hash, role, created_at) 
-       VALUES ($1, $2, $3, $4, NOW()) 
+      `INSERT INTO users (id, username, email, password_hash, role, created_at) 
+       VALUES ($1, $2, $3, $4, $5, NOW()) 
        ON CONFLICT (email) DO UPDATE SET 
        password_hash = EXCLUDED.password_hash, 
        role = EXCLUDED.role, 
        username = EXCLUDED.username
        RETURNING id, username, email, role`,
-      [username, email, password_hash, 'admin']
+      [userId, username, email, password_hash, 'admin']
     );
     
     res.json({ message: 'Superadmin created/updated successfully', user: rows[0] });
   } catch (err) {
+    console.error('Create superadmin error:', err);
     res.status(500).json({ error: err.message });
   }
 });
@@ -754,10 +765,138 @@ app.post('/api/comments', async (req, res) => {
   }
 });
 
+// Get alerts for user
+app.get('/api/alerts', async (req, res) => {
+  try {
+    const { userId, active } = req.query;
+    
+    let query = 'SELECT * FROM alerts';
+    const params = [];
+    const conditions = [];
+    
+    if (userId) {
+      conditions.push(`user_id = $${params.length + 1}`);
+      params.push(userId);
+    }
+    
+    if (active === 'true') {
+      conditions.push(`is_active = $${params.length + 1}`);
+      params.push(true);
+    }
+    
+    if (conditions.length > 0) {
+      query += ' WHERE ' + conditions.join(' AND ');
+    }
+    
+    query += ' ORDER BY created_at DESC';
+    
+    const { rows } = await pool.query(query, params);
+    res.json(rows);
+  } catch (err) {
+    console.error('Error fetching alerts:', err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// Create new alert
+app.post('/api/alerts', async (req, res) => {
+  try {
+    const { user_id, type, rules, is_active = true } = req.body;
+    
+    const { rows } = await pool.query(
+      'INSERT INTO alerts (user_id, type, rules, is_active, created_at, updated_at) VALUES ($1, $2, $3, $4, NOW(), NOW()) RETURNING *',
+      [user_id, type, JSON.stringify(rules), is_active]
+    );
+    
+    res.status(201).json(rows[0]);
+  } catch (err) {
+    console.error('Error creating alert:', err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// Update alert
+app.put('/api/alerts/:id', async (req, res) => {
+  try {
+    const { id } = req.params;
+    const updates = req.body;
+    
+    const updateFields = [];
+    const updateValues = [];
+    let paramCount = 1;
+    
+    Object.keys(updates).forEach(key => {
+      if (updates[key] !== undefined) {
+        updateFields.push(`${key} = $${paramCount}`);
+        updateValues.push(key === 'rules' ? JSON.stringify(updates[key]) : updates[key]);
+        paramCount++;
+      }
+    });
+    
+    updateFields.push('updated_at = NOW()');
+    updateValues.push(id);
+    
+    const query = `UPDATE alerts SET ${updateFields.join(', ')} WHERE id = $${paramCount} RETURNING *`;
+    const { rows } = await pool.query(query, updateValues);
+    
+    if (rows.length === 0) {
+      return res.status(404).json({ error: 'Alert not found' });
+    }
+    
+    res.json(rows[0]);
+  } catch (err) {
+    console.error('Error updating alert:', err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// Activate alert
+app.put('/api/alerts/:id/activate', async (req, res) => {
+  try {
+    const { id } = req.params;
+    
+    const { rows } = await pool.query(
+      'UPDATE alerts SET is_active = true, updated_at = NOW() WHERE id = $1 RETURNING *',
+      [id]
+    );
+    
+    if (rows.length === 0) {
+      return res.status(404).json({ error: 'Alert not found' });
+    }
+    
+    res.json(rows[0]);
+  } catch (err) {
+    console.error('Error activating alert:', err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// Deactivate alert
+app.put('/api/alerts/:id/deactivate', async (req, res) => {
+  try {
+    const { id } = req.params;
+    
+    const { rows } = await pool.query(
+      'UPDATE alerts SET is_active = false, updated_at = NOW() WHERE id = $1 RETURNING *',
+      [id]
+    );
+    
+    
+    if (rows.length === 0) {
+      return res.status(404).json({ error: 'Alert not found' });
+    }
+    
+    res.json(rows[0]);
+  } catch (err) {
+    console.error('Error deactivating alert:', err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
 // Get all announcements
 app.get('/api/announcements', async (req, res) => {
   try {
-    const { rows } = await pool.query('SELECT * FROM admin_announcements');
+    const { rows } = await pool.query('SELECT * FROM announcements ORDER BY created_at DESC');
     res.json(rows);
   } catch (err) {
     res.status(500).json({ error: err.message });
@@ -769,7 +908,7 @@ app.post('/api/announcements', async (req, res) => {
   try {
     const { title, content, type, target_audience, author_id, is_active, send_push, sent_count, views } = req.body;
     const { rows } = await pool.query(
-      'INSERT INTO admin_announcements (title, content, type, target_audience, author_id, is_active, send_push, sent_count, views, created_at) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, NOW()) RETURNING *',
+      'INSERT INTO announcements (title, content, type, target_audience, author_id, is_active, send_push, sent_count, views, created_at) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, NOW()) RETURNING *',
       [title, content, type, target_audience, author_id, is_active, send_push, sent_count, views]
     );
     res.status(201).json(rows[0]);
@@ -1053,7 +1192,7 @@ app.post('/api/follows/user', async (req, res) => {
     
     // Insert follow relationship
     await pool.query(
-      'INSERT INTO user_follows (follower_id, following_id, created_at) VALUES ($1, $2, NOW()) ON CONFLICT DO NOTHING',
+      'INSERT INTO user_follows (follower_id, followed_id, created_at) VALUES ($1, $2, NOW()) ON CONFLICT DO NOTHING',
       [sessionId, targetUserId]
     );
     
@@ -1074,7 +1213,7 @@ app.delete('/api/follows/user/:targetUserId', async (req, res) => {
     const { targetUserId } = req.params;
     
     await pool.query(
-      'DELETE FROM user_follows WHERE follower_id = $1 AND following_id = $2',
+      'DELETE FROM user_follows WHERE follower_id = $1 AND followed_id = $2',
       [sessionId, targetUserId]
     );
     
@@ -1095,7 +1234,7 @@ app.post('/api/follows/store', async (req, res) => {
     const { storeId } = req.body;
     
     await pool.query(
-      'INSERT INTO store_follows (user_id, store_id, created_at) VALUES ($1, $2, NOW()) ON CONFLICT DO NOTHING',
+      'INSERT INTO store_follows (follower_id, store_id, created_at) VALUES ($1, $2, NOW()) ON CONFLICT DO NOTHING',
       [sessionId, storeId]
     );
     
@@ -1116,7 +1255,7 @@ app.delete('/api/follows/store/:storeId', async (req, res) => {
     const { storeId } = req.params;
     
     await pool.query(
-      'DELETE FROM store_follows WHERE user_id = $1 AND store_id = $2',
+      'DELETE FROM store_follows WHERE follower_id = $1 AND store_id = $2',
       [sessionId, storeId]
     );
     
@@ -1137,7 +1276,7 @@ app.get('/api/follows/user/:targetUserId/check', async (req, res) => {
     const { targetUserId } = req.params;
     
     const { rows } = await pool.query(
-      'SELECT 1 FROM user_follows WHERE follower_id = $1 AND following_id = $2',
+      'SELECT 1 FROM user_follows WHERE follower_id = $1 AND followed_id = $2',
       [sessionId, targetUserId]
     );
     
@@ -1158,7 +1297,7 @@ app.get('/api/follows/store/:storeId/check', async (req, res) => {
     const { storeId } = req.params;
     
     const { rows } = await pool.query(
-      'SELECT 1 FROM store_follows WHERE user_id = $1 AND store_id = $2',
+      'SELECT 1 FROM store_follows WHERE follower_id = $1 AND store_id = $2',
       [sessionId, storeId]
     );
     
@@ -1174,9 +1313,9 @@ app.get('/api/follows/counts/:userId', async (req, res) => {
     const { userId } = req.params;
     
     const [followersResult, followingUsersResult, followingStoresResult] = await Promise.all([
-      pool.query('SELECT COUNT(*) FROM user_follows WHERE following_id = $1', [userId]),
+      pool.query('SELECT COUNT(*) FROM user_follows WHERE followed_id = $1', [userId]),
       pool.query('SELECT COUNT(*) FROM user_follows WHERE follower_id = $1', [userId]),
-      pool.query('SELECT COUNT(*) FROM store_follows WHERE user_id = $1', [userId])
+      pool.query('SELECT COUNT(*) FROM store_follows WHERE follower_id = $1', [userId])
     ]);
     
     res.json({
@@ -1210,10 +1349,10 @@ app.get('/api/follows/feed', async (req, res) => {
       LEFT JOIN stores s ON d.store_id = s.id
       LEFT JOIN users u ON d.created_by = u.id
       WHERE (
-        d.created_by IN (SELECT following_id FROM user_follows WHERE follower_id = $1)
-        OR d.store_id IN (SELECT store_id FROM store_follows WHERE user_id = $1)
+        d.created_by IN (SELECT followed_id FROM user_follows WHERE follower_id = $1)
+        OR d.store_id IN (SELECT store_id FROM store_follows WHERE follower_id = $1)
       )
-      AND d.status = 'active'
+      AND d.status = 'live'
       ORDER BY d.created_at DESC
       LIMIT $2 OFFSET $3
     `, [sessionId, parseInt(limit), parseInt(offset)]);

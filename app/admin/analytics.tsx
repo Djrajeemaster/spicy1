@@ -82,6 +82,10 @@ export default function AdminAnalytics() {
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
 
+  useEffect(() => {
+    loadAnalytics();
+  }, []);
+
   const loadAnalytics = async () => {
     try {
       setLoading(true);

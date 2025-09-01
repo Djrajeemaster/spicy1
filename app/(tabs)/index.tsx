@@ -621,155 +621,309 @@ export default function HomeScreen() {
           position: 'relative',
           top: undefined,
           zIndex: 100,
-          padding: 0,
-          minHeight: 48,
-          height: 48,
+          padding: width < 1200 ? 8 : 0,
+          minHeight: width < 1200 ? 96 : 48,
+          height: width < 1200 ? 96 : 48,
           opacity: subHeaderOpacity,
           pointerEvents: showFilterBar ? 'auto' : 'none',
         },
       ]}
     >
-      <View style={{ flexDirection: 'row', alignItems: 'center', flexWrap: 'nowrap', width: '100%', gap: 8, margin: 0, paddingTop: 0, paddingBottom: 0, minHeight: 0, height: 'auto' }}>
-        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 16 }}>
-          <View style={styles.subHeaderLeft}>
-            <TouchableOpacity style={styles.subHeaderDropdown} onPress={() => setOpenDropdown(openDropdown === 'categories' ? null : 'categories')}>
-              <Text style={styles.subHeaderValue}>
-                {selectedCategories.includes('all') || selectedCategories.length === 0
-                  ? '🔥 All Categories'
-                  : `🔥 ${availableCategories.find(c => c.id === selectedCategories[0])?.name || 'Selected'}`
+      {width < 1200 ? (
+        // Wide Screen: Two-line layout
+        <>
+          {/* First Line: Categories, Stores, Location */}
+          <View style={{ flexDirection: 'row', alignItems: 'center', width: '100%', gap: 16, marginBottom: 8 }}>
+            <View style={styles.subHeaderLeft}>
+              <TouchableOpacity style={styles.subHeaderDropdown} onPress={() => setOpenDropdown(openDropdown === 'categories' ? null : 'categories')}>
+                <Text style={styles.subHeaderValue}>
+                  {selectedCategories.includes('all') || selectedCategories.length === 0
+                    ? '🔥 All Categories'
+                    : `🔥 ${availableCategories.find(c => c.id === selectedCategories[0])?.name || 'Selected'}`
+                  }
+                </Text>
+                <Text style={styles.dropdownArrowSmall}>▼</Text>
+              </TouchableOpacity>
+            </View>
+            <View style={styles.subHeaderMiddle}>
+              <TouchableOpacity style={styles.subHeaderDropdown} onPress={() => setOpenDropdown(openDropdown === 'stores' ? null : 'stores')}>
+                <Text style={styles.subHeaderValue}>
+                  {selectedStores.includes('all') || selectedStores.length === 0
+                    ? '🏪 All Stores'
+                    : `🏪 ${availableStores.find(s => s.id === selectedStores[0])?.name || 'Selected'}`
+                  }
+                </Text>
+                <Text style={styles.dropdownArrowSmall}>▼</Text>
+              </TouchableOpacity>
+            </View>
+            <View style={styles.subHeaderMiddle}>
+              <TouchableOpacity style={styles.subHeaderDropdown} onPress={async () => {
+                if (!locationEnabled) {
+                  await handleLocationToggle();
+                  return;
                 }
-              </Text>
-              <Text style={styles.dropdownArrowSmall}>▼</Text>
-            </TouchableOpacity>
+                setOpenDropdown(openDropdown === 'location' ? null : 'location');
+              }}>
+                <Text style={styles.subHeaderValue}>
+                  {!locationEnabled
+                    ? '📍 Enable Location'
+                    : selectedRadius === null
+                      ? '📍 All Locations'
+                      : `📍 Within ${selectedRadius}km`
+                  }
+                </Text>
+                <Text style={styles.dropdownArrowSmall}>▼</Text>
+              </TouchableOpacity>
+            </View>
+
           </View>
-          <View style={styles.subHeaderMiddle}>
-            <TouchableOpacity style={styles.subHeaderDropdown} onPress={() => setOpenDropdown(openDropdown === 'stores' ? null : 'stores')}>
-              <Text style={styles.subHeaderValue}>
-                {selectedStores.includes('all') || selectedStores.length === 0
-                  ? '🏪 All Stores'
-                  : `🏪 ${availableStores.find(s => s.id === selectedStores[0])?.name || 'Selected'}`
-                }
-              </Text>
-              <Text style={styles.dropdownArrowSmall}>▼</Text>
-            </TouchableOpacity>
-          </View>
-          <View style={styles.subHeaderMiddle}>
-            <TouchableOpacity style={styles.subHeaderDropdown} onPress={async () => {
-              if (!locationEnabled) {
-                await handleLocationToggle();
-                return;
-              }
-              setOpenDropdown(openDropdown === 'location' ? null : 'location');
-            }}>
-              <Text style={styles.subHeaderValue}>
-                {!locationEnabled
-                  ? '📍 Enable Location'
-                  : selectedRadius === null
-                    ? '📍 All Locations'
-                    : `📍 Within ${selectedRadius}km`
-                }
-              </Text>
-              <Text style={styles.dropdownArrowSmall}>▼</Text>
-            </TouchableOpacity>
-          </View>
-        </View>
-        <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'center', flex: 1, gap: 12 }}>
-          <Text style={{ color: '#fff', fontSize: 12, fontWeight: '500' }}>🔥 {filteredDeals.length.toLocaleString()} active deals</Text>
-          <View style={{ width: 1, height: 14, backgroundColor: '#b3b3ff' }} />
-          <Text style={{ color: '#fff', fontSize: 12, fontWeight: '500' }}>🔥 {filteredDeals.filter(deal => {
-            const hoursAgo = (Date.now() - new Date(deal.created_at).getTime()) / (1000 * 60 * 60);
-            return hoursAgo <= 24 && (deal.votes_up || 0) > 5;
-          }).length} trending now</Text>
-          <View style={{ width: 1, height: 14, backgroundColor: '#b3b3ff' }} />
-          <Text style={{ color: '#fff', fontSize: 12, fontWeight: '500' }}>⚡ {filteredDeals.filter(deal => {
-            const expiry = deal.expiry_date || deal.expires_at;
-            if (!expiry) return false;
-            const expiresIn = new Date(expiry).getTime() - Date.now();
-            const hoursLeft = expiresIn / (1000 * 60 * 60);
-            return hoursLeft > 0 && hoursLeft <= 24;
-          }).length} expiring soon</Text>
-        </View>
-        <View style={[styles.sortPillsDisplay, { margin: 0, padding: 0, flexDirection: 'row', alignItems: 'center', marginLeft: 'auto', gap: 8 }]}>
-          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 0, marginRight: 8 }}>
-            <TouchableOpacity
-              style={{
-                backgroundColor: viewMode === 'grid' ? '#fff' : 'transparent',
-                borderRadius: 14,
-                paddingVertical: 2,
-                paddingHorizontal: 8,
-                borderWidth: viewMode === 'grid' ? 2 : 1,
-                borderColor: viewMode === 'grid' ? '#6366f1' : '#e5e7eb',
-                marginRight: 2,
-                alignItems: 'center',
+          
+          {/* Second Line: Stats, View Toggle, and Sort Options */}
+          <View style={{ flexDirection: 'row', alignItems: 'center', width: '100%', gap: 16 }}>
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12 }}>
+              <Text style={{ color: '#fff', fontSize: 12, fontWeight: '500' }}>🔥 {filteredDeals.length.toLocaleString()} active deals</Text>
+              <View style={{ width: 1, height: 14, backgroundColor: '#b3b3ff' }} />
+              <Text style={{ color: '#fff', fontSize: 12, fontWeight: '500' }}>🔥 {filteredDeals.filter(deal => {
+                const hoursAgo = (Date.now() - new Date(deal.created_at).getTime()) / (1000 * 60 * 60);
+                return hoursAgo <= 24 && (deal.votes_up || 0) > 5;
+              }).length} trending now</Text>
+              <View style={{ width: 1, height: 14, backgroundColor: '#b3b3ff' }} />
+              <Text style={{ color: '#fff', fontSize: 12, fontWeight: '500' }}>⚡ {filteredDeals.filter(deal => {
+                const expiry = deal.expiry_date || deal.expires_at;
+                if (!expiry) return false;
+                const expiresIn = new Date(expiry).getTime() - Date.now();
+                const hoursLeft = expiresIn / (1000 * 60 * 60);
+                return hoursLeft > 0 && hoursLeft <= 24;
+              }).length} expiring soon</Text>
+            </View>
+            
+            <View style={[styles.sortPillsDisplay, { margin: 0, padding: 0, flexDirection: 'row', alignItems: 'center', marginLeft: 'auto', gap: 8 }]}>
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 0, marginRight: 8 }}>
+                <TouchableOpacity
+                  style={{
+                    backgroundColor: viewMode === 'grid' ? '#fff' : 'transparent',
+                    borderRadius: 14,
+                    paddingVertical: 2,
+                    paddingHorizontal: 8,
+                    borderWidth: viewMode === 'grid' ? 2 : 1,
+                    borderColor: viewMode === 'grid' ? '#6366f1' : '#e5e7eb',
+                    marginRight: 2,
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    ...(isDesktop ? { cursor: 'pointer' } : {}),
+                  }}
+                  onPress={() => setViewMode('grid')}
+                  activeOpacity={0.85}
+                >
+                  <Text style={{ color: viewMode === 'grid' ? '#6366f1' : '#fff', fontWeight: '700', fontSize: 13 }}>▦</Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  style={{
+                    backgroundColor: viewMode === 'list' ? '#fff' : 'transparent',
+                    borderRadius: 14,
+                    paddingVertical: 2,
+                    paddingHorizontal: 8,
+                    borderWidth: viewMode === 'list' ? 2 : 1,
+                    borderColor: viewMode === 'list' ? '#6366f1' : '#e5e7eb',
+                    marginLeft: 2,
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    ...(isDesktop ? { cursor: 'pointer' } : {}),
+                  }}
+                  onPress={() => setViewMode('list')}
+                  activeOpacity={0.85}
+                >
+                  <Text style={{ color: viewMode === 'list' ? '#6366f1' : '#fff', fontWeight: '700', fontSize: 13 }}>≡</Text>
+                </TouchableOpacity>
+              </View>
+              <View style={{
+                flexDirection: 'row',
                 justifyContent: 'center',
-                ...(isDesktop ? { cursor: 'pointer' } : {}),
-              }}
-              onPress={() => setViewMode('grid')}
-              activeOpacity={0.85}
-            >
-              <Text style={{ color: viewMode === 'grid' ? '#6366f1' : '#fff', fontWeight: '700', fontSize: 13 }}>▦</Text>
-            </TouchableOpacity>
-            <TouchableOpacity
-              style={{
-                backgroundColor: viewMode === 'list' ? '#fff' : 'transparent',
-                borderRadius: 14,
-                paddingVertical: 2,
-                paddingHorizontal: 8,
-                borderWidth: viewMode === 'list' ? 2 : 1,
-                borderColor: viewMode === 'list' ? '#6366f1' : '#e5e7eb',
-                marginLeft: 2,
                 alignItems: 'center',
-                justifyContent: 'center',
-                ...(isDesktop ? { cursor: 'pointer' } : {}),
-              }}
-              onPress={() => setViewMode('list')}
-              activeOpacity={0.85}
-            >
-              <Text style={{ color: viewMode === 'list' ? '#6366f1' : '#fff', fontWeight: '700', fontSize: 13 }}>≡</Text>
-            </TouchableOpacity>
+                gap: 6,
+                paddingVertical: 0,
+                paddingHorizontal: 0,
+              }}>
+                {[
+                  { key: 'newest', label: 'Newest', icon: '🕐' },
+                  { key: 'popular', label: 'Popular', icon: '🔥' },
+                  { key: 'price_low', label: 'Low Price', icon: '💰' },
+                  { key: 'price_high', label: 'High Price', icon: '💎' },
+                  { key: 'expiring', label: 'Expiring', icon: '⏰' }
+                ].map(option => (
+                  <TouchableOpacity
+                    key={option.key}
+                    style={{
+                      backgroundColor: sortBy === option.key ? '#e0e7ff' : 'transparent',
+                      borderRadius: 14,
+                      paddingVertical: 4,
+                      paddingHorizontal: 10,
+                      marginHorizontal: 2,
+                      borderWidth: sortBy === option.key ? 2 : 1,
+                      borderColor: sortBy === option.key ? '#6366f1' : '#e5e7eb',
+                      minWidth: 60,
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      ...(isDesktop ? { cursor: 'pointer' } : {}),
+                    }}
+                    onPress={() => setSortBy(option.key as typeof sortBy)}
+                    activeOpacity={0.85}
+                  >
+                    <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+                      <Text style={{ marginRight: 5, color: sortBy === option.key ? '#210458ff' : '#f9f9f9ff', fontWeight: sortBy === option.key ? '700' : '500', fontSize: 13 }}>{option.icon}</Text>
+                      <Text style={{ color: sortBy === option.key ? '#210458ff' : '#f9f9f9ff', fontWeight: sortBy === option.key ? '700' : '500', fontSize: 13 }}>{option.label}</Text>
+                    </View>
+                  </TouchableOpacity>
+                ))}
+              </View>
+            </View>
           </View>
-          <View style={{
-            flexDirection: 'row',
-            justifyContent: 'center',
-            alignItems: 'center',
-            gap: 6,
-            paddingVertical: 0,
-            paddingHorizontal: 0,
-          }}>
-            {[
-              { key: 'newest', label: 'Newest', icon: '🕐' },
-              { key: 'popular', label: 'Popular', icon: '🔥' },
-              { key: 'price_low', label: 'Low Price', icon: '💰' },
-              { key: 'price_high', label: 'High Price', icon: '💎' },
-              { key: 'expiring', label: 'Expiring', icon: '⏰' }
-            ].map(option => (
+        </>
+      ) : (
+        // Narrow Screen: Single-line layout
+        <View style={{ flexDirection: 'row', alignItems: 'center', flexWrap: 'nowrap', width: '100%', gap: 8, margin: 0, paddingTop: 0, paddingBottom: 0, minHeight: 0, height: 'auto' }}>
+          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 16 }}>
+            <View style={styles.subHeaderLeft}>
+              <TouchableOpacity style={styles.subHeaderDropdown} onPress={() => setOpenDropdown(openDropdown === 'categories' ? null : 'categories')}>
+                <Text style={styles.subHeaderValue}>
+                  {selectedCategories.includes('all') || selectedCategories.length === 0
+                    ? '🔥 All Categories'
+                    : `🔥 ${availableCategories.find(c => c.id === selectedCategories[0])?.name || 'Selected'}`
+                  }
+                </Text>
+                <Text style={styles.dropdownArrowSmall}>▼</Text>
+              </TouchableOpacity>
+            </View>
+            <View style={styles.subHeaderMiddle}>
+              <TouchableOpacity style={styles.subHeaderDropdown} onPress={() => setOpenDropdown(openDropdown === 'stores' ? null : 'stores')}>
+                <Text style={styles.subHeaderValue}>
+                  {selectedStores.includes('all') || selectedStores.length === 0
+                    ? '🏪 All Stores'
+                    : `🏪 ${availableStores.find(s => s.id === selectedStores[0])?.name || 'Selected'}`
+                  }
+                </Text>
+                <Text style={styles.dropdownArrowSmall}>▼</Text>
+              </TouchableOpacity>
+            </View>
+            <View style={styles.subHeaderMiddle}>
+              <TouchableOpacity style={styles.subHeaderDropdown} onPress={async () => {
+                if (!locationEnabled) {
+                  await handleLocationToggle();
+                  return;
+                }
+                setOpenDropdown(openDropdown === 'location' ? null : 'location');
+              }}>
+                <Text style={styles.subHeaderValue}>
+                  {!locationEnabled
+                    ? '📍 Enable Location'
+                    : selectedRadius === null
+                      ? '📍 All Locations'
+                      : `📍 Within ${selectedRadius}km`
+                  }
+                </Text>
+                <Text style={styles.dropdownArrowSmall}>▼</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+          <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'center', flex: 1, gap: 12 }}>
+            <Text style={{ color: '#fff', fontSize: 12, fontWeight: '500' }}>🔥 {filteredDeals.length.toLocaleString()} active deals</Text>
+            <View style={{ width: 1, height: 14, backgroundColor: '#b3b3ff' }} />
+            <Text style={{ color: '#fff', fontSize: 12, fontWeight: '500' }}>🔥 {filteredDeals.filter(deal => {
+              const hoursAgo = (Date.now() - new Date(deal.created_at).getTime()) / (1000 * 60 * 60);
+              return hoursAgo <= 24 && (deal.votes_up || 0) > 5;
+            }).length} trending now</Text>
+            <View style={{ width: 1, height: 14, backgroundColor: '#b3b3ff' }} />
+            <Text style={{ color: '#fff', fontSize: 12, fontWeight: '500' }}>⚡ {filteredDeals.filter(deal => {
+              const expiry = deal.expiry_date || deal.expires_at;
+              if (!expiry) return false;
+              const expiresIn = new Date(expiry).getTime() - Date.now();
+              const hoursLeft = expiresIn / (1000 * 60 * 60);
+              return hoursLeft > 0 && hoursLeft <= 24;
+            }).length} expiring soon</Text>
+          </View>
+          <View style={[styles.sortPillsDisplay, { margin: 0, padding: 0, flexDirection: 'row', alignItems: 'center', marginLeft: 'auto', gap: 8 }]}>
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 0, marginRight: 8 }}>
               <TouchableOpacity
-                key={option.key}
                 style={{
-                  backgroundColor: sortBy === option.key ? '#e0e7ff' : 'transparent',
+                  backgroundColor: viewMode === 'grid' ? '#fff' : 'transparent',
                   borderRadius: 14,
-                  paddingVertical: 4,
-                  paddingHorizontal: 10,
-                  marginHorizontal: 2,
-                  borderWidth: sortBy === option.key ? 2 : 1,
-                  borderColor: sortBy === option.key ? '#6366f1' : '#e5e7eb',
-                  minWidth: 60,
+                  paddingVertical: 2,
+                  paddingHorizontal: 8,
+                  borderWidth: viewMode === 'grid' ? 2 : 1,
+                  borderColor: viewMode === 'grid' ? '#6366f1' : '#e5e7eb',
+                  marginRight: 2,
                   alignItems: 'center',
                   justifyContent: 'center',
                   ...(isDesktop ? { cursor: 'pointer' } : {}),
                 }}
-                onPress={() => setSortBy(option.key as typeof sortBy)}
+                onPress={() => setViewMode('grid')}
                 activeOpacity={0.85}
               >
-                <View style={{ flexDirection: 'row', alignItems: 'center' }}>
-                  <Text style={{ marginRight: 5, color: sortBy === option.key ? '#210458ff' : '#f9f9f9ff', fontWeight: sortBy === option.key ? '700' : '500', fontSize: 13 }}>{option.icon}</Text>
-                  <Text style={{ color: sortBy === option.key ? '#210458ff' : '#f9f9f9ff', fontWeight: sortBy === option.key ? '700' : '500', fontSize: 13 }}>{option.label}</Text>
-                </View>
+                <Text style={{ color: viewMode === 'grid' ? '#6366f1' : '#fff', fontWeight: '700', fontSize: 13 }}>▦</Text>
               </TouchableOpacity>
-            ))}
+              <TouchableOpacity
+                style={{
+                  backgroundColor: viewMode === 'list' ? '#fff' : 'transparent',
+                  borderRadius: 14,
+                  paddingVertical: 2,
+                  paddingHorizontal: 8,
+                  borderWidth: viewMode === 'list' ? 2 : 1,
+                  borderColor: viewMode === 'list' ? '#6366f1' : '#e5e7eb',
+                  marginLeft: 2,
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  ...(isDesktop ? { cursor: 'pointer' } : {}),
+                }}
+                onPress={() => setViewMode('list')}
+                activeOpacity={0.85}
+              >
+                <Text style={{ color: viewMode === 'list' ? '#6366f1' : '#fff', fontWeight: '700', fontSize: 13 }}>≡</Text>
+              </TouchableOpacity>
+            </View>
+            <View style={{
+              flexDirection: 'row',
+              justifyContent: 'center',
+              alignItems: 'center',
+              gap: 6,
+              paddingVertical: 0,
+              paddingHorizontal: 0,
+            }}>
+              {[
+                { key: 'newest', label: 'Newest', icon: '🕐' },
+                { key: 'popular', label: 'Popular', icon: '🔥' },
+                { key: 'price_low', label: 'Low Price', icon: '💰' },
+                { key: 'price_high', label: 'High Price', icon: '💎' },
+                { key: 'expiring', label: 'Expiring', icon: '⏰' }
+              ].map(option => (
+                <TouchableOpacity
+                  key={option.key}
+                  style={{
+                    backgroundColor: sortBy === option.key ? '#e0e7ff' : 'transparent',
+                    borderRadius: 14,
+                    paddingVertical: 4,
+                    paddingHorizontal: 10,
+                    marginHorizontal: 2,
+                    borderWidth: sortBy === option.key ? 2 : 1,
+                    borderColor: sortBy === option.key ? '#6366f1' : '#e5e7eb',
+                    minWidth: 60,
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    ...(isDesktop ? { cursor: 'pointer' } : {}),
+                  }}
+                  onPress={() => setSortBy(option.key as typeof sortBy)}
+                  activeOpacity={0.85}
+                >
+                  <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+                    <Text style={{ marginRight: 5, color: sortBy === option.key ? '#210458ff' : '#f9f9f9ff', fontWeight: sortBy === option.key ? '700' : '500', fontSize: 13 }}>{option.icon}</Text>
+                    <Text style={{ color: sortBy === option.key ? '#210458ff' : '#f9f9f9ff', fontWeight: sortBy === option.key ? '700' : '500', fontSize: 13 }}>{option.label}</Text>
+                  </View>
+                </TouchableOpacity>
+              ))}
+            </View>
+
           </View>
         </View>
-      </View>
+      )}
     </Animated.View>
   )}
 
