@@ -1,4 +1,4 @@
-import { supabase } from '@/lib/supabase';
+
 
 export interface AnalyticsData {
   userGrowth: { date: string; count: number }[];

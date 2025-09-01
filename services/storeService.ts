@@ -1,4 +1,4 @@
-import { supabase } from '@/lib/supabase';
+
 import { Database } from '@/types/database';
 
 type Store = Database['public']['Tables']['stores']['Row'];
@@ -8,13 +8,9 @@ type StoreUpdate = Database['public']['Tables']['stores']['Update'];
 class StoreService {
   async getStores(): Promise<{ data: Store[]; error: any }> {
     try {
-      const { data, error } = await supabase
-        .from('stores')
-        .select('*')
-        .order('name');
-
-      if (error) throw error;
-
+      const response = await fetch('http://localhost:3000/api/stores');
+      if (!response.ok) throw new Error('Failed to fetch stores');
+      const data = await response.json();
       return { data: data || [], error: null };
     } catch (error) {
       console.error('Error fetching stores:', error);
@@ -24,14 +20,9 @@ class StoreService {
 
   async getStoreById(id: string): Promise<{ data: Store | null; error: any }> {
     try {
-      const { data, error } = await supabase
-        .from('stores')
-        .select('*')
-        .eq('id', id)
-        .single();
-
-      if (error) throw error;
-
+      const response = await fetch(`http://localhost:3000/api/stores/${id}`);
+      if (!response.ok) throw new Error('Failed to fetch store');
+      const data = await response.json();
       return { data, error: null };
     } catch (error) {
       console.error('Error fetching store:', error);
@@ -41,14 +32,9 @@ class StoreService {
 
   async getStoreBySlug(slug: string): Promise<{ data: Store | null; error: any }> {
     try {
-      const { data, error } = await supabase
-        .from('stores')
-        .select('*')
-        .eq('slug', slug)
-        .single();
-
-      if (error) throw error;
-
+      const response = await fetch(`http://localhost:3000/api/stores/slug/${slug}`);
+      if (!response.ok) throw new Error('Failed to fetch store by slug');
+      const data = await response.json();
       return { data, error: null };
     } catch (error) {
       console.error('Error fetching store by slug:', error);
@@ -58,14 +44,13 @@ class StoreService {
 
   async createStore(storeData: StoreInsert): Promise<{ data: Store | null; error: any }> {
     try {
-      const { data, error } = await supabase
-        .from('stores')
-        .insert(storeData)
-        .select()
-        .single();
-
-      if (error) throw error;
-
+      const response = await fetch('http://localhost:3000/api/stores', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(storeData),
+      });
+      if (!response.ok) throw new Error('Failed to create store');
+      const data = await response.json();
       return { data, error: null };
     } catch (error) {
       console.error('Error creating store:', error);
@@ -75,15 +60,13 @@ class StoreService {
 
   async updateStore(id: string, updates: StoreUpdate): Promise<{ data: Store | null; error: any }> {
     try {
-      const { data, error } = await supabase
-        .from('stores')
-        .update(updates)
-        .eq('id', id)
-        .select()
-        .single();
-
-      if (error) throw error;
-
+      const response = await fetch(`http://localhost:3000/api/stores/${id}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(updates),
+      });
+      if (!response.ok) throw new Error('Failed to update store');
+      const data = await response.json();
       return { data, error: null };
     } catch (error) {
       console.error('Error updating store:', error);
@@ -93,13 +76,10 @@ class StoreService {
 
   async deleteStore(id: string): Promise<{ error: any }> {
     try {
-      const { error } = await supabase
-        .from('stores')
-        .delete()
-        .eq('id', id);
-
-      if (error) throw error;
-
+      const response = await fetch(`http://localhost:3000/api/stores/${id}`, {
+        method: 'DELETE',
+      });
+      if (!response.ok) throw new Error('Failed to delete store');
       return { error: null };
     } catch (error) {
       console.error('Error deleting store:', error);

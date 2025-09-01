@@ -187,7 +187,7 @@ export const useAdminData = () => {
   }, [users]);
 
   // Deal management actions
-  const handleDealAction = useCallback(async (dealId: string, action: 'Approve' | 'Reject', adminId: string) => {
+  const handleDealAction = useCallback(async (dealId: string, action: 'Approve' | 'Reject' | 'Delete', adminId: string) => {
     const deal = pendingDeals.find(d => d.id === dealId);
     if (!deal) return;
     
@@ -198,24 +198,35 @@ export const useAdminData = () => {
         { text: 'Cancel', style: 'cancel' },
         { 
           text: action,
+          style: action === 'Delete' ? 'destructive' : 'default',
           onPress: async () => {
-            const newStatus = action === 'Approve' ? 'live' : 'archived';
-            const { data, error } = await dealService.updateDeal(dealId, { status: newStatus });
-            
-            if (error) {
-              Alert.alert('Error', `Failed to ${action.toLowerCase()} deal: ${error.message}`);
+            if (action === 'Delete') {
+              const { error } = await dealService.deleteDeal(dealId);
+              if (error) {
+                Alert.alert('Error', `Failed to delete deal: ${error.message}`);
+              } else {
+                setPendingDeals(prev => prev.filter(d => d.id !== dealId));
+                Alert.alert('Success', 'Deal deleted successfully');
+              }
             } else {
-              setPendingDeals(prev => prev.filter(d => d.id !== dealId));
-              Alert.alert('Success', `Deal ${action.toLowerCase()}d successfully`);
+              const newStatus = action === 'Approve' ? 'live' : 'rejected';
+              const { data, error } = await dealService.updateDeal(dealId, { status: newStatus });
               
-              // Log admin activity
-              await activityService.logActivity(
-                adminId,
-                'admin_action',
-                `${action}d deal: ${deal.title}`,
-                'deal',
-                dealId
-              );
+              if (error) {
+                Alert.alert('Error', `Failed to ${action.toLowerCase()} deal: ${error.message}`);
+              } else {
+                setPendingDeals(prev => prev.filter(d => d.id !== dealId));
+                Alert.alert('Success', `Deal ${action.toLowerCase()}d successfully`);
+                
+                // Log admin activity
+                await activityService.logActivity(
+                  adminId,
+                  'admin_action',
+                  `${action}d deal: ${deal.title}`,
+                  'deal',
+                  dealId
+                );
+              }
             }
           }
         }

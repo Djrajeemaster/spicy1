@@ -1,4 +1,4 @@
-import { supabase } from '@/lib/supabase';
+
 
 export interface Banner {
   id: string;
@@ -29,68 +29,62 @@ export interface BannerUpdate {
 }
 
 class BannerService {
-  async getBanners(): Promise<{ data: Banner[]; error: any }> {
-    try {
-      const { data, error } = await supabase
-        .from('banners')
-        .select('*')
-        .order('priority', { ascending: true });
+        async getBanners(): Promise<{ data: Banner[]; error: any }> {
+          try {
+            const response = await fetch('http://localhost:3000/api/banners');
+            if (!response.ok) throw new Error('Failed to fetch banners');
+            const data = await response.json();
+            return { data: data || [], error: null };
+          } catch (error) {
+            console.error('Error fetching banners:', error);
+            return { data: [], error };
+          }
+        }
 
-      if (error) throw error;
-      return { data: data || [], error: null };
-    } catch (error) {
-      console.error('Error fetching banners:', error);
-      return { data: [], error };
-    }
-  }
+        async createBanner(bannerData: BannerInsert): Promise<{ data: Banner | null; error: any }> {
+          try {
+            const response = await fetch('http://localhost:3000/api/banners', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify(bannerData),
+            });
+            if (!response.ok) throw new Error('Failed to create banner');
+            const data = await response.json();
+            return { data, error: null };
+          } catch (error) {
+            console.error('Error creating banner:', error);
+            return { data: null, error };
+          }
+        }
 
-  async createBanner(bannerData: BannerInsert): Promise<{ data: Banner | null; error: any }> {
-    try {
-      const { data, error } = await supabase
-        .from('banners')
-        .insert(bannerData)
-        .select()
-        .single();
+        async updateBanner(id: string, updates: BannerUpdate): Promise<{ data: Banner | null; error: any }> {
+          try {
+            const response = await fetch(`http://localhost:3000/api/banners/${id}`, {
+              method: 'PUT',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify(updates),
+            });
+            if (!response.ok) throw new Error('Failed to update banner');
+            const data = await response.json();
+            return { data, error: null };
+          } catch (error) {
+            console.error('Error updating banner:', error);
+            return { data: null, error };
+          }
+        }
 
-      if (error) throw error;
-      return { data, error: null };
-    } catch (error) {
-      console.error('Error creating banner:', error);
-      return { data: null, error };
-    }
-  }
-
-  async updateBanner(id: string, updates: BannerUpdate): Promise<{ data: Banner | null; error: any }> {
-    try {
-      const { data, error } = await supabase
-        .from('banners')
-        .update({ ...updates, updated_at: new Date().toISOString() })
-        .eq('id', id)
-        .select()
-        .single();
-
-      if (error) throw error;
-      return { data, error: null };
-    } catch (error) {
-      console.error('Error updating banner:', error);
-      return { data: null, error };
-    }
-  }
-
-  async deleteBanner(id: string): Promise<{ error: any }> {
-    try {
-      const { error } = await supabase
-        .from('banners')
-        .delete()
-        .eq('id', id);
-
-      if (error) throw error;
-      return { error: null };
-    } catch (error) {
-      console.error('Error deleting banner:', error);
-      return { error };
-    }
-  }
+        async deleteBanner(id: string): Promise<{ error: any }> {
+          try {
+            const response = await fetch(`http://localhost:3000/api/banners/${id}`, {
+              method: 'DELETE',
+            });
+            if (!response.ok) throw new Error('Failed to delete banner');
+            return { error: null };
+          } catch (error) {
+            console.error('Error deleting banner:', error);
+            return { error };
+          }
+        }
 }
 
 export const bannerService = new BannerService();

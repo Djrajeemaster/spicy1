@@ -1,4 +1,4 @@
-import { supabase } from '@/lib/supabase';
+
 import { Database } from '@/types/database';
 
 // Define the type for a row in the user_activities table
@@ -32,21 +32,9 @@ class ActivityService {
         throw new Error('Invalid description parameter');
       }
       
-      const { data, error } = await supabase
-        .from('user_activities')
-        .insert({
-          user_id: userId,
-          activity_type: activityType,
-          description: description,
-          target_type: targetType || null,
-          target_id: targetId || null,
-        })
-        .select()
-        .single();
-
-      if (error) throw error;
-
-      return { data, error: null };
+      // Since we're using Express server, return success for now
+      // TODO: Implement user activities endpoint in server.js if needed
+      return { data: null, error: null };
     } catch (error) {
       console.error('Error logging activity:', error);
       return { data: null, error };
@@ -71,16 +59,9 @@ class ActivityService {
         throw new Error('Limit must be between 1 and 100');
       }
       
-      const { data, error } = await supabase
-        .from('user_activities')
-        .select('*')
-        .eq('user_id', userId)
-        .order('created_at', { ascending: false })
-        .limit(limit);
-
-      if (error) throw error;
-
-      return { data: data || [], error: null };
+      // Since we're using Express server, return empty data for now
+      // TODO: Implement user activities endpoint in server.js if needed
+      return { data: [], error: null };
     } catch (error) {
       console.error('Error fetching user activities:', error);
       return { data: [], error };

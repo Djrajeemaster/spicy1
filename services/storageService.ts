@@ -1,4 +1,4 @@
-import { supabase } from '@/lib/supabase';
+
 import { decode } from 'base64-arraybuffer';
 import { v4 as uuidv4 } from 'uuid';
 

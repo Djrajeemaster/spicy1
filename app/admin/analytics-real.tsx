@@ -1,7 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { View, Text, StyleSheet, ScrollView, RefreshControl, Alert, ActivityIndicator } from 'react-native';
 import { BarChart3, Users, MessageSquare, TrendingUp, Calendar, Eye, Heart, DollarSign } from 'lucide-react-native';
-import { supabase } from '../../lib/supabase';
 
 interface AnalyticsData {
   userStats: {
@@ -77,58 +76,42 @@ export default function AdminAnalytics() {
   const loadAnalytics = async () => {
     try {
       setLoading(true);
-
-      // Get user statistics
-      const { data: users, error: usersError } = await supabase
-        .from('users')
-        .select('id, created_at');
-
-      if (usersError) throw usersError;
-
-      // Get deal statistics
-      const { data: deals, error: dealsError } = await supabase
-        .from('deals')
-        .select('id, created_at, status, category');
-
-      if (dealsError) throw dealsError;
-
-      // Get comment statistics
-      const { data: comments, error: commentsError } = await supabase
-        .from('comments')
-        .select('id, created_at');
-
-      if (commentsError) throw commentsError;
-
+      // Fetch data from backend API endpoints
+      const [usersRes, dealsRes, commentsRes] = await Promise.all([
+        fetch('http://localhost:3000/api/users'),
+        fetch('http://localhost:3000/api/deals'),
+        fetch('http://localhost:3000/api/comments'),
+      ]);
+      if (!usersRes.ok || !dealsRes.ok || !commentsRes.ok) {
+        throw new Error('Failed to fetch analytics data');
+      }
+      const users = await usersRes.json();
+      const deals = await dealsRes.json();
+      const comments = await commentsRes.json();
       // Process the data
       const now = new Date();
       const weekAgo = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
       const monthAgo = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);
-      const dayAgo = new Date(now.getTime() - 24 * 60 * 60 * 1000);
-
       // User statistics
       const totalUsers = users?.length || 0;
-      const usersThisWeek = users?.filter(u => new Date(u.created_at) >= weekAgo).length || 0;
-      const usersThisMonth = users?.filter(u => new Date(u.created_at) >= monthAgo).length || 0;
+      const usersThisWeek = users?.filter((u: any) => new Date(u.created_at) >= weekAgo).length || 0;
+      const usersThisMonth = users?.filter((u: any) => new Date(u.created_at) >= monthAgo).length || 0;
       const activeToday = Math.floor(totalUsers * 0.1); // Estimate active users
-
       // Deal statistics
       const totalDeals = deals?.length || 0;
-      const pendingDeals = deals?.filter(d => d.status === 'pending').length || 0;
-      const approvedDeals = deals?.filter(d => d.status === 'approved').length || 0;
-      const dealsThisWeek = deals?.filter(d => new Date(d.created_at) >= weekAgo).length || 0;
-
+      const pendingDeals = deals?.filter((d: any) => d.status === 'pending').length || 0;
+      const approvedDeals = deals?.filter((d: any) => d.status === 'approved').length || 0;
+      const dealsThisWeek = deals?.filter((d: any) => new Date(d.created_at) >= weekAgo).length || 0;
       // Content statistics
       const totalComments = comments?.length || 0;
-      const commentsThisWeek = comments?.filter(c => new Date(c.created_at) >= weekAgo).length || 0;
-
+      const commentsThisWeek = comments?.filter((c: any) => new Date(c.created_at) >= weekAgo).length || 0;
       // Category analysis
       const categoryCount: { [key: string]: number } = {};
-      deals?.forEach(deal => {
+      deals?.forEach((deal: any) => {
         if (deal.category) {
           categoryCount[deal.category] = (categoryCount[deal.category] || 0) + 1;
         }
       });
-
       const topCategories = Object.entries(categoryCount)
         .map(([name, count]) => ({
           name,
@@ -137,25 +120,20 @@ export default function AdminAnalytics() {
         }))
         .sort((a, b) => b.count - a.count)
         .slice(0, 5);
-
       // Recent activity (last 7 days)
       const recentActivity = [];
       for (let i = 6; i >= 0; i--) {
         const date = new Date(now.getTime() - i * 24 * 60 * 60 * 1000);
         const dateStr = date.toISOString().split('T')[0];
-        
-        const newUsers = users?.filter(u => 
+        const newUsers = users?.filter((u: any) =>
           u.created_at.split('T')[0] === dateStr
         ).length || 0;
-        
-        const newDeals = deals?.filter(d => 
+        const newDeals = deals?.filter((d: any) =>
           d.created_at.split('T')[0] === dateStr
         ).length || 0;
-        
-        const newComments = comments?.filter(c => 
+        const newComments = comments?.filter((c: any) =>
           c.created_at.split('T')[0] === dateStr
         ).length || 0;
-
         recentActivity.push({
           date: dateStr,
           newUsers,
@@ -163,7 +141,6 @@ export default function AdminAnalytics() {
           newComments
         });
       }
-
       setAnalytics({
         userStats: {
           total: totalUsers,
@@ -186,7 +163,6 @@ export default function AdminAnalytics() {
         topCategories,
         recentActivity
       });
-
     } catch (error: any) {
       console.error('Error loading analytics:', error);
       Alert.alert('Error', 'Failed to load analytics data');

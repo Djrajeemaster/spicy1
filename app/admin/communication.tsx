@@ -2,7 +2,6 @@ import React, { useState, useEffect } from 'react';
 import { View, Text, StyleSheet, FlatList, TouchableOpacity, TextInput, Alert, Modal } from 'react-native';
 import { Send, MessageSquare, Users, Bell, BellOff, Filter } from 'lucide-react-native';
 import { elevate } from '../../services/adminElevation';
-import { supabase } from '../../lib/supabase';
 import { useAuth } from '../../contexts/AuthProvider';
 
 interface Announcement {
@@ -37,37 +36,10 @@ export default function AdminCommunication() {
   const loadAnnouncements = async () => {
     try {
       setLoading(true);
-      
-      // Load real announcements from database
-      const { data: announcements, error } = await supabase
-        .from('announcements')
-        .select(`
-          *,
-          users!announcements_author_id_fkey(username)
-        `)
-        .order('created_at', { ascending: false });
-
-      if (error) {
-        console.error('Error loading announcements:', error);
-        // Fallback to placeholder data
-        const placeholderAnnouncements: Announcement[] = [
-          {
-            id: '1',
-            title: 'Welcome to Admin Panel',
-            content: 'This is a placeholder announcement. Database table was just created.',
-            type: 'info',
-            target_audience: 'all',
-            created_at: new Date().toISOString(),
-            author_id: 'system',
-            is_active: true,
-            send_push: false,
-            admin_username: 'System'
-          }
-        ];
-        setAnnouncements(placeholderAnnouncements);
-        return;
-      }
-
+      // Load announcements from backend API
+      const res = await fetch('http://localhost:3000/api/announcements');
+      if (!res.ok) throw new Error('Failed to fetch announcements');
+      const announcements = await res.json();
       const formattedAnnouncements: Announcement[] = announcements?.map((ann: any) => ({
         id: ann.id,
         title: ann.title,
@@ -78,12 +50,11 @@ export default function AdminCommunication() {
         expires_at: ann.expires_at,
         is_active: ann.is_active ?? true,
         author_id: ann.author_id,
-        admin_username: ann.users?.username || 'Admin',
+        admin_username: ann.admin_username || 'Admin',
         sent_count: ann.sent_count || 0,
         views: ann.views || 0,
         send_push: ann.send_push || false
       })) || [];
-
       setAnnouncements(formattedAnnouncements);
     } catch (error: any) {
       console.error('Error loading announcements:', error);

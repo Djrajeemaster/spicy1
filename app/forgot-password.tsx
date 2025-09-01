@@ -12,7 +12,6 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { router } from 'expo-router';
 import { LinearGradient } from 'expo-linear-gradient';
 import { AtSign, Send, MailQuestion, ArrowLeft } from 'lucide-react-native';
-import { supabase } from '@/lib/supabase';
 
 export default function ForgotPasswordScreen() {
   const [email, setEmail] = useState('');
@@ -37,13 +36,13 @@ export default function ForgotPasswordScreen() {
     setError(null);
     setSuccessMessage(null);
 
-    const { error: resetError } = await supabase.auth.resetPasswordForEmail(email);
+    // const { error: resetError } = await supabase.auth.resetPasswordForEmail(email);
 
-    if (resetError) {
-      setError(resetError.message);
-    } else {
-      setSuccessMessage('Password reset link sent! Please check your email inbox (and spam folder).');
-    }
+    // if (resetError) {
+    //   setError(resetError.message);
+    // } else {
+    //   setSuccessMessage('Password reset link sent! Please check your email inbox (and spam folder).');
+    // }
     setLoading(false);
   };
 

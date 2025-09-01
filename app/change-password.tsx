@@ -15,7 +15,6 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { ArrowLeft, Lock, Eye, EyeOff } from 'lucide-react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { router } from 'expo-router';
-import { supabase } from '@/lib/supabase';
 
 export default function ChangePasswordScreen() {
   const [successBanner, setSuccessBanner] = useState(false);

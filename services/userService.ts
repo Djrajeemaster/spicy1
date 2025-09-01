@@ -1,4 +1,4 @@
-import { supabase } from '@/lib/supabase';
+
 import { Database } from '@/types/database';
 
 type UserProfile = Database['public']['Tables']['users']['Row'];
@@ -16,12 +16,15 @@ export interface PublicUserProfile {
 class UserService {
   async getAllUsers(): Promise<{ data: UserProfile[]; error: any }> {
     try {
-      const { data, error } = await supabase
-        .from('users')
-        .select('*')
-        .order('created_at', { ascending: false });
+      const response = await fetch('http://localhost:3000/api/users', {
+        credentials: 'include'
+      });
       
-      if (error) throw error;
+      if (!response.ok) {
+        throw new Error(`HTTP error! status: ${response.status}`);
+      }
+      
+      const data = await response.json();
       return { data: data || [], error: null };
     } catch (error) {
       console.error('Error fetching all users:', error);
@@ -31,13 +34,18 @@ class UserService {
 
   async updateUserStatus(userId: string, status: string, adminId: string): Promise<{ data: any | null; error: any }> {
     try {
-      // Using raw SQL to bypass TypeScript issues
-      const { data, error } = await supabase.rpc('update_user_status', {
-        user_id: userId,
-        new_status: status
+      const response = await fetch(`http://localhost:3000/api/users/${userId}/status`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ status, adminId }),
+        credentials: 'include'
       });
       
-      if (error) throw error;
+      if (!response.ok) {
+        throw new Error(`HTTP error! status: ${response.status}`);
+      }
+      
+      const data = await response.json();
       return { data, error: null };
     } catch (error) {
       console.error('Error updating user status:', error);
@@ -47,29 +55,38 @@ class UserService {
 
   async searchByUsernamePrefix(prefix: string, limit = 8) {
     if (!prefix) return { data: [] as UserProfile[], error: null };
-    const { data, error } = await supabase
-      .from('users')
-      .select('id, username, avatar_url')
-      .ilike('username', `${prefix}%`)
-      .order('username', { ascending: true })
-      .limit(limit);
-
-    return { data: (data || []) as UserProfile[], error };
+    
+    try {
+      const response = await fetch(`http://localhost:3000/api/users/search?prefix=${encodeURIComponent(prefix)}&limit=${limit}`, {
+        credentials: 'include'
+      });
+      
+      if (!response.ok) {
+        throw new Error(`HTTP error! status: ${response.status}`);
+      }
+      
+      const data = await response.json();
+      return { data: (data || []) as UserProfile[], error: null };
+    } catch (error) {
+      return { data: [] as UserProfile[], error };
+    }
   }
 
   async getUserByUsername(username: string): Promise<[any, PublicUserProfile | null]> {
     try {
-      const { data, error } = await supabase
-        .from('users')
-        .select('id, username, role, reputation, avatar_url, created_at, status')
-        .eq('username', username)
-        .single();
+      const response = await fetch(`http://localhost:3000/api/users/username/${encodeURIComponent(username)}`, {
+        credentials: 'include'
+      });
       
-      if (error) throw error;
+      if (!response.ok) {
+        if (response.status === 404) {
+          return [null, null];
+        }
+        throw new Error(`HTTP error! status: ${response.status}`);
+      }
       
-      if (!data) return [null, null];
+      const userData = await response.json();
       
-      const userData = data as any;
       const publicProfile: PublicUserProfile = {
         id: userData.id,
         username: userData.username,

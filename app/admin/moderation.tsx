@@ -2,7 +2,6 @@ import React, { useEffect, useState } from 'react';
 import { View, Text, StyleSheet, FlatList, TouchableOpacity, Alert, Image } from 'react-native';
 import { CheckCircle, XCircle, Eye, Flag, MessageSquare, Calendar, User } from 'lucide-react-native';
 import { elevate } from '../../services/adminElevation';
-import { supabase } from '../../lib/supabase';
 
 interface ModerationItem {
   id: string;
@@ -32,124 +31,60 @@ export default function AdminModeration() {
   const loadModerationQueue = async () => {
     try {
       setLoading(true);
-      
       let moderationItems: ModerationItem[] = [];
 
       // Load deals that need moderation (pending, reported, or flagged)
       if (filter === 'all' || filter === 'deals') {
-        let { data: deals, error: dealsError } = await supabase
-          .from('deals')
-          .select(`
-            id,
-            title,
-            description,
-            category_id,
-            images,
-            created_at,
-            status,
-            created_by,
-            categories!inner(name),
-            users!deals_created_by_fkey(id, username, email)
-          `)
-          .in('status', ['pending', 'flagged', 'reported', 'draft'])
-          .order('created_at', { ascending: false });
-
-        if (dealsError) {
-          console.log('Error loading deals for moderation:', dealsError);
-          // If the query fails, try loading all deals and we'll filter them
-          const { data: allDeals, error: allDealsError } = await supabase
-            .from('deals')
-            .select(`
-              id,
-              title,
-              description,
-              category_id,
-              images,
-              created_at,
-              status,
-              created_by,
-              categories!inner(name),
-              users!deals_created_by_fkey(id, username, email)
-            `)
-            .order('created_at', { ascending: false })
-            .limit(20);
-
-          if (!allDealsError && allDeals) {
-            console.log('Available deal statuses:', [...new Set(allDeals.map((d: any) => d.status))]);
-            // Show recent deals that might need review
-            deals = allDeals.slice(0, 10);
-          }
-        }
-
+        const dealsRes = await fetch('http://localhost:3000/api/deals?moderation=true');
+        if (!dealsRes.ok) throw new Error('Failed to fetch deals for moderation');
+        const deals = await dealsRes.json();
         const dealItems: ModerationItem[] = deals?.map((deal: any) => ({
           id: deal.id,
           type: 'deal' as const,
           title: deal.title || 'Untitled Deal',
           content: deal.description || 'No description provided',
           author: {
-            id: deal.users?.id || '',
-            username: deal.users?.username || 'Unknown User',
-            email: deal.users?.email || '',
+            id: deal.user?.id || '',
+            username: deal.user?.username || 'Unknown User',
+            email: deal.user?.email || '',
             reputation: 0
           },
           created_at: deal.created_at,
           status: deal.status || 'active',
-          category: deal.categories?.name || 'Uncategorized',
+          category: deal.category?.name || 'Uncategorized',
           image_url: deal.images?.[0] || null,
-          reports_count: 0
+          reports_count: deal.reports_count || 0
         })) || [];
-
-        console.log(`Loaded ${dealItems.length} deals for moderation with statuses:`, 
-                   dealItems.map(d => d.status).filter((s, i, arr) => arr.indexOf(s) === i));
-
         moderationItems = [...moderationItems, ...dealItems];
       }
 
       // Load user reports (if available)
       if (filter === 'all' || filter === 'reports') {
-        try {
-          const { data: reports, error: reportsError } = await supabase
-            .from('user_reports')
-            .select(`
-              id,
-              reason,
-              description,
-              created_at,
-              status,
-              reported_user:users!user_reports_reported_user_id_fkey(id, username, email),
-              reporter:users!user_reports_reporter_id_fkey(id, username, email)
-            `)
-            .eq('status', 'pending');
-
-          if (!reportsError && reports) {
-            const reportItems: ModerationItem[] = reports.map((report: any) => ({
-              id: report.id,
-              type: 'user_report' as const,
-              title: `User Report: ${report.reason || 'Violation'}`,
-              content: report.description || 'No description provided',
-              author: {
-                id: report.reported_user?.id || '',
-                username: report.reported_user?.username || 'Unknown User',
-                email: report.reported_user?.email || '',
-                reputation: 0
-              },
-              created_at: report.created_at,
-              status: report.status,
-              reason: report.reason,
-              reports_count: 1
-            }));
-
-            moderationItems = [...moderationItems, ...reportItems];
-          }
-        } catch (reportError) {
-          // Silently handle if user_reports table doesn't exist or has issues
-          console.log('User reports not available:', reportError);
+        const reportsRes = await fetch('http://localhost:3000/api/user_reports?status=pending');
+        if (reportsRes.ok) {
+          const reports = await reportsRes.json();
+          const reportItems: ModerationItem[] = reports.map((report: any) => ({
+            id: report.id,
+            type: 'user_report' as const,
+            title: `User Report: ${report.reason || 'Violation'}`,
+            content: report.description || 'No description provided',
+            author: {
+              id: report.reported_user?.id || '',
+              username: report.reported_user?.username || 'Unknown User',
+              email: report.reported_user?.email || '',
+              reputation: 0
+            },
+            created_at: report.created_at,
+            status: report.status,
+            reason: report.reason,
+            reports_count: report.reports_count || 1
+          }));
+          moderationItems = [...moderationItems, ...reportItems];
         }
       }
 
       // Sort by creation date (newest first)
       moderationItems.sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
-
       setItems(moderationItems);
     } catch (error: any) {
       console.error('Error loading moderation queue:', error);

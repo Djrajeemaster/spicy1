@@ -1,4 +1,4 @@
-import { supabase } from '@/lib/supabase';
+
 
 export interface CrudOptions {
   entity: string;
@@ -13,10 +13,6 @@ export interface CrudOptions {
 
 class AdminCrudService {
   private async makeRequest(options: CrudOptions) {
-    const url = `${process.env.EXPO_PUBLIC_SUPABASE_URL}/functions/v1/admin-crud`;
-    const { data: session } = await supabase.auth.getSession();
-    const jwt = session.session?.access_token;
-
     const params = new URLSearchParams({
       op: options.operation,
       entity: options.entity,
@@ -29,16 +25,16 @@ class AdminCrudService {
 
     const headers: Record<string, string> = {
       'Content-Type': 'application/json',
-      ...(jwt ? { Authorization: `Bearer ${jwt}` } : {}),
     };
 
     if (options.elevationToken) {
       headers['x-admin-elevation'] = options.elevationToken;
     }
 
-    const response = await fetch(`${url}?${params}`, {
+    const response = await fetch(`http://localhost:3000/api/admin/crud?${params}`, {
       method: options.data ? 'POST' : 'GET',
       headers,
+      credentials: 'include',
       ...(options.data ? { body: JSON.stringify(options.data) } : {}),
     });
 

@@ -2,7 +2,6 @@ import React, { useState, useEffect } from 'react';
 import { View, Text, StyleSheet, FlatList, TouchableOpacity, TextInput, Alert, Modal } from 'react-native';
 import { Send, MessageSquare, Users, Bell, BellOff, Filter } from 'lucide-react-native';
 import { elevate } from '../../services/adminElevation';
-import { supabase } from '../../lib/supabase';
 import { useAuth } from '../../contexts/AuthProvider';
 
 interface Announcement {
@@ -37,23 +36,10 @@ export default function AdminCommunication() {
   const loadAnnouncements = async () => {
     try {
       setLoading(true);
-      
-      // Load real announcements from database
-      const { data: announcements, error } = await supabase
-        .from('announcements')
-        .select(`
-          *,
-          author:users(username)
-        `)
-        .order('created_at', { ascending: false });
-
-      if (error) {
-        // If announcements table doesn't exist, show empty state
-        console.log('Announcements table may not exist:', error);
-        setAnnouncements([]);
-        return;
-      }
-
+      // Load announcements from backend API
+      const res = await fetch('http://localhost:3000/api/announcements');
+      if (!res.ok) throw new Error('Failed to fetch announcements');
+      const announcements = await res.json();
       const formattedAnnouncements: Announcement[] = announcements?.map((ann: any) => ({
         id: ann.id,
         title: ann.title,
@@ -64,12 +50,11 @@ export default function AdminCommunication() {
         expires_at: ann.expires_at,
         is_active: ann.is_active ?? true,
         author_id: ann.author_id,
-        admin_username: ann.author?.username || 'Admin',
+        admin_username: ann.admin_username || 'Admin',
         sent_count: ann.sent_count || 0,
         views: ann.views || 0,
         send_push: ann.send_push || false
       })) || [];
-
       setAnnouncements(formattedAnnouncements);
     } catch (error: any) {
       console.error('Error loading announcements:', error);
@@ -91,11 +76,11 @@ export default function AdminCommunication() {
 
     try {
       const elevation = await elevate(10);
-      
-      // Insert into announcements table
-      const { data, error } = await supabase
-        .from('announcements')
-        .insert([{
+      // Send announcement to backend API
+      const res = await fetch('http://localhost:3000/api/announcements', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
           title: newAnnouncement.title,
           content: newAnnouncement.content,
           type: newAnnouncement.type,
@@ -105,13 +90,10 @@ export default function AdminCommunication() {
           send_push: newAnnouncement.send_push,
           sent_count: 0,
           views: 0
-        }])
-        .select()
-        .single();
-
-      if (error) {
-        console.error('Error creating announcement:', error);
-        // Fallback to local state if table doesn't exist
+        })
+      });
+      if (!res.ok) {
+        // Fallback to local state if API fails
         const newAnnouncementItem: Announcement = {
           id: Date.now().toString(),
           ...newAnnouncement,
@@ -122,12 +104,10 @@ export default function AdminCommunication() {
           views: 0,
           sent_count: 0
         };
-        
         setAnnouncements(prev => [newAnnouncementItem, ...prev]);
       } else {
         loadAnnouncements(); // Reload to get the new announcement
       }
-      
       Alert.alert('Success', 'Announcement sent successfully');
       setModalVisible(false);
       setNewAnnouncement({

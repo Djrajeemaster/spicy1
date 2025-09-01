@@ -1,4 +1,4 @@
-import { supabase } from '@/lib/supabase';
+
 
 export interface UserActionRequest {
   userId: string;
@@ -58,28 +58,14 @@ export interface UserStats {
 
 class AdminUserService {
   private async makeRequest(endpoint: string, data: any, elevationToken: string) {
-    const url = `${process.env.EXPO_PUBLIC_SUPABASE_URL}/functions/v1/${endpoint}`;
-    const { data: session } = await supabase.auth.getSession();
-    const jwt = session.session?.access_token;
-
-    if (!jwt) {
-      throw new Error('Not authenticated. Please sign in.');
-    }
-
-    console.log(`Making admin request to ${endpoint}`, {
-      hasJWT: !!jwt,
-      hasElevationToken: !!elevationToken,
-      jwtPreview: jwt ? `${jwt.substring(0, 20)}...` : 'none'
-    });
-
-    const response = await fetch(url, {
+    const response = await fetch(`http://localhost:3000/api/admin/${endpoint}`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        'Authorization': `Bearer ${jwt}`,
         'x-admin-elevation': elevationToken,
       },
       body: JSON.stringify(data),
+      credentials: 'include'
     });
 
     if (!response.ok) {
@@ -95,13 +81,6 @@ class AdminUserService {
         throw new Error('Elevation token expired: Please request a new elevation token.');
       }
       
-      console.error(`${endpoint} failed:`, {
-        status: response.status,
-        statusText: response.statusText,
-        errorText,
-        url
-      });
-      
       throw new Error(`${endpoint} failed: ${response.status} ${response.statusText}${errorText ? ` - ${errorText}` : ''}`);
     }
 
@@ -109,16 +88,10 @@ class AdminUserService {
   }
 
   async getUserStats(userId: string): Promise<UserStats> {
-    const url = `${process.env.EXPO_PUBLIC_SUPABASE_URL}/functions/v1/admin-user-stats`;
-    const { data: session } = await supabase.auth.getSession();
-    const jwt = session.session?.access_token;
-
-    const response = await fetch(`${url}?user_id=${userId}`, {
+    const response = await fetch(`http://localhost:3000/api/admin/user-stats?user_id=${userId}`, {
       method: 'GET',
-      headers: {
-        'Content-Type': 'application/json',
-        ...(jwt ? { Authorization: `Bearer ${jwt}` } : {}),
-      },
+      headers: { 'Content-Type': 'application/json' },
+      credentials: 'include'
     });
 
     if (!response.ok) {

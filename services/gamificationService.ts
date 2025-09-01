@@ -1,4 +1,4 @@
-import { supabase } from '@/lib/supabase';
+
 
 export interface UserBadge {
   id: string;
@@ -34,19 +34,12 @@ export interface UserStats {
 class GamificationService {
   async getUserStats(userId: string): Promise<{ data: UserStats | null; error: any }> {
     try {
-      const { data, error } = await supabase
-        .from('user_stats')
-        .select(`
-          *,
-          user_badges(
-            id,
-            badge:badges(*)
-          )
-        `)
-        .eq('user_id', userId)
-        .single();
-
-      return { data, error };
+      const response = await fetch(`http://localhost:3000/api/gamification/stats/${userId}`, {
+        credentials: 'include'
+      });
+      if (!response.ok) throw new Error('Failed to fetch user stats');
+      const data = await response.json();
+      return { data, error: null };
     } catch (error) {
       return { data: null, error };
     }
@@ -54,18 +47,13 @@ class GamificationService {
 
   async awardPoints(userId: string, points: number, action: string) {
     try {
-      // Update user stats
-      const { error: updateError } = await supabase.rpc('add_user_points', {
-        user_id: userId,
-        points_to_add: points,
-        action_type: action
+      const response = await fetch('http://localhost:3000/api/gamification/award-points', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ userId, points, action }),
+        credentials: 'include'
       });
-
-      if (updateError) throw updateError;
-
-      // Check for new achievements
-      await this.checkAchievements(userId);
-
+      if (!response.ok) throw new Error('Failed to award points');
       return { error: null };
     } catch (error) {
       return { error };
@@ -98,24 +86,14 @@ class GamificationService {
 
   async awardBadge(userId: string, badgeId: string) {
     try {
-      // Check if user already has this badge
-      const { data: existing } = await supabase
-        .from('user_badges')
-        .select('id')
-        .eq('user_id', userId)
-        .eq('badge_id', badgeId)
-        .single();
-
-      if (existing) return; // Already has badge
-
-      const { error } = await supabase
-        .from('user_badges')
-        .insert({
-          user_id: userId,
-          badge_id: badgeId,
-        });
-
-      return { error };
+      const response = await fetch('http://localhost:3000/api/gamification/award-badge', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ userId, badgeId }),
+        credentials: 'include'
+      });
+      if (!response.ok) throw new Error('Failed to award badge');
+      return { error: null };
     } catch (error) {
       return { error };
     }
@@ -123,16 +101,12 @@ class GamificationService {
 
   async getLeaderboard(limit = 10) {
     try {
-      const { data, error } = await supabase
-        .from('user_stats')
-        .select(`
-          *,
-          users(username, role)
-        `)
-        .order('total_points', { ascending: false })
-        .limit(limit);
-
-      return { data, error };
+      const response = await fetch(`http://localhost:3000/api/gamification/leaderboard?limit=${limit}`, {
+        credentials: 'include'
+      });
+      if (!response.ok) throw new Error('Failed to fetch leaderboard');
+      const data = await response.json();
+      return { data, error: null };
     } catch (error) {
       return { data: null, error };
     }

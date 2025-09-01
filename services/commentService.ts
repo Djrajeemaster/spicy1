@@ -1,4 +1,4 @@
-import { supabase } from '@/lib/supabase';
+
 import { Database } from '@/types/database';
 import { safeAsync } from '@/utils/errorHandler';
 
@@ -17,18 +17,9 @@ class CommentService {
    */
   getComments(dealId: string) {
     return safeAsync(async () => {
-      const { data, error } = await supabase
-        .from('comments')
-        .select(`
-          *,
-          users!comments_user_id_fkey(username, avatar_url)
-        `)
-        .eq('deal_id', dealId)
-        .eq('status', 'active')
-        .order('created_at', { ascending: true });
-
-      if (error) throw error;
-
+      const response = await fetch(`http://localhost:3000/api/deals/${dealId}/comments`);
+      if (!response.ok) throw new Error('Failed to fetch comments');
+      const data = await response.json();
       return this.buildCommentTree((data as CommentWithUser[]) || []);
     }, 'CommentService.getComments');
   }
@@ -38,23 +29,14 @@ class CommentService {
    */
   addComment(dealId: string, userId: string, content: string, parentId?: string | null) {
     return safeAsync(async () => {
-      const { data, error } = await supabase
-        .from('comments')
-        .insert({
-          deal_id: dealId,
-          user_id: userId,
-          content,
-          parent_id: parentId || null,
-        })
-        .select()
-        .single();
-
-      if (error) throw error;
-
-      // Also increment the comment count on the deal
-      await supabase.rpc('increment_comment_count', { deal_id_param: dealId });
-
-      return data;
+      const response = await fetch(`http://localhost:3000/api/deals/${dealId}/comments`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ userId, content, parentId }),
+        credentials: 'include'
+      });
+      if (!response.ok) throw new Error('Failed to add comment');
+      return await response.json();
     }, 'CommentService.addComment');
   }
 
@@ -63,31 +45,13 @@ class CommentService {
    */
   flagComment(commentId: string, userId: string, reason?: string) {
     return safeAsync(async () => {
-      // Increment the flag count
-      const { error: updateError } = await supabase
-        .from('comments')
-        .update({
-          flag_count: supabase.sql`flag_count + 1`,
-          flagged_by: userId,
-          flagged_at: new Date().toISOString()
-        })
-        .eq('id', commentId);
-
-      if (updateError) throw updateError;
-
-      // Optionally log the flag reason in user_reports table
-      if (reason) {
-        await supabase
-          .from('user_reports')
-          .insert({
-            reporter_id: userId,
-            reported_content_id: commentId,
-            content_type: 'comment',
-            reason: reason,
-            description: `Comment flagged: ${reason}`
-          });
-      }
-
+      const response = await fetch(`http://localhost:3000/api/comments/${commentId}/flag`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ userId, reason }),
+        credentials: 'include'
+      });
+      if (!response.ok) throw new Error('Failed to flag comment');
       return { success: true };
     }, 'CommentService.flagComment');
   }

@@ -3,7 +3,6 @@
 
 import React, { useEffect, useState } from 'react';
 import { View, Text } from 'react-native';
-import { supabase } from '@/lib/supabase';
 
 export default function UserDebugInfo() {
   const [userInfo, setUserInfo] = useState<any>(null);

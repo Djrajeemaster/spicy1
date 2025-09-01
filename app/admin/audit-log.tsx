@@ -1,7 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { View, Text, StyleSheet, FlatList, TouchableOpacity, TextInput, Alert } from 'react-native';
 import { Search, Activity, Shield, Eye, Trash2, User } from 'lucide-react-native';
-import { supabase } from '../../lib/supabase';
 import { useAuth } from '../../contexts/AuthProvider';
 
 interface AuditLog {
@@ -25,19 +24,13 @@ export default function AdminAuditLog() {
   const loadAuditLogs = async () => {
     try {
       setLoading(true);
-      
-      // Load recent admin activities from various tables
+      // Load recent admin activities from backend API
       let activities: AuditLog[] = [];
-      
-      // Load real audit logs from database first
+      // Load real audit logs from backend
       try {
-        const { data: realAuditLogs } = await supabase
-          .from('audit_logs')
-          .select('*')
-          .order('created_at', { ascending: false })
-          .limit(50);
-
-        if (realAuditLogs) {
+        const res = await fetch('http://localhost:3000/api/audit_logs');
+        if (res.ok) {
+          const realAuditLogs = await res.json();
           realAuditLogs.forEach((log: any) => {
             activities.push({
               id: log.id,
@@ -53,19 +46,13 @@ export default function AdminAuditLog() {
           });
         }
       } catch (err) {
-        console.log('Audit logs table may not exist yet:', err);
+        console.log('Audit logs API may not exist yet:', err);
       }
-      
       // Track deal moderation activities
       try {
-        const { data: dealUpdates } = await supabase
-          .from('deals')
-          .select('id, title, status, updated_at, created_by')
-          .not('status', 'eq', 'active')
-          .order('updated_at', { ascending: false })
-          .limit(20);
-
-        if (dealUpdates) {
+        const res = await fetch('http://localhost:3000/api/deals?status!=active');
+        if (res.ok) {
+          const dealUpdates = await res.json();
           dealUpdates.forEach((deal: any) => {
             activities.push({
               id: `deal_${deal.id}`,
@@ -87,7 +74,6 @@ export default function AdminAuditLog() {
       } catch (err) {
         console.log('Could not load deal activities:', err);
       }
-
       // Sort activities by date
       activities.sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
       setLogs(activities);

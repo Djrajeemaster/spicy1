@@ -1,4 +1,4 @@
-import { supabase } from '@/lib/supabase';
+
 
 export interface NotificationRow {
   id: string;
@@ -12,22 +12,33 @@ export interface NotificationRow {
 
 class NotificationService {
   async listUnread() {
-    const { data, error } = await supabase
-      .from('notifications')
-      .select('*')
-      .is('read_at', null)
-      .order('created_at', { ascending: false });
-    return { data: (data || []) as NotificationRow[], error };
+    try {
+      const response = await fetch('http://localhost:3000/api/notifications/unread', {
+        credentials: 'include'
+      });
+      if (!response.ok) throw new Error('Failed to fetch notifications');
+      const data = await response.json();
+      return { data: (data || []) as NotificationRow[], error: null };
+    } catch (error) {
+      return { data: [] as NotificationRow[], error };
+    }
   }
 
   async markRead(ids: string[]) {
     if (!ids.length) return { data: null, error: null };
-    const { data, error } = await supabase
-      .from('notifications')
-      .update({ read_at: new Date().toISOString() })
-      .in('id', ids)
-      .select();
-    return { data, error };
+    try {
+      const response = await fetch('http://localhost:3000/api/notifications/mark-read', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ ids }),
+        credentials: 'include'
+      });
+      if (!response.ok) throw new Error('Failed to mark notifications as read');
+      const data = await response.json();
+      return { data, error: null };
+    } catch (error) {
+      return { data: null, error };
+    }
   }
 }
 

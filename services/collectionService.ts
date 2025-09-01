@@ -1,4 +1,4 @@
-import { supabase } from '@/lib/supabase';
+
 
 export interface DealCollection {
   id: string;
@@ -22,16 +22,12 @@ export interface CollectionDeal {
 class CollectionService {
   async getUserCollections(userId: string) {
     try {
-      const { data, error } = await supabase
-        .from('deal_collections')
-        .select(`
-          *,
-          collection_deals(count)
-        `)
-        .eq('user_id', userId)
-        .order('updated_at', { ascending: false });
-
-      return { data, error };
+      const response = await fetch(`http://localhost:3000/api/collections?userId=${userId}`, {
+        credentials: 'include'
+      });
+      if (!response.ok) throw new Error('Failed to fetch collections');
+      const data = await response.json();
+      return { data, error: null };
     } catch (error) {
       return { data: null, error };
     }
@@ -39,18 +35,15 @@ class CollectionService {
 
   async createCollection(userId: string, name: string, description?: string, isPublic = false) {
     try {
-      const { data, error } = await supabase
-        .from('deal_collections')
-        .insert({
-          name,
-          description,
-          user_id: userId,
-          is_public: isPublic,
-        })
-        .select()
-        .single();
-
-      return { data, error };
+      const response = await fetch('http://localhost:3000/api/collections', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name, description, userId, isPublic }),
+        credentials: 'include'
+      });
+      if (!response.ok) throw new Error('Failed to create collection');
+      const data = await response.json();
+      return { data, error: null };
     } catch (error) {
       return { data: null, error };
     }
@@ -58,16 +51,15 @@ class CollectionService {
 
   async addDealToCollection(collectionId: string, dealId: string) {
     try {
-      const { data, error } = await supabase
-        .from('collection_deals')
-        .insert({
-          collection_id: collectionId,
-          deal_id: dealId,
-        })
-        .select()
-        .single();
-
-      return { data, error };
+      const response = await fetch(`http://localhost:3000/api/collections/${collectionId}/deals`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ dealId }),
+        credentials: 'include'
+      });
+      if (!response.ok) throw new Error('Failed to add deal to collection');
+      const data = await response.json();
+      return { data, error: null };
     } catch (error) {
       return { data: null, error };
     }
@@ -75,13 +67,12 @@ class CollectionService {
 
   async removeDealFromCollection(collectionId: string, dealId: string) {
     try {
-      const { error } = await supabase
-        .from('collection_deals')
-        .delete()
-        .eq('collection_id', collectionId)
-        .eq('deal_id', dealId);
-
-      return { error };
+      const response = await fetch(`http://localhost:3000/api/collections/${collectionId}/deals/${dealId}`, {
+        method: 'DELETE',
+        credentials: 'include'
+      });
+      if (!response.ok) throw new Error('Failed to remove deal from collection');
+      return { error: null };
     } catch (error) {
       return { error };
     }
@@ -89,16 +80,12 @@ class CollectionService {
 
   async getCollectionDeals(collectionId: string) {
     try {
-      const { data, error } = await supabase
-        .from('collection_deals')
-        .select(`
-          *,
-          deals(*)
-        `)
-        .eq('collection_id', collectionId)
-        .order('added_at', { ascending: false });
-
-      return { data, error };
+      const response = await fetch(`http://localhost:3000/api/collections/${collectionId}/deals`, {
+        credentials: 'include'
+      });
+      if (!response.ok) throw new Error('Failed to fetch collection deals');
+      const data = await response.json();
+      return { data, error: null };
     } catch (error) {
       return { data: null, error };
     }
@@ -106,13 +93,12 @@ class CollectionService {
 
   async deleteCollection(collectionId: string, userId: string) {
     try {
-      const { error } = await supabase
-        .from('deal_collections')
-        .delete()
-        .eq('id', collectionId)
-        .eq('user_id', userId);
-
-      return { error };
+      const response = await fetch(`http://localhost:3000/api/collections/${collectionId}?userId=${userId}`, {
+        method: 'DELETE',
+        credentials: 'include'
+      });
+      if (!response.ok) throw new Error('Failed to delete collection');
+      return { error: null };
     } catch (error) {
       return { error };
     }

@@ -1,4 +1,4 @@
-import { supabase } from '@/lib/supabase';
+
 
 export async function startImpersonation(targetUserId: string, opts?: { elevationToken?: string }) {
   const url = `${process.env.EXPO_PUBLIC_SUPABASE_URL}/functions/v1/admin-impersonate-start`;

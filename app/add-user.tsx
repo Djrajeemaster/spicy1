@@ -5,7 +5,6 @@ import { ArrowLeft, UserPlus } from 'lucide-react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { create } from '@/services/adminCrud';
 import { elevate } from '@/services/adminElevation';
-import { supabase } from '@/lib/supabase';
 
 const ROLES = ['user', 'verified_user', 'business', 'moderator', 'admin', 'super_admin'];
 
@@ -24,37 +23,19 @@ export default function AddUserScreen() {
 
     try {
       setLoading(true);
-      
-      // Use Supabase Auth to create user
-      const { data, error } = await supabase.auth.signUp({
-        email: email.trim(),
-        password,
-        options: {
-          data: {
-            username: username.trim(),
-            role: role
-          }
-        }
+      // Replace Supabase call with backend API request
+      const response = await fetch('http://localhost:3000/api/users', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          username: username.trim(),
+          email: email.trim(),
+          password,
+          role,
+        }),
       });
-      
-      if (error) throw error;
-      
-      // Update user profile if signup successful
-      if (data.user) {
-        const { error: profileError } = await supabase
-          .from('users')
-          .upsert({
-            id: data.user.id,
-            username: username.trim(),
-            email: email.trim(),
-            role: role,
-            created_at: new Date().toISOString()
-          });
-        
-        if (profileError) {
-          console.warn('Profile update failed:', profileError);
-        }
-      }
+      const result = await response.json();
+      if (!response.ok) throw new Error(result.error || 'Failed to create user');
 
       Alert.alert('Success', 'User created successfully');
       setTimeout(() => router.replace('/(tabs)/admin'), 1000);

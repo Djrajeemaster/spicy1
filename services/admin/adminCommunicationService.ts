@@ -1,4 +1,4 @@
-import { supabase } from '@/lib/supabase';
+
 
 export interface Announcement {
   id: string;
@@ -26,39 +26,11 @@ interface SendAnnouncementRequest {
 class AdminCommunicationService {
   async getAnnouncements(): Promise<Announcement[]> {
     try {
-      const { data, error } = await supabase
-        .from('admin_announcements')
-        .select(`
-          id,
-          title,
-          content,
-          type,
-          target_audience,
-          send_push,
-          created_at,
-          admin_id,
-          views,
-          is_published,
-          users!admin_announcements_admin_id_fkey(username)
-        `)
-        .eq('is_published', true)
-        .order('created_at', { ascending: false });
-
-      if (error) throw error;
-
-      return (data || []).map(announcement => ({
-        id: announcement.id,
-        title: announcement.title,
-        content: announcement.content,
-        type: announcement.type as 'info' | 'warning' | 'urgent',
-        target_audience: announcement.target_audience as 'all' | 'verified' | 'business' | 'moderators',
-        send_push: announcement.send_push,
-        created_at: announcement.created_at,
-        admin_id: announcement.admin_id,
-        admin_username: (announcement as any).users?.username,
-        views: announcement.views || 0,
-        is_published: announcement.is_published,
-      }));
+      const response = await fetch('http://localhost:3000/api/announcements', {
+        credentials: 'include'
+      });
+      if (!response.ok) throw new Error('Failed to fetch announcements');
+      return await response.json();
     } catch (error) {
       console.error('Error fetching announcements:', error);
       throw error;
@@ -67,14 +39,12 @@ class AdminCommunicationService {
 
   async sendAnnouncement(request: SendAnnouncementRequest): Promise<void> {
     try {
-      const headers = {
-        'Content-Type': 'application/json',
-        'x-admin-elevation': request.elevationToken,
-      };
-
-      const response = await fetch(`${process.env.EXPO_PUBLIC_SUPABASE_URL}/functions/v1/admin-send-announcement`, {
+      const response = await fetch('http://localhost:3000/api/admin/send-announcement', {
         method: 'POST',
-        headers,
+        headers: {
+          'Content-Type': 'application/json',
+          'x-admin-elevation': request.elevationToken,
+        },
         body: JSON.stringify({
           title: request.title,
           content: request.content,
@@ -82,6 +52,7 @@ class AdminCommunicationService {
           target_audience: request.target_audience,
           send_push: request.send_push,
         }),
+        credentials: 'include'
       });
 
       if (!response.ok) {
@@ -102,34 +73,11 @@ class AdminCommunicationService {
     by_type: Record<string, number>;
   }> {
     try {
-      const thisMonth = new Date();
-      thisMonth.setDate(1);
-      thisMonth.setHours(0, 0, 0, 0);
-
-      const { data: announcements, error } = await supabase
-        .from('admin_announcements')
-        .select('id, type, views, created_at')
-        .eq('is_published', true);
-
-      if (error) throw error;
-
-      const thisMonthAnnouncements = announcements?.filter(
-        a => new Date(a.created_at) >= thisMonth
-      ) || [];
-
-      const totalViews = announcements?.reduce((sum, a) => sum + (a.views || 0), 0) || 0;
-      const byType = announcements?.reduce((acc, a) => {
-        acc[a.type] = (acc[a.type] || 0) + 1;
-        return acc;
-      }, {} as Record<string, number>) || {};
-
-      return {
-        total_announcements: announcements?.length || 0,
-        announcements_this_month: thisMonthAnnouncements.length,
-        total_views: totalViews,
-        average_views: announcements?.length ? Math.round(totalViews / announcements.length) : 0,
-        by_type: byType,
-      };
+      const response = await fetch('http://localhost:3000/api/admin/announcement-stats', {
+        credentials: 'include'
+      });
+      if (!response.ok) throw new Error('Failed to fetch announcement stats');
+      return await response.json();
     } catch (error) {
       console.error('Error fetching announcement stats:', error);
       throw error;
@@ -178,14 +126,11 @@ class AdminCommunicationService {
     created_at: string;
   }>> {
     try {
-      const { data, error } = await supabase
-        .from('system_notifications')
-        .select('*')
-        .order('created_at', { ascending: false });
-
-      if (error) throw error;
-
-      return data || [];
+      const response = await fetch('http://localhost:3000/api/admin/system-notifications', {
+        credentials: 'include'
+      });
+      if (!response.ok) return [];
+      return await response.json();
     } catch (error) {
       console.error('Error fetching system notifications:', error);
       return [];

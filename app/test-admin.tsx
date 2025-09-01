@@ -3,7 +3,6 @@ import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Alert } from 'rea
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useAuth } from '@/contexts/AuthProvider';
 import { canEditAnyDeal } from '@/utils/adminUtils';
-import { supabase } from '@/lib/supabase';
 
 export default function TestAdminScreen() {
   const { user, profile } = useAuth();

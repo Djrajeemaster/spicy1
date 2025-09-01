@@ -1,4 +1,4 @@
-import { supabase } from '@/lib/supabase';
+
 import { Database } from '@/types/database';
 
 type Category = Database['public']['Tables']['categories']['Row'];
@@ -8,12 +8,9 @@ type CategoryUpdate = Database['public']['Tables']['categories']['Update'];
 class CategoryService {
   async getCategories(): Promise<{ data: Category[]; error: any }> {
     try {
-      const { data, error } = await supabase
-        .from('categories')
-        .select('*')
-        .eq('is_active', true)
-        .order('name', { ascending: true });
-      if (error) throw error;
+      const response = await fetch('http://localhost:3000/api/categories?is_active=true');
+      if (!response.ok) throw new Error('Failed to fetch categories');
+      const data = await response.json();
       return { data: data || [], error: null };
     } catch (error) {
       console.error('Error fetching categories:', error);
@@ -23,11 +20,9 @@ class CategoryService {
 
   async getAllCategories(): Promise<{ data: Category[]; error: any }> {
     try {
-      const { data, error } = await supabase
-        .from('categories')
-        .select('*')
-        .order('name', { ascending: true });
-      if (error) throw error;
+      const response = await fetch('http://localhost:3000/api/categories');
+      if (!response.ok) throw new Error('Failed to fetch all categories');
+      const data = await response.json();
       return { data: data || [], error: null };
     } catch (error) {
       console.error('Error fetching all categories:', error);
@@ -37,12 +32,9 @@ class CategoryService {
 
   async getCategoryById(id: string): Promise<{ data: Category | null; error: any }> {
     try {
-      const { data, error } = await supabase
-        .from('categories')
-        .select('*')
-        .eq('id', id)
-        .single();
-      if (error) throw error;
+      const response = await fetch(`http://localhost:3000/api/categories/${id}`);
+      if (!response.ok) throw new Error('Failed to fetch category');
+      const data = await response.json();
       return { data, error: null };
     } catch (error) {
       console.error('Error fetching category:', error);
@@ -52,12 +44,13 @@ class CategoryService {
 
   async createCategory(categoryData: CategoryInsert): Promise<{ data: Category | null; error: any }> {
     try {
-      const { data, error } = await supabase
-        .from('categories')
-        .insert(categoryData)
-        .select()
-        .single();
-      if (error) throw error;
+      const response = await fetch('http://localhost:3000/api/categories', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(categoryData),
+      });
+      if (!response.ok) throw new Error('Failed to create category');
+      const data = await response.json();
       return { data, error: null };
     } catch (error) {
       console.error('Error creating category:', error);
@@ -67,13 +60,13 @@ class CategoryService {
 
   async updateCategory(id: string, updates: CategoryUpdate): Promise<{ data: Category | null; error: any }> {
     try {
-      const { data, error } = await supabase
-        .from('categories')
-        .update(updates)
-        .eq('id', id)
-        .select()
-        .single();
-      if (error) throw error;
+      const response = await fetch(`http://localhost:3000/api/categories/${id}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(updates),
+      });
+      if (!response.ok) throw new Error('Failed to update category');
+      const data = await response.json();
       return { data, error: null };
     } catch (error) {
       console.error('Error updating category:', error);
@@ -83,11 +76,10 @@ class CategoryService {
 
   async deleteCategory(id: string): Promise<{ error: any }> {
     try {
-      const { error } = await supabase
-        .from('categories')
-        .delete()
-        .eq('id', id);
-      if (error) throw error;
+      const response = await fetch(`http://localhost:3000/api/categories/${id}`, {
+        method: 'DELETE',
+      });
+      if (!response.ok) throw new Error('Failed to delete category');
       return { error: null };
     } catch (error) {
       console.error('Error deleting category:', error);

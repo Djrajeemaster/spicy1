@@ -41,6 +41,19 @@ type Store = Database['public']['Tables']['stores']['Row'];
 
 const RADIUS_OPTIONS = [1, 5, 10, 25];
 
+// Replace service calls with backend API fetch
+const fetchDealsFromApi = async () => {
+  try {
+    const response = await fetch('http://localhost:3000/api/deals');
+    const data = await response.json();
+    // Ensure data is always an array
+    return Array.isArray(data) ? data : [];
+  } catch (error) {
+    console.error('Error fetching deals:', error);
+    return [];
+  }
+};
+
 export default function HomeScreen() {
   const scrollY = useRef(new Animated.Value(0)).current;
   const [showFilterBar, setShowFilterBar] = useState(true);
@@ -237,52 +250,15 @@ export default function HomeScreen() {
 
   // ----- Deals loader -----
   const loadDeals = useCallback(async () => {
-    try {
-      setLoading(true);
-      const [error, data] = await dealService.getDeals({ sortBy, limit: 50 }, user?.id);
-      
-      if (data && data.length > 0) {
-        const mappedData = data.map((d: any) => ({
-          ...d,
-          id: String(d.id),
-          createdAt: d.created_at || new Date().toISOString(),
-          created_at: d.created_at || new Date().toISOString(),
-          category: d.category || {},
-          store: d.store || {},
-          postedBy: d.created_by_user?.username || 'Unknown',
-          created_by: d.created_by, // Add this for edit functionality
-          votes: { up: d.votes_up || 0, down: d.votes_down || 0 },
-          votes_up: d.votes_up || 0,
-          comments: d.comment_count || 0,
-          image: d.images?.[0] || 'https://images.pexels.com/photos/3394650/pexels-photo-3394650.jpeg',
-          images: d.images || [],
-          city: d.city || 'Online',
-          distance: '0.5 miles',
-          view_count: d.view_count || 0,
-        }));
-        setDeals(mappedData);
-        setFilteredDeals(mappedData);
-      } else if (error) {
-        console.error('Failed to load deals:', error);
-        setDeals([]);
-        setFilteredDeals([]);
-      } else {
-        setDeals([]);
-        setFilteredDeals([]);
-      }
-    } catch (error) {
-      console.error('Error loading deals:', error);
-      setDeals([]);
-      setFilteredDeals([]);
-    } finally {
-      setLoading(false);
-    }
-  }, [user?.id, sortBy]);
+    setLoading(true);
+    const data = await fetchDealsFromApi();
+    setDeals(data);
+    setLoading(false);
+  }, []);
 
-  // initial + whenever filters change
   useEffect(() => {
     loadDeals();
-  }, [loadDeals]);
+  }, []);
 
   // Apply filters whenever search query or filter options change
   useEffect(() => {
@@ -653,9 +629,7 @@ export default function HomeScreen() {
         },
       ]}
     >
-      {/* Top row: filter controls and sort pills */}
       <View style={{ flexDirection: 'row', alignItems: 'center', flexWrap: 'nowrap', width: '100%', gap: 8, margin: 0, paddingTop: 0, paddingBottom: 0, minHeight: 0, height: 'auto' }}>
-        {/* Left Filters */}
         <View style={{ flexDirection: 'row', alignItems: 'center', gap: 16 }}>
           <View style={styles.subHeaderLeft}>
             <TouchableOpacity style={styles.subHeaderDropdown} onPress={() => setOpenDropdown(openDropdown === 'categories' ? null : 'categories')}>
@@ -699,8 +673,6 @@ export default function HomeScreen() {
             </TouchableOpacity>
           </View>
         </View>
-
-        {/* Center Stats */}
         <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'center', flex: 1, gap: 12 }}>
           <Text style={{ color: '#fff', fontSize: 12, fontWeight: '500' }}>🔥 {filteredDeals.length.toLocaleString()} active deals</Text>
           <View style={{ width: 1, height: 14, backgroundColor: '#b3b3ff' }} />
@@ -717,10 +689,7 @@ export default function HomeScreen() {
             return hoursLeft > 0 && hoursLeft <= 24;
           }).length} expiring soon</Text>
         </View>
-
-        {/* Right Sort Pills */}
-        <View style={[styles.sortPillsDisplay, { margin: 0, padding: 0, flexDirection: 'row', alignItems: 'center', marginLeft: 'auto', gap: 8 }]}> 
-          {/* Grid/List Toggle */}
+        <View style={[styles.sortPillsDisplay, { margin: 0, padding: 0, flexDirection: 'row', alignItems: 'center', marginLeft: 'auto', gap: 8 }]}>
           <View style={{ flexDirection: 'row', alignItems: 'center', gap: 0, marginRight: 8 }}>
             <TouchableOpacity
               style={{
@@ -759,7 +728,6 @@ export default function HomeScreen() {
               <Text style={{ color: viewMode === 'list' ? '#6366f1' : '#fff', fontWeight: '700', fontSize: 13 }}>≡</Text>
             </TouchableOpacity>
           </View>
-          {/* Sort Pills */}
           <View style={{
             flexDirection: 'row',
             justifyContent: 'center',
@@ -778,13 +746,13 @@ export default function HomeScreen() {
               <TouchableOpacity
                 key={option.key}
                 style={{
-                  backgroundColor: sortBy === option.key ? '#e0e7ff' : 'transparent', // subtle light blue for selected
+                  backgroundColor: sortBy === option.key ? '#e0e7ff' : 'transparent',
                   borderRadius: 14,
                   paddingVertical: 4,
                   paddingHorizontal: 10,
                   marginHorizontal: 2,
                   borderWidth: sortBy === option.key ? 2 : 1,
-                  borderColor: sortBy === option.key ? '#6366f1' : '#e5e7eb', // bold border for selected
+                  borderColor: sortBy === option.key ? '#6366f1' : '#e5e7eb',
                   minWidth: 60,
                   alignItems: 'center',
                   justifyContent: 'center',
@@ -793,22 +761,15 @@ export default function HomeScreen() {
                 onPress={() => setSortBy(option.key as typeof sortBy)}
                 activeOpacity={0.85}
               >
-                <Text style={{
-                  color: sortBy === option.key ? '#210458ff' : '#f9f9f9ff', // dark for selected, medium gray for unselected
-                  fontWeight: sortBy === option.key ? '700' : '500',
-                  fontSize: 13,
-                  display: 'flex',
-                  flexDirection: 'row',
-                  alignItems: 'center',
-                }}>
-                  <Text style={{ marginRight: 5 }}>{option.icon}</Text>
-                  {option.label}
-                </Text>
+                <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+                  <Text style={{ marginRight: 5, color: sortBy === option.key ? '#210458ff' : '#f9f9f9ff', fontWeight: sortBy === option.key ? '700' : '500', fontSize: 13 }}>{option.icon}</Text>
+                  <Text style={{ color: sortBy === option.key ? '#210458ff' : '#f9f9f9ff', fontWeight: sortBy === option.key ? '700' : '500', fontSize: 13 }}>{option.label}</Text>
+                </View>
               </TouchableOpacity>
             ))}
           </View>
         </View>
-      </View> {/* Close main row */}
+      </View>
     </Animated.View>
   )}
 

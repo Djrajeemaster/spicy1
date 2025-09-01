@@ -56,6 +56,7 @@ export default function AdminScreen() {
     loading: adminLoading,
     handleUserAction,
     handleDealAction,
+    handleDealDelete,
     toggleCategory,
     addNewCategory,
     toggleBanner,

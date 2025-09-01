@@ -1,7 +1,6 @@
 import { dealService } from '@/services/dealService';
 import React, { useEffect, useState } from 'react';
 import { View, Text, ActivityIndicator, Alert, TouchableOpacity, ScrollView } from 'react-native';
-import { supabase } from '@/lib/supabase';
 import { reportService } from '@/services/reportService';
 
 interface Report {

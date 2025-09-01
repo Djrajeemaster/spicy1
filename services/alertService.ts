@@ -1,4 +1,4 @@
-import { supabase } from '@/lib/supabase';
+
 import { Database } from '@/types/database';
 
 type Alert = Database['public']['Tables']['alerts']['Row'];
@@ -22,14 +22,11 @@ class AlertService {
    */
   async getUserAlerts(userId: string): Promise<{ data: Alert[]; error: any }> {
     try {
-      const { data, error } = await supabase
-        .from('alerts')
-        .select('*')
-        .eq('user_id', userId)
-        .eq('is_active', true); // Only fetch active alerts
-
-      if (error) throw error;
-
+      const response = await fetch(`http://localhost:3000/api/alerts?userId=${userId}&active=true`, {
+        credentials: 'include'
+      });
+      if (!response.ok) throw new Error('Failed to fetch alerts');
+      const data = await response.json();
       return { data: data || [], error: null };
     } catch (error) {
       console.error('Error fetching user alerts:', error);
@@ -43,14 +40,14 @@ class AlertService {
    */
   async createAlert(alertData: AlertInsert): Promise<{ data: Alert | null; error: any }> {
     try {
-      const { data, error } = await supabase
-        .from('alerts')
-        .insert(alertData)
-        .select()
-        .single();
-
-      if (error) throw error;
-
+      const response = await fetch('http://localhost:3000/api/alerts', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(alertData),
+        credentials: 'include'
+      });
+      if (!response.ok) throw new Error('Failed to create alert');
+      const data = await response.json();
       return { data, error: null };
     } catch (error) {
       console.error('Error creating alert:', error);
@@ -65,15 +62,14 @@ class AlertService {
    */
   async updateAlert(alertId: string, updates: AlertUpdate): Promise<{ data: Alert | null; error: any }> {
     try {
-      const { data, error } = await supabase
-        .from('alerts')
-        .update(updates)
-        .eq('id', alertId)
-        .select()
-        .single();
-
-      if (error) throw error;
-
+      const response = await fetch(`http://localhost:3000/api/alerts/${alertId}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(updates),
+        credentials: 'include'
+      });
+      if (!response.ok) throw new Error('Failed to update alert');
+      const data = await response.json();
       return { data, error: null };
     } catch (error) {
       console.error('Error updating alert:', error);
@@ -87,13 +83,11 @@ class AlertService {
    */
   async deactivateAlert(alertId: string): Promise<{ error: any }> {
     try {
-      const { error } = await supabase
-        .from('alerts')
-        .update({ is_active: false })
-        .eq('id', alertId);
-
-      if (error) throw error;
-
+      const response = await fetch(`http://localhost:3000/api/alerts/${alertId}/deactivate`, {
+        method: 'PUT',
+        credentials: 'include'
+      });
+      if (!response.ok) throw new Error('Failed to deactivate alert');
       return { error: null };
     } catch (error) {
       console.error('Error deactivating alert:', error);
@@ -107,13 +101,11 @@ class AlertService {
    */
   async activateAlert(alertId: string): Promise<{ error: any }> {
     try {
-      const { error } = await supabase
-        .from('alerts')
-        .update({ is_active: true })
-        .eq('id', alertId);
-
-      if (error) throw error;
-
+      const response = await fetch(`http://localhost:3000/api/alerts/${alertId}/activate`, {
+        method: 'PUT',
+        credentials: 'include'
+      });
+      if (!response.ok) throw new Error('Failed to activate alert');
       return { error: null };
     } catch (error) {
       console.error('Error activating alert:', error);

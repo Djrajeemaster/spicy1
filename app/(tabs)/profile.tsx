@@ -263,7 +263,7 @@ useEffect(() => {
           setLoadingSaved(false);
         })();
       }
-    }, [user?.id, profileTab, fetchedUserDeals.length, followCounts, followingFeed.length, savedDeals.length])
+    }, [user?.id, profileTab])
   );
 
   const userDeals = {

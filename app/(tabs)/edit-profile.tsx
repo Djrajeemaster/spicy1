@@ -19,7 +19,6 @@ import { router } from 'expo-router';
 import { useAuth } from '@/contexts/AuthProvider';
 import { userService } from '@/services/userService';
 import { Database } from '@/types/database';
-import { supabase } from '@/lib/supabase';
 import * as ImagePicker from 'expo-image-picker';
 import { storageService } from '@/services/storageService';
 

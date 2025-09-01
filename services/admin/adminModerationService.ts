@@ -1,4 +1,4 @@
-import { supabase } from '@/lib/supabase';
+
 
 interface ModerationItem {
   id: string;

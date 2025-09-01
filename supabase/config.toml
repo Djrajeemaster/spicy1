@@ -12,7 +12,7 @@ enabled = false
 
 [db]
 # Remote database URL – password is percent‑encoded (Yuvansai@143 → Yuvansai%40143)
-url = "postgresql://postgres:Yuvansai%40143@db.spaygpmpymjxlomnturx.supabase.co:5432/postgres"
+
 
 # Local‑only settings (you can keep them as‑is)
 port = 54322

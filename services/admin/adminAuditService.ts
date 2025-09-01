@@ -1,4 +1,4 @@
-import { supabase } from '@/lib/supabase';
+
 
 export interface AuditLog {
   id: string;
@@ -24,74 +24,19 @@ interface AuditFilters {
 class AdminAuditService {
   async getAuditLogs(filters: AuditFilters): Promise<AuditLog[]> {
     try {
-      let query = supabase
-        .from('admin_actions')
-        .select(`
-          id,
-          admin_id,
-          action_type,
-          reason,
-          user_id,
-          created_at,
-          ip_address,
-          metadata,
-          users!admin_actions_admin_id_fkey(username)
-        `)
-        .order('created_at', { ascending: false });
-
-      // Apply date filter
-      const now = new Date();
-      if (filters.dateRange === 'today') {
-        const today = new Date(now);
-        today.setHours(0, 0, 0, 0);
-        query = query.gte('created_at', today.toISOString());
-      } else if (filters.dateRange === '7d') {
-        const weekAgo = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
-        query = query.gte('created_at', weekAgo.toISOString());
-      } else if (filters.dateRange === '30d') {
-        const monthAgo = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);
-        query = query.gte('created_at', monthAgo.toISOString());
-      }
-
-      // Apply action filter
-      if (filters.action) {
-        query = query.eq('action_type', filters.action);
-      }
-
-      // Apply admin filter
-      if (filters.admin_id) {
-        query = query.eq('admin_id', filters.admin_id);
-      }
-
-      const { data, error } = await query.limit(100);
-
-      if (error) throw error;
-
-      // Transform the data to match our AuditLog interface
-      const logs: AuditLog[] = (data || []).map(item => ({
-        id: item.id,
-        admin_id: item.admin_id,
-        admin_username: (item as any).users?.username || 'Unknown Admin',
-        action: item.action_type,
-        description: this.formatActionDescription(item.action_type, item.reason, item.user_id),
-        target_type: item.user_id ? 'user' : undefined,
-        target_id: item.user_id,
-        metadata: item.metadata || {},
-        ip_address: item.ip_address,
-        created_at: item.created_at,
-      }));
-
-      // Apply search filter on transformed data
-      if (filters.search) {
-        const searchLower = filters.search.toLowerCase();
-        return logs.filter(log => 
-          log.description.toLowerCase().includes(searchLower) ||
-          log.action.toLowerCase().includes(searchLower) ||
-          log.admin_username.toLowerCase().includes(searchLower)
-        );
-      }
-
-      return logs;
+      const params = new URLSearchParams({
+        dateRange: filters.dateRange,
+        ...(filters.search && { search: filters.search }),
+        ...(filters.action && { action: filters.action }),
+        ...(filters.admin_id && { admin_id: filters.admin_id })
+      });
+      
+      const response = await fetch(`http://localhost:3000/api/admin/audit-logs?${params}`, {
+        credentials: 'include'
+      });
+      
+      if (!response.ok) throw new Error('Failed to fetch audit logs');
+      return await response.json();
     } catch (error) {
       console.error('Error fetching audit logs:', error);
       throw error;
@@ -132,19 +77,15 @@ class AdminAuditService {
     ipAddress?: string
   ): Promise<void> {
     try {
-      const { error } = await supabase
-        .from('admin_actions')
-        .insert({
-          admin_id: adminId,
-          action_type: action,
-          reason: description,
-          user_id: targetType === 'user' ? targetId : null,
-          metadata: metadata || {},
-          ip_address: ipAddress,
-          created_at: new Date().toISOString(),
-        });
-
-      if (error) throw error;
+      const response = await fetch('http://localhost:3000/api/admin/log-action', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          adminId, action, description, targetType, targetId, metadata, ipAddress
+        }),
+        credentials: 'include'
+      });
+      if (!response.ok) throw new Error('Failed to log admin action');
     } catch (error) {
       console.error('Error logging admin action:', error);
       throw error;
@@ -159,66 +100,12 @@ class AdminAuditService {
     recent_activity: AuditLog[];
   }> {
     try {
-      const now = new Date();
-      const today = new Date(now);
-      today.setHours(0, 0, 0, 0);
-      const weekAgo = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
-
-      let baseQuery = supabase.from('admin_actions');
-      if (adminId) {
-        baseQuery = baseQuery.select('*').eq('admin_id', adminId);
-      } else {
-        baseQuery = baseQuery.select('*');
-      }
-
-      const [
-        { count: totalActions },
-        { count: actionsToday },
-        { count: actionsThisWeek },
-        { data: recentActions }
-      ] = await Promise.all([
-        baseQuery.select('*', { count: 'exact', head: true }),
-        baseQuery.select('*', { count: 'exact', head: true }).gte('created_at', today.toISOString()),
-        baseQuery.select('*', { count: 'exact', head: true }).gte('created_at', weekAgo.toISOString()),
-        baseQuery.select(`
-          id,
-          admin_id,
-          action_type,
-          reason,
-          user_id,
-          created_at,
-          users!admin_actions_admin_id_fkey(username)
-        `).order('created_at', { ascending: false }).limit(5)
-      ]);
-
-      // Find most common action
-      const actionCounts = new Map<string, number>();
-      recentActions?.forEach(action => {
-        const count = actionCounts.get(action.action_type) || 0;
-        actionCounts.set(action.action_type, count + 1);
+      const params = adminId ? `?admin_id=${adminId}` : '';
+      const response = await fetch(`http://localhost:3000/api/admin/activity-stats${params}`, {
+        credentials: 'include'
       });
-
-      const mostCommonAction = Array.from(actionCounts.entries())
-        .sort((a, b) => b[1] - a[1])[0]?.[0] || 'None';
-
-      const recentActivity: AuditLog[] = (recentActions || []).map(item => ({
-        id: item.id,
-        admin_id: item.admin_id,
-        admin_username: (item as any).users?.username || 'Unknown Admin',
-        action: item.action_type,
-        description: this.formatActionDescription(item.action_type, item.reason, item.user_id),
-        target_type: item.user_id ? 'user' : undefined,
-        target_id: item.user_id,
-        created_at: item.created_at,
-      }));
-
-      return {
-        total_actions: totalActions || 0,
-        actions_today: actionsToday || 0,
-        actions_this_week: actionsThisWeek || 0,
-        most_common_action: mostCommonAction,
-        recent_activity: recentActivity,
-      };
+      if (!response.ok) throw new Error('Failed to fetch activity stats');
+      return await response.json();
     } catch (error) {
       console.error('Error fetching admin activity stats:', error);
       return {

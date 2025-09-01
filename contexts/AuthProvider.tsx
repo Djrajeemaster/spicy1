@@ -1,11 +1,10 @@
 import React, { createContext, useContext, useEffect, useState, ReactNode } from 'react';
-import { Session, User } from '@supabase/supabase-js';
-import { supabase } from '@/lib/supabase';
+// import types for session and user if needed from your backend response
 import { logger } from '@/utils/logger';
 
 export interface AuthContextType {
-  session: Session | null;
-  user: User | null;
+  session: any | null;
+  user: any | null;
   profile: any | null; // Replace 'any' with your UserProfile type
   loading: boolean;
   signIn: (email: string, password: string) => Promise<{ error: Error | null }>;
@@ -17,25 +16,20 @@ export interface AuthContextType {
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
 export const AuthProvider = ({ children }: { children: ReactNode }) => {
-  const [session, setSession] = useState<Session | null>(null);
-  const [user, setUser] = useState<User | null>(null);
+  const [session, setSession] = useState<any | null>(null);
+  const [user, setUser] = useState<any | null>(null);
   const [profile, setProfile] = useState<any | null>(null);
   const [loading, setLoading] = useState(true);
 
   // Helper function to fetch user profile
   const fetchUserProfile = async (userId: string) => {
     try {
-      const { data, error } = await supabase
-        .from('users')
-        .select('*')
-        .eq('id', userId)
-        .maybeSingle();
-
-      if (error) {
-        logger.error('Failed to fetch user profile', { userId, error });
+      const response = await fetch(`http://localhost:3000/api/users/${userId}`);
+      if (!response.ok) {
+        // If user profile doesn't exist, just return the basic user data
         return null;
       }
-
+      const data = await response.json();
       return data;
     } catch (err) {
       logger.error('Unexpected error fetching user profile', { userId, error: err });
@@ -43,94 +37,136 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     }
   };
 
-  useEffect(() => {
-    // Get initial session
-    supabase.auth.getSession().then(async ({ data: { session } }) => {
-      setSession(session);
-      const currentUser = session?.user ?? null;
-      setUser(currentUser);
-
-      if (session?.user) {
-        const userProfile = await fetchUserProfile(session.user.id);
-        setProfile(userProfile);
-      } else {
-        setProfile(null);
-      }
-      setLoading(false);
-    });
-
-    // Listen for auth changes
-    const { data: { subscription } } = supabase.auth.onAuthStateChange(
-      async (_event, session) => {
-        setSession(session);
-        const currentUser = session?.user ?? null;
-        setUser(currentUser);
-
-        if (session?.user) {
-          const userProfile = await fetchUserProfile(session.user.id);
-          setProfile(userProfile);
+  // Top-level fetchSession for reuse
+  const fetchSession = async () => {
+    setLoading(true);
+    try {
+      const response = await fetch('http://localhost:3000/api/auth/session', { 
+        credentials: 'include',
+        headers: {
+          'Content-Type': 'application/json'
+        }
+      });
+      
+      if (response.ok) {
+        const sessionData = await response.json();
+        console.log('Session data received:', sessionData);
+        
+        if (sessionData.authenticated && sessionData.user) {
+          setSession(sessionData.session || { user_id: sessionData.user.id });
+          setUser(sessionData.user);
+          setProfile(sessionData.user);
+          console.log('User authenticated:', sessionData.user);
         } else {
+          console.log('No authenticated user found');
+          setSession(null);
+          setUser(null);
           setProfile(null);
         }
-        setLoading(false);
+      } else {
+        console.log('Session check failed:', response.status);
+        setSession(null);
+        setUser(null);
+        setProfile(null);
       }
-    );
-
-    return () => subscription.unsubscribe();
-  }, []);
-
-  const signIn = async (email: string, password: string) => {
-    logger.authEvent('signin_attempt', undefined, { email });
-    const { error } = await supabase.auth.signInWithPassword({ email, password });
-    if (error) {
-      logger.authEvent('signin_failed', undefined, { email, error: error.message });
-    } else {
-      // The onAuthStateChange listener will handle the rest
-      logger.authEvent('signin_success');
+    } catch (err) {
+      console.error('Session fetch error:', err);
+      setSession(null);
+      setUser(null);
+      setProfile(null);
     }
-    return { error };
+    setLoading(false);
   };
 
-  const signUp = async (email: string, password: string, metadata: any) => {
-    logger.authEvent('signup_attempt', undefined, { email, username: metadata?.username });
-    const { error } = await supabase.auth.signUp({
-      email,
-      password,
-      options: {
-        data: metadata,
-      },
-    });
-    if (error) {
-      logger.authEvent('signup_failed', undefined, { email, error: error.message });
-    } else {
-      // The onAuthStateChange listener will handle the rest
-      logger.authEvent('signup_success');
+  useEffect(() => {
+    fetchSession();
+  }, []);
+
+  const signIn = async (email: string, password: string): Promise<{ error: Error | null }> => {
+    logger.authEvent('signin_attempt', undefined, { email });
+    try {
+      const response = await fetch('http://localhost:3000/api/auth/signin', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email, password }),
+        credentials: 'include',
+      });
+      if (!response.ok) {
+        const errorData = await response.json();
+        logger.authEvent('signin_failed', undefined, { email, error: errorData.message });
+        return { error: new Error(errorData.message) };
+      }
+      
+      const data = await response.json();
+      logger.authEvent('signin_success');
+      console.log('Signin response data:', data);
+      
+      // Set the user and session data immediately from signin response
+      if (data.authenticated && data.user) {
+        setSession(data.session || { user_id: data.user.id });
+        setUser(data.user);
+        setProfile(data.user);
+        console.log('User signed in successfully:', data.user);
+      } else {
+        console.error('Signin response missing user data');
+        return { error: new Error('Invalid response from server') };
+      }
+      
+      return { error: null };
+    } catch (err) {
+      const errorMsg = err instanceof Error ? err.message : String(err);
+      logger.authEvent('signin_failed', undefined, { email, error: errorMsg });
+      return { error: new Error(errorMsg) };
     }
-    return { error };
+  };
+
+  const signUp = async (email: string, password: string, metadata: any): Promise<{ error: Error | null }> => {
+    logger.authEvent('signup_attempt', undefined, { email, username: metadata?.username });
+    try {
+      const response = await fetch('http://localhost:3000/api/auth/signup', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email, password, metadata }),
+        credentials: 'include',
+      });
+      if (!response.ok) {
+        const errorData = await response.json();
+        logger.authEvent('signup_failed', undefined, { email, error: errorData.message });
+        return { error: new Error(errorData.message) };
+      }
+      logger.authEvent('signup_success');
+      await fetchSession();
+      return { error: null };
+    } catch (err) {
+      const errorMsg = err instanceof Error ? err.message : String(err);
+      logger.authEvent('signup_failed', undefined, { email, error: errorMsg });
+      return { error: new Error(errorMsg) };
+    }
   };
 
   const signOut = async () => {
-    await supabase.auth.signOut();
+    try {
+      await fetch('http://localhost:3000/api/auth/signout', {
+        method: 'POST',
+        credentials: 'include',
+        headers: {
+          'Content-Type': 'application/json'
+        }
+      });
+    } catch (err) {
+      console.error('Signout error:', err);
+    } finally {
+      // Always clear local state
+      setSession(null);
+      setUser(null);
+      setProfile(null);
+    }
   };
 
   const signInWithGoogle = async () => {
-    // Temporarily disable Google Sign-In
     logger.authEvent('google_signin_attempt_disabled');
-    const error = new Error(
-      'Google Sign-In is temporarily unavailable. Please use email and password.'
-    );
+    const error = new Error('Google Sign-In is temporarily unavailable. Please use email and password.');
     return { error };
-
-    /*
-    // To re-enable, remove the code above and uncomment this block:
-    logger.authEvent('google_signin_attempt');
-    const { data, error } = await supabase.auth.signInWithOAuth({ provider: 'google' });
-    if (error) {
-      logger.authEvent('google_signin_failed', undefined, { error: error.message });
-      return { error };
-    }
-    return { error: null };
-    */
   };
 
   const value = { session, user, profile, loading, signIn, signUp, signOut, signInWithGoogle };

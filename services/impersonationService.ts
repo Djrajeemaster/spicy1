@@ -1,18 +1,14 @@
-import { supabase } from '@/lib/supabase';
+
 
 export async function startImpersonation(targetUserId: string, elevationToken: string) {
-  const url = `${process.env.EXPO_PUBLIC_SUPABASE_URL}/functions/v1/admin-impersonate-start`;
-  const { data: session } = await supabase.auth.getSession();
-  const jwt = session.session?.access_token;
-
-  const res = await fetch(url, {
+  const res = await fetch('http://localhost:3000/api/admin/impersonate/start', {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
-      ...(jwt ? { Authorization: `Bearer ${jwt}` } : {}),
       'x-admin-elevation': elevationToken,
     },
     body: JSON.stringify({ target_user_id: targetUserId }),
+    credentials: 'include'
   });
   if (!res.ok) {
     const t = await res.text().catch(() => '');
@@ -22,17 +18,11 @@ export async function startImpersonation(targetUserId: string, elevationToken: s
 }
 
 export async function stopImpersonation(targetUserId?: string) {
-  const url = `${process.env.EXPO_PUBLIC_SUPABASE_URL}/functions/v1/admin-impersonate-stop`;
-  const { data: session } = await supabase.auth.getSession();
-  const jwt = session.session?.access_token;
-
-  const res = await fetch(url, {
+  const res = await fetch('http://localhost:3000/api/admin/impersonate/stop', {
     method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      ...(jwt ? { Authorization: `Bearer ${jwt}` } : {}),
-    },
+    headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ target_user_id: targetUserId }),
+    credentials: 'include'
   });
   if (!res.ok) {
     const t = await res.text().catch(() => '');

@@ -102,7 +102,7 @@ export default function AdminSettings() {
           <Text style={styles.rowSub}>{sub}</Text>
         </View>
       </View>
-      <View>{typeof right === 'string' ? <Text>{right}</Text> : right}</View>
+  <View>{(typeof right === 'string' || typeof right === 'number') ? <Text>{right}</Text> : right}</View>
     </View>
   );
 

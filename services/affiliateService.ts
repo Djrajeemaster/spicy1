@@ -1,4 +1,4 @@
-import { supabase } from '@/lib/supabase';
+
 import { Database } from '@/types/database';
 
 type AffiliateSettings = Database['public']['Tables']['affiliate_settings']['Row'];

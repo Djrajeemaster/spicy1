@@ -19,7 +19,7 @@ import { useAuth } from '@/contexts/AuthProvider';
 import { useTheme } from '@/contexts/ThemeProvider';
 import { alertService } from '@/services/alertService';
 
-import { canAccessAdmin } from '@/lib/supabase';
+// import canAccessAdmin from '@/lib/db'; // Removed: Node.js-only code
 import { router } from 'expo-router';
 import { logger } from '@/utils/logger';
 
@@ -139,7 +139,7 @@ export function Header({
   const showFullSearch = !!onSearchChange;
 
   const showAdminButton = useMemo(() => 
-    profile && canAccessAdmin(profile.role), 
+    profile && profile.role === 'admin', // Simplified: check for admin role
     [profile?.role]
   );
 
