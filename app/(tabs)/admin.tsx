@@ -32,8 +32,13 @@ export default function AdminScreen() {
   const currentUserRole = profile?.role || 'guest';
 
   // Redirect unauthenticated users to login
+  React.useEffect(() => {
+    if (!loading && !user) {
+      router.replace('/sign-in');
+    }
+  }, [loading, user]);
+
   if (!loading && !user) {
-    router.replace('/sign-in');
     return null;
   }
 
@@ -132,7 +137,21 @@ export default function AdminScreen() {
           onAddUser={() => router.push('/add-user')}
         />;
       case 'deals':
-        return <DealManagement deals={pendingDeals} onDealAction={(dealId, action) => handleDealAction(dealId, action, profile?.id || '')} />;
+        return <DealManagement 
+          deals={pendingDeals} 
+          onDealAction={async (dealId, action) => {
+            console.log('Admin onDealAction called:', { dealId, action });
+            try {
+              await handleDealAction(dealId, action, profile?.id || '');
+              console.log('handleDealAction completed successfully');
+              window.alert(`Deal ${action.toLowerCase()}d successfully`);
+              refreshData();
+            } catch (error) {
+              console.error('handleDealAction failed:', error);
+              window.alert(`Failed to ${action.toLowerCase()} deal`);
+            }
+          }} 
+        />;
       case 'moderation':
         return <AdminModeration />;
       case 'analytics':

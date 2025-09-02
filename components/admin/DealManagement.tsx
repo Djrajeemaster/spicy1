@@ -1,12 +1,13 @@
 import React, { useState, useEffect } from 'react';
 import { View, Text, StyleSheet, FlatList, TouchableOpacity, Alert } from 'react-native';
+import { useFocusEffect } from '@react-navigation/native';
 import { AdminDeal } from '@/hooks/useAdminData';
 import { CircleCheck as CheckCircle, Circle as XCircle, Flag, Edit2, Trash2, Square, CheckSquare } from 'lucide-react-native';
 import { router } from 'expo-router';
 
 interface DealManagementProps {
   deals: AdminDeal[];
-  onDealAction: (dealId: string, action: 'Approve' | 'Reject' | 'Delete') => void;
+  onDealAction: (dealId: string, action: 'Approve' | 'Reject' | 'Delete') => Promise<void>;
 }
 
 const DealItem: React.FC<{ 
@@ -15,6 +16,20 @@ const DealItem: React.FC<{
   isSelected: boolean;
   onSelect: (dealId: string) => void;
 }> = ({ deal, onDealAction, isSelected, onSelect }) => {
+  
+  const handleAction = async (action: 'Approve' | 'Reject' | 'Delete') => {
+    const actionText = action.toLowerCase();
+    if (window.confirm(`Are you sure you want to ${actionText} "${deal.title}"?`)) {
+      console.log('Executing action:', action, 'for deal:', deal.id);
+      try {
+        await onDealAction(deal.id, action);
+        console.log('Action completed successfully');
+      } catch (error) {
+        console.error('Action failed:', error);
+        window.alert(`Failed to ${actionText} deal`);
+      }
+    }
+  };
   const getStatusColor = (status: string) => {
     switch (status) {
       case 'live': return '#10b981';
@@ -50,14 +65,14 @@ const DealItem: React.FC<{
           <Edit2 size={18} color="#3b82f6" />
         </TouchableOpacity>
         {deal.status === 'pending' && (
-          <TouchableOpacity onPress={() => onDealAction(deal.id, 'Approve')} style={dealStyles.actionButton}>
+          <TouchableOpacity onPress={() => handleAction('Approve')} style={dealStyles.actionButton}>
             <CheckCircle size={20} color="#10b981" />
           </TouchableOpacity>
         )}
-        <TouchableOpacity onPress={() => onDealAction(deal.id, 'Reject')} style={dealStyles.actionButton}>
+        <TouchableOpacity onPress={() => handleAction('Reject')} style={dealStyles.actionButton}>
           <XCircle size={20} color="#ef4444" />
         </TouchableOpacity>
-        <TouchableOpacity onPress={() => onDealAction(deal.id, 'Delete')} style={dealStyles.actionButton}>
+        <TouchableOpacity onPress={() => handleAction('Delete')} style={dealStyles.actionButton}>
           <Trash2 size={18} color="#dc2626" />
         </TouchableOpacity>
       </View>
@@ -66,7 +81,7 @@ const DealItem: React.FC<{
 };
 
 export const DealManagement: React.FC<DealManagementProps> = ({ deals, onDealAction }) => {
-  const [filter, setFilter] = useState<'all' | 'pending' | 'live' | 'rejected' | 'flagged'>('all');
+  const [filter, setFilter] = useState<'all' | 'pending' | 'live' | 'expired' | 'deleted' | 'flagged'>('all');
   const [selectedDeals, setSelectedDeals] = useState<string[]>([]);
   const [allDeals, setAllDeals] = useState<AdminDeal[]>([]);
 
@@ -74,21 +89,50 @@ export const DealManagement: React.FC<DealManagementProps> = ({ deals, onDealAct
     fetchAllDeals();
   }, []);
 
+  // Refresh data when screen comes into focus (after returning from edit)
+  useFocusEffect(
+    React.useCallback(() => {
+      fetchAllDeals();
+    }, [])
+  );
+
   const fetchAllDeals = async () => {
     try {
-      const response = await fetch('http://localhost:3000/api/deals', {
-        credentials: 'include'
+      // Fetch deals with different statuses
+      const [liveResponse, draftResponse, expiredResponse] = await Promise.all([
+        fetch('http://localhost:3000/api/deals', { credentials: 'include' }),
+        fetch('http://localhost:3000/api/deals?status=draft', { credentials: 'include' }),
+        fetch('http://localhost:3000/api/deals?status=expired', { credentials: 'include' })
+      ]);
+      
+      const [liveDeals, draftDeals, expiredDeals] = await Promise.all([
+        liveResponse.ok ? liveResponse.json() : [],
+        draftResponse.ok ? draftResponse.json() : [],
+        expiredResponse.ok ? expiredResponse.json() : []
+      ]);
+      
+      // Remove duplicates by ID
+      const allDealsMap = new Map();
+      [...liveDeals, ...draftDeals, ...expiredDeals].forEach(deal => {
+        allDealsMap.set(deal.id, deal);
       });
-      if (response.ok) {
-        const data = await response.json();
-        setAllDeals(data);
-      }
+      const allDeals = Array.from(allDealsMap.values());
+      console.log('Fetched deals:', allDeals.length, 'deals');
+      setAllDeals(allDeals);
     } catch (error) {
       console.error('Error fetching all deals:', error);
     }
   };
 
-  const filteredDeals = filter === 'all' ? allDeals : allDeals.filter(deal => deal.status === filter);
+  const filteredDeals = filter === 'all' ? allDeals : allDeals.filter(deal => {
+    // Map 'deleted' filter to 'draft' status
+    const targetStatus = filter === 'deleted' ? 'draft' : filter;
+    return deal.status === targetStatus;
+  });
+  
+  console.log('Current filter:', filter);
+  console.log('All deals:', allDeals.map(d => ({ id: d.id, title: d.title, status: d.status })));
+  console.log('Filtered deals:', filteredDeals.map(d => ({ id: d.id, title: d.title, status: d.status })));
 
   const handleSelectDeal = (dealId: string) => {
     setSelectedDeals(prev => 
@@ -106,32 +150,48 @@ export const DealManagement: React.FC<DealManagementProps> = ({ deals, onDealAct
     }
   };
 
-  const handleBulkAction = (action: 'approve' | 'reject' | 'delete') => {
+  const handleBulkAction = async (action: 'approve' | 'reject' | 'delete') => {
+    console.log('handleBulkAction called with:', action, 'selectedDeals:', selectedDeals);
+    
     if (selectedDeals.length === 0) {
+      console.log('No deals selected');
       Alert.alert('No Selection', 'Please select deals to perform bulk action.');
       return;
     }
 
     const actionText = action === 'approve' ? 'approve' : action === 'reject' ? 'reject' : 'delete';
-    Alert.alert(
-      'Confirm Bulk Action',
-      `Are you sure you want to ${actionText} ${selectedDeals.length} deal(s)?`,
-      [
-        { text: 'Cancel', style: 'cancel' },
-        {
-          text: 'Confirm',
-          onPress: () => {
-            selectedDeals.forEach(dealId => {
-              if (action === 'approve') onDealAction(dealId, 'Approve');
-              else if (action === 'reject') onDealAction(dealId, 'Reject');
-              else onDealAction(dealId, 'Delete');
-            });
-            setSelectedDeals([]);
-            setTimeout(fetchAllDeals, 500);
+    console.log('Showing confirmation dialog for:', actionText);
+    
+    if (window.confirm(`Are you sure you want to ${actionText} ${selectedDeals.length} deal(s)?`)) {
+      console.log('User confirmed bulk action');
+      try {
+        for (const dealId of selectedDeals) {
+          console.log('Processing deal:', dealId);
+          try {
+            if (action === 'approve') {
+              console.log('Calling onDealAction with Approve');
+              await onDealAction(dealId, 'Approve');
+            } else if (action === 'reject') {
+              console.log('Calling onDealAction with Reject');
+              await onDealAction(dealId, 'Reject');
+            } else {
+              console.log('Calling onDealAction with Delete');
+              await onDealAction(dealId, 'Delete');
+            }
+            console.log('Deal action completed for:', dealId);
+          } catch (error) {
+            console.error('Error processing deal:', dealId, error);
+            throw error;
           }
         }
-      ]
-    );
+        setSelectedDeals([]);
+        window.alert(`${selectedDeals.length} deal(s) ${actionText}d successfully`);
+        await fetchAllDeals();
+      } catch (error) {
+        console.error('Bulk action error:', error);
+        window.alert(`Failed to ${actionText} some deals`);
+      }
+    }
   };
 
   return (
@@ -140,14 +200,14 @@ export const DealManagement: React.FC<DealManagementProps> = ({ deals, onDealAct
       
       {/* Filter Tabs */}
       <View style={dealStyles.filterTabs}>
-        {['all', 'pending', 'live', 'rejected', 'flagged'].map((status) => (
+        {['all', 'pending', 'live', 'expired', 'deleted', 'flagged'].map((status) => (
           <TouchableOpacity
             key={status}
             onPress={() => setFilter(status as any)}
             style={[dealStyles.filterTab, filter === status && dealStyles.activeFilterTab]}
           >
             <Text style={[dealStyles.filterTabText, filter === status && dealStyles.activeFilterTabText]}>
-              {status.charAt(0).toUpperCase() + status.slice(1)}
+              {status === 'expired' ? 'Rejected' : status === 'deleted' ? 'Deleted' : status.charAt(0).toUpperCase() + status.slice(1)}
             </Text>
           </TouchableOpacity>
         ))}
@@ -162,13 +222,22 @@ export const DealManagement: React.FC<DealManagementProps> = ({ deals, onDealAct
             </Text>
           </TouchableOpacity>
           <View style={dealStyles.bulkActionButtons}>
-            <TouchableOpacity onPress={() => handleBulkAction('approve')} style={[dealStyles.bulkButton, dealStyles.approveButton]}>
+            <TouchableOpacity onPress={() => {
+              console.log('Approve button clicked');
+              handleBulkAction('approve');
+            }} style={[dealStyles.bulkButton, dealStyles.approveButton]}>
               <Text style={dealStyles.bulkButtonText}>Approve ({selectedDeals.length})</Text>
             </TouchableOpacity>
-            <TouchableOpacity onPress={() => handleBulkAction('reject')} style={[dealStyles.bulkButton, dealStyles.rejectButton]}>
+            <TouchableOpacity onPress={() => {
+              console.log('Reject button clicked');
+              handleBulkAction('reject');
+            }} style={[dealStyles.bulkButton, dealStyles.rejectButton]}>
               <Text style={dealStyles.bulkButtonText}>Reject ({selectedDeals.length})</Text>
             </TouchableOpacity>
-            <TouchableOpacity onPress={() => handleBulkAction('delete')} style={[dealStyles.bulkButton, dealStyles.deleteButton]}>
+            <TouchableOpacity onPress={() => {
+              console.log('Delete button clicked');
+              handleBulkAction('delete');
+            }} style={[dealStyles.bulkButton, dealStyles.deleteButton]}>
               <Text style={dealStyles.bulkButtonText}>Delete ({selectedDeals.length})</Text>
             </TouchableOpacity>
           </View>
@@ -180,9 +249,13 @@ export const DealManagement: React.FC<DealManagementProps> = ({ deals, onDealAct
         renderItem={({ item }) => (
           <DealItem 
             deal={item} 
-            onDealAction={(dealId, action) => {
-              onDealAction(dealId, action);
-              setTimeout(fetchAllDeals, 500);
+            onDealAction={async (dealId, action) => {
+              try {
+                await onDealAction(dealId, action);
+                await fetchAllDeals();
+              } catch (error) {
+                console.error('Deal action error:', error);
+              }
             }}
             isSelected={selectedDeals.includes(item.id)}
             onSelect={handleSelectDeal}

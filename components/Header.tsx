@@ -11,7 +11,8 @@ import {
   Animated,
   ScrollView,
 } from 'react-native';
-import { Bell, ChevronDown, LogIn, Sparkles, Search, Filter, Navigation } from 'lucide-react-native';
+import { Bell, ChevronDown, LogIn, Search, Filter, Navigation } from 'lucide-react-native';
+import { Image } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { UserBadge } from '@/components/UserBadge';
 import { getRolePrivileges } from '@/types/user';
@@ -203,11 +204,11 @@ export function Header({
         <View style={[styles.mainRow, isDesktopWeb && showFullSearch && styles.mainRowDesktop]}>
           <View style={[styles.leftSection, isDesktopWeb && styles.leftSectionDesktop]}>
             <TouchableOpacity onPress={() => router.push('/')} style={styles.logoContainer}>
-              <LinearGradient colors={['#fbbf24', '#f59e0b', '#d97706']} style={styles.logo}>
-                <Sparkles size={18} color="#FFFFFF" />
+              <LinearGradient colors={['#0A2540', '#1e40af', '#3b82f6']} style={styles.logo}>
+                <Image source={{ uri: '/app-icon-32.png' }} style={{ width: 24, height: 24 }} />
               </LinearGradient>
               {/* Show full text only on desktop, just icon on mobile */}
-              {isDesktopWeb && <Text style={styles.appName}>SaversDream</Text>}
+              {isDesktopWeb && <Text style={{ color: '#0A2540', fontFamily: 'Poppins, sans-serif', fontSize: 28,fontWeight: 'bold', textAlign: 'center' }}>SaversDream</Text>}
             </TouchableOpacity>
           </View>
 

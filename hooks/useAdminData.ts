@@ -40,6 +40,7 @@ export interface SystemSettings {
   allow_guest_posting?: boolean;
   max_daily_posts_per_user?: number;
   min_reputation_to_post?: number;
+  soft_delete_retention_days?: number;
 }
 
 // Default system settings to ensure all properties are always defined
@@ -49,6 +50,7 @@ const defaultSystemSettings: SystemSettings = {
   allow_guest_posting: false,
   max_daily_posts_per_user: 5,
   min_reputation_to_post: 0,
+  soft_delete_retention_days: 30,
 };
 
 export const useAdminData = () => {
@@ -188,50 +190,34 @@ export const useAdminData = () => {
 
   // Deal management actions
   const handleDealAction = useCallback(async (dealId: string, action: 'Approve' | 'Reject' | 'Delete', adminId: string) => {
-    const deal = pendingDeals.find(d => d.id === dealId);
-    if (!deal) return;
+    // Find deal in all deals, not just pending deals
+    let deal = pendingDeals.find(d => d.id === dealId);
+    if (!deal) {
+      // If not in pending deals, it might be in other statuses, so just proceed with the action
+      console.log('Deal not found in pendingDeals, proceeding with action anyway');
+    }
     
-    Alert.alert(
-      `${action} Deal`,
-      `${action} "${deal.title}"?`,
-      [
-        { text: 'Cancel', style: 'cancel' },
-        { 
-          text: action,
-          style: action === 'Delete' ? 'destructive' : 'default',
-          onPress: async () => {
-            if (action === 'Delete') {
-              const { error } = await dealService.deleteDeal(dealId);
-              if (error) {
-                Alert.alert('Error', `Failed to delete deal: ${error.message}`);
-              } else {
-                setPendingDeals(prev => prev.filter(d => d.id !== dealId));
-                Alert.alert('Success', 'Deal deleted successfully');
-              }
-            } else {
-              const newStatus = action === 'Approve' ? 'live' : 'rejected';
-              const { data, error } = await dealService.updateDeal(dealId, { status: newStatus });
-              
-              if (error) {
-                Alert.alert('Error', `Failed to ${action.toLowerCase()} deal: ${error.message}`);
-              } else {
-                setPendingDeals(prev => prev.filter(d => d.id !== dealId));
-                Alert.alert('Success', `Deal ${action.toLowerCase()}d successfully`);
-                
-                // Log admin activity
-                await activityService.logActivity(
-                  adminId,
-                  'admin_action',
-                  `${action}d deal: ${deal.title}`,
-                  'deal',
-                  dealId
-                );
-              }
-            }
-          }
-        }
-      ]
-    );
+    if (action === 'Delete') {
+      // Soft delete - mark as draft instead of permanent deletion
+      const { data, error } = await dealService.updateDeal(dealId, { status: 'draft' });
+      if (error) throw new Error(`Failed to delete deal: ${error.message}`);
+      setPendingDeals(prev => prev.filter(d => d.id !== dealId));
+    } else {
+      const newStatus = action === 'Approve' ? 'live' : 'expired';
+      const { data, error } = await dealService.updateDeal(dealId, { status: newStatus });
+      
+      if (error) throw new Error(`Failed to ${action.toLowerCase()} deal: ${error.message}`);
+      setPendingDeals(prev => prev.filter(d => d.id !== dealId));
+      
+      // Log admin activity
+      await activityService.logActivity(
+        adminId,
+        'admin_action',
+        `${action}d deal: ${dealId}`,
+        'deal',
+        dealId
+      );
+    }
   }, [pendingDeals]);
 
   // Category management actions

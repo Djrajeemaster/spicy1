@@ -13,6 +13,7 @@ export const SystemSettingsManagement: React.FC<SystemSettingsManagementProps> =
   const [tempValues, setTempValues] = useState({
     maxDailyPosts: settings.max_daily_posts_per_user?.toString() || '5',
     minReputationToPost: settings.min_reputation_to_post?.toString() || '0',
+    softDeleteRetentionDays: settings.soft_delete_retention_days?.toString() || '30',
     dealExpiryDays: '30',
     maxImageSize: '5',
     rateLimit: '100',
@@ -166,6 +167,14 @@ export const SystemSettingsManagement: React.FC<SystemSettingsManagementProps> =
           onChangeText={(text) => setTempValues(prev => ({ ...prev, maxCommentLength: text }))}
           onSave={() => Alert.alert('Saved', 'Comment length limit updated')}
           placeholder="500"
+        />
+        <NumberSetting
+          title="Soft Delete Retention (Days)"
+          description="Days to keep deleted deals before permanent deletion"
+          value={tempValues.softDeleteRetentionDays}
+          onChangeText={(text) => setTempValues(prev => ({ ...prev, softDeleteRetentionDays: text }))}
+          onSave={() => updateNumericSetting('softDeleteRetentionDays', 'soft_delete_retention_days')}
+          placeholder="30"
         />
         <NumberSetting
           title="Auto-delete Expired Deals (Days)"

@@ -567,9 +567,8 @@ app.post('/api/deals', async (req, res) => {
     const { rows } = await pool.query(`
       INSERT INTO deals (
         title, description, price, original_price, discount_percentage,
-        deal_url, image_url, category_id, store_id, created_by,
-        city, state, status, created_at
-      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, NOW())
+        deal_url, category_id, store_id, created_by, city, state, status, created_at
+      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, NOW())
       RETURNING *
     `, [
       dealData.title,
@@ -578,12 +577,11 @@ app.post('/api/deals', async (req, res) => {
       dealData.original_price,
       dealData.discount_percentage,
       dealData.deal_url,
-      dealData.image_url,
       dealData.category_id,
       dealData.store_id,
       dealData.created_by,
-      dealData.city,
-      dealData.state,
+      dealData.city || 'Unknown',
+      dealData.state || 'Unknown',
       dealData.status || 'pending'
     ]);
     
@@ -836,10 +834,59 @@ app.post('/api/auth/create-superadmin', async (req, res) => {
   }
 });
 
+// Signup endpoint
+app.post('/api/auth/signup', async (req, res) => {
+  try {
+    const { email, password, username } = req.body;
+    
+    if (!email || !password || !username) {
+      return res.status(400).json({ error: 'Email, password, and username are required' });
+    }
+    
+    // Check if user already exists
+    const existingUser = await pool.query('SELECT id FROM users WHERE email = $1 OR username = $2', [email, username]);
+    if (existingUser.rows.length > 0) {
+      return res.status(400).json({ error: 'User already exists' });
+    }
+    
+    // Hash password
+    const hashedPassword = await bcrypt.hash(password, 10);
+    
+    // Generate UUID for the user
+    const userId = require('crypto').randomUUID();
+    
+    // Create user
+    const result = await pool.query(
+      'INSERT INTO users (id, email, password_hash, username, role, status, created_at) VALUES ($1, $2, $3, $4, $5, $6, NOW()) RETURNING id, email, username, role, status',
+      [userId, email, hashedPassword, username, 'user', 'active']
+    );
+    
+    const user = result.rows[0];
+    
+    // Set session cookie
+    res.cookie('session_id', user.id, { 
+      httpOnly: true, 
+      secure: false,
+      maxAge: 24 * 60 * 60 * 1000,
+      sameSite: 'lax',
+      path: '/'
+    });
+    
+    res.json({ user, authenticated: true, session: { user_id: user.id } });
+  } catch (error) {
+    console.error('Signup error:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
 // Signin endpoint
 app.post('/api/auth/signin', async (req, res) => {
   try {
     const { email, password } = req.body;
+    
+    if (!email || !password) {
+      return res.status(400).json({ error: 'Email and password are required' });
+    }
     
     // Get user from database
     const { rows } = await pool.query(

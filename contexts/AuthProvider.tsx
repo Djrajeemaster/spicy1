@@ -93,8 +93,9 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
       });
       if (!response.ok) {
         const errorData = await response.json();
-        logger.authEvent('signin_failed', undefined, { email, error: errorData.message });
-        return { error: new Error(errorData.message) };
+        const errorMessage = errorData.error || errorData.message || 'Sign in failed';
+        logger.authEvent('signin_failed', undefined, { email, error: errorMessage });
+        return { error: new Error(errorMessage) };
       }
       
       const data = await response.json();
@@ -126,13 +127,14 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
       const response = await fetch('http://localhost:3000/api/auth/signup', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email, password, metadata }),
+        body: JSON.stringify({ email, password, username: metadata?.username }),
         credentials: 'include',
       });
       if (!response.ok) {
         const errorData = await response.json();
-        logger.authEvent('signup_failed', undefined, { email, error: errorData.message });
-        return { error: new Error(errorData.message) };
+        const errorMessage = errorData.error || errorData.message || 'Sign up failed';
+        logger.authEvent('signup_failed', undefined, { email, error: errorMessage });
+        return { error: new Error(errorMessage) };
       }
       logger.authEvent('signup_success');
       await fetchSession();
