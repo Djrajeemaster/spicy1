@@ -58,8 +58,8 @@ export default function DealListCard({ deal, isGuest, onVote, userRole, userId }
     await onVote(Number(deal.id), voteType);
   };
 
-  const discountPercentage = deal.original_price && deal.original_price > 0 ? 
-    Math.round(((deal.original_price - deal.price) / deal.original_price) * 100) : 0;
+  const discountPercentage = deal.original_price && Number(deal.original_price) > 0 ? 
+    Math.round(((Number(deal.original_price) - Number(deal.price)) / Number(deal.original_price)) * 100) : 0;
 
   const isExpiring = deal.expires_at && 
     new Date(deal.expires_at).getTime() - Date.now() < 24 * 60 * 60 * 1000;
@@ -148,9 +148,9 @@ export default function DealListCard({ deal, isGuest, onVote, userRole, userId }
               {/* Price Section */}
               <View style={styles.priceSection}>
                 <View style={styles.priceContainer}>
-                  <Text style={styles.currentPrice}>${deal.price.toFixed(2)}</Text>
-                  {deal.original_price && deal.original_price > deal.price && (
-                    <Text style={styles.originalPrice}>${deal.original_price.toFixed(2)}</Text>
+                  <Text style={styles.currentPrice}>${Number(deal.price).toFixed(2)}</Text>
+                  {deal.original_price && Number(deal.original_price) > Number(deal.price) && (
+                    <Text style={styles.originalPrice}>${Number(deal.original_price).toFixed(2)}</Text>
                   )}
                 </View>
                 {discountPercentage > 0 && (

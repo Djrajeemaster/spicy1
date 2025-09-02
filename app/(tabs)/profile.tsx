@@ -43,6 +43,7 @@ import {  type FollowCounts } from '@/services/followService';
 import { formatTimeAgo } from '@/utils/time';
 import { DealCard } from '@/components/DealCard';
 import { Header } from '@/components/Header';
+import UserRoleSection from '@/components/UserRoleSection';
 
 export default function ProfileScreen() {
   const { user, profile, signOut } = useAuth();
@@ -487,6 +488,9 @@ useEffect(() => {
         {/* My Deals (Overview) */}
         {profileTab === 'overview' && (
         <>
+        {/* Role Section */}
+        <UserRoleSection />
+        
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>My Deals</Text>
 

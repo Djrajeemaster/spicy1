@@ -175,14 +175,12 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: '#f8fafc',
+    padding: 20,
   },
   header: {
     flexDirection: 'row',
     alignItems: 'center',
-    padding: 20,
-    backgroundColor: '#ffffff',
-    borderBottomWidth: 1,
-    borderBottomColor: '#e2e8f0',
+    marginBottom: 20,
   },
   title: {
     fontSize: 24,
@@ -196,7 +194,7 @@ const styles = StyleSheet.create({
     backgroundColor: '#f1f5f9',
     borderRadius: 8,
     paddingHorizontal: 12,
-    margin: 16,
+    marginBottom: 16,
   },
   searchInput: {
     flex: 1,
@@ -206,7 +204,7 @@ const styles = StyleSheet.create({
     color: '#1e293b',
   },
   listContainer: {
-    padding: 16,
+    paddingBottom: 20,
   },
   logCard: {
     backgroundColor: '#ffffff',

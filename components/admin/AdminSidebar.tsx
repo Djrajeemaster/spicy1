@@ -20,6 +20,8 @@ const sidebarTabs: SidebarTab[] = [
   { id: 'categories', name: 'Categories', icon: Tag, category: 'Management' },
   { id: 'stores', name: 'Stores', icon: Store, category: 'Management' },
   { id: 'affiliates', name: 'Affiliates', icon: DollarSign, category: 'Management' },
+  { id: 'role-requests', name: 'Role Requests', icon: Shield, category: 'Management' },
+  { id: 'roles', name: 'Roles', icon: Users, category: 'Management' },
   { id: 'moderation', name: 'Moderation', icon: Eye, category: 'Moderation' },
   { id: 'reports', name: 'Reports', icon: AlertTriangle, category: 'Moderation' },
   { id: 'analytics', name: 'Analytics', icon: BarChart3, category: 'Analytics' },

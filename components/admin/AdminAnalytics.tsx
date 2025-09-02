@@ -1,12 +1,3 @@
-  const onRefresh = async () => {
-    setRefreshing(true);
-    await loadAnalytics();
-    setRefreshing(false);
-  };
-// ...existing code...
-// ...existing code...
-// ...existing code...
-// ...existing code...
 import React, { useState, useEffect } from 'react';
 import { View, Text, StyleSheet, ScrollView, RefreshControl, Alert, ActivityIndicator } from 'react-native';
 import { BarChart3, Users, MessageSquare, TrendingUp, Calendar, Eye, Heart, DollarSign } from 'lucide-react-native';
@@ -77,14 +68,10 @@ const CategoryBar = ({ category }: { category: { name: string; count: number; pe
   </View>
 );
 
-export default function AdminAnalytics() {
+export const AdminAnalytics: React.FC = () => {
   const [analytics, setAnalytics] = useState<AnalyticsData | null>(null);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
-
-  useEffect(() => {
-    loadAnalytics();
-  }, []);
 
   const loadAnalytics = async () => {
     try {
@@ -184,6 +171,17 @@ export default function AdminAnalytics() {
       setLoading(false);
     }
   };
+
+  const onRefresh = async () => {
+    setRefreshing(true);
+    await loadAnalytics();
+    setRefreshing(false);
+  };
+
+  useEffect(() => {
+    loadAnalytics();
+  }, []);
+
   if (loading) {
     return (
       <View style={styles.loadingContainer}>
@@ -300,7 +298,7 @@ export default function AdminAnalytics() {
       <View style={styles.bottomPadding} />
     </ScrollView>
   );
-}
+};
 
 const styles = StyleSheet.create({
   container: {
@@ -479,11 +477,5 @@ const styles = StyleSheet.create({
   },
   bottomPadding: {
     height: 100,
-  },
-  noDataText: {
-    textAlign: 'center',
-    color: '#64748b',
-    fontStyle: 'italic',
-    padding: 20,
   },
 });

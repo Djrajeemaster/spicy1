@@ -16,11 +16,15 @@ import ReportManagement from '@/components/admin/ReportManagement';
 import { useAuth } from '@/contexts/AuthProvider';
 import { router } from 'expo-router';
 
-// Import the new feature components (convert to real data)
-import AdminAnalytics from '../admin/analytics';
-import AdminModeration from '../admin/moderation';
-import AdminCommunication from '../admin/communication';
-import AdminAuditLog from '../admin/audit-log';
+// Import role management components
+import { RoleRequestsManagement } from '@/components/admin/RoleRequestsManagement';
+import { RolesManagement } from '@/components/admin/RolesManagement';
+
+// Import admin feature components
+import { AdminAnalytics } from '@/components/admin/AdminAnalytics';
+import AdminModeration from '@/components/admin/AdminModeration';
+import AdminCommunication from '@/components/admin/AdminCommunication';
+import AdminAuditLog from '@/components/admin/AdminAuditLog';
 
 export default function AdminScreen() {
   const [activeTab, setActiveTab] = useState<AdminTab>('dashboard');
@@ -61,6 +65,7 @@ export default function AdminScreen() {
     addNewCategory,
     toggleBanner,
     addNewBanner,
+    deleteBanner,
     updateSetting,
     refreshData,
   } = useAdminData();
@@ -137,9 +142,9 @@ export default function AdminScreen() {
       case 'audit':
         return <AdminAuditLog />;
       case 'banners':
-        return <BannerManagement banners={banners} onToggleBanner={toggleBanner} onAddNewBanner={() => router.push('/add-banner')} />;
+        return <BannerManagement banners={banners} onToggleBanner={toggleBanner} onAddNewBanner={addNewBanner} onDeleteBanner={deleteBanner} />;
       case 'categories':
-        return <CategoryManagement categories={categories} onToggleCategory={toggleCategory} onAddNewCategory={addNewCategory} />;
+        return <CategoryManagement categories={categories} onToggleCategory={toggleCategory} onAddNewCategory={addNewCategory} onRefresh={refreshData} />;
       case 'stores':
         return <StoreManagement onRefresh={() => window.location.reload()} />;
       case 'affiliates':
@@ -148,6 +153,10 @@ export default function AdminScreen() {
         return <SystemSettingsManagement settings={systemSettings} onUpdateSetting={updateSetting} />;
       case 'reports':
         return <ReportManagement />;
+      case 'role-requests':
+        return <RoleRequestsManagement />;
+      case 'roles':
+        return <RolesManagement />;
       default:
         return null;
     }

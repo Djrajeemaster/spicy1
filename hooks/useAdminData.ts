@@ -285,10 +285,8 @@ export const useAdminData = () => {
     }
     
     async function createCategory(categoryName: string) {
-      const slug = categoryName.toLowerCase().replace(/\s+/g, '-');
       const { data, error } = await categoryService.createCategory({
         name: categoryName,
-        slug,
         emoji: '📦', // Default emoji
         is_active: true,
       });
@@ -319,6 +317,17 @@ export const useAdminData = () => {
       ));
     }
   }, [banners]);
+
+  const deleteBanner = useCallback(async (bannerId: string) => {
+    const { error } = await bannerService.deleteBanner(bannerId);
+    
+    if (error) {
+      Alert.alert('Error', `Failed to delete banner: ${error.message}`);
+    } else {
+      setBanners(prev => prev.filter(b => b.id !== bannerId));
+      Alert.alert('Success', 'Banner deleted successfully');
+    }
+  }, []);
 
   const addNewBanner = useCallback(async () => {
     let title: string | null = null;
@@ -400,6 +409,7 @@ export const useAdminData = () => {
     addNewCategory,
     toggleBanner,
     addNewBanner,
+    deleteBanner,
     updateSetting,
     
     // Refresh function

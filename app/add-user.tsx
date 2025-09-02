@@ -3,8 +3,7 @@ import { View, Text, TextInput, TouchableOpacity, StyleSheet, Alert } from 'reac
 import { router } from 'expo-router';
 import { ArrowLeft, UserPlus } from 'lucide-react-native';
 import { LinearGradient } from 'expo-linear-gradient';
-import { create } from '@/services/adminCrud';
-import { elevate } from '@/services/adminElevation';
+// Direct API call for user creation
 
 const ROLES = ['user', 'verified_user', 'business', 'moderator', 'admin', 'super_admin'];
 
@@ -23,23 +22,42 @@ export default function AddUserScreen() {
 
     try {
       setLoading(true);
-      // Replace Supabase call with backend API request
+      
       const response = await fetch('http://localhost:3000/api/users', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: {
+          'Content-Type': 'application/json',
+        },
         body: JSON.stringify({
           username: username.trim(),
           email: email.trim(),
           password,
-          role,
-        }),
+          role
+        })
       });
-      const result = await response.json();
-      if (!response.ok) throw new Error(result.error || 'Failed to create user');
 
-      Alert.alert('Success', 'User created successfully');
-      setTimeout(() => router.replace('/(tabs)/admin'), 1000);
+      const data = await response.json();
+
+      if (!response.ok) {
+        throw new Error(data.error || 'Failed to create user');
+      }
+
+      // Clear form
+      setUsername('');
+      setEmail('');
+      setPassword('');
+      setRole('user');
+      
+      Alert.alert('Success', 'User created successfully', [
+        { text: 'OK', onPress: () => router.back() }
+      ]);
+      
+      // Auto-close after 1 second if user doesn't interact
+      setTimeout(() => {
+        router.back();
+      }, 1000);
     } catch (error: any) {
+      console.error('Error creating user:', error);
       Alert.alert('Error', error.message || 'Failed to create user');
     } finally {
       setLoading(false);
@@ -49,7 +67,7 @@ export default function AddUserScreen() {
   return (
     <View style={styles.container}>
       <View style={styles.header}>
-        <TouchableOpacity onPress={() => router.canGoBack() ? router.back() : router.replace('/(tabs)/admin')} style={styles.backButton}>
+        <TouchableOpacity onPress={() => router.back()} style={styles.backButton}>
           <ArrowLeft size={24} color="#FFFFFF" />
         </TouchableOpacity>
         <Text style={styles.title}>Add New User</Text>
@@ -64,8 +82,6 @@ export default function AddUserScreen() {
             onChangeText={setUsername}
             placeholder="Enter username"
             autoCapitalize="none"
-            autoComplete="off"
-            textContentType="none"
           />
         </View>
 
@@ -78,8 +94,6 @@ export default function AddUserScreen() {
             placeholder="Enter email"
             keyboardType="email-address"
             autoCapitalize="none"
-            autoComplete="off"
-            textContentType="none"
           />
         </View>
 
@@ -91,8 +105,6 @@ export default function AddUserScreen() {
             onChangeText={setPassword}
             placeholder="Enter password"
             secureTextEntry
-            autoComplete="off"
-            textContentType="none"
           />
         </View>
 

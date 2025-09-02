@@ -1,15 +1,16 @@
 import React from 'react';
-import { View, Text, StyleSheet, FlatList, TouchableOpacity, Switch, Image } from 'react-native';
+import { View, Text, StyleSheet, FlatList, TouchableOpacity, Switch, Image, Alert } from 'react-native';
 import { AdminBanner } from '@/hooks/useAdminData';
-import { Plus } from 'lucide-react-native';
+import { Plus, Trash2 } from 'lucide-react-native';
 
 interface BannerManagementProps {
   banners: AdminBanner[];
   onToggleBanner: (bannerId: string) => void;
   onAddNewBanner: () => void;
+  onDeleteBanner?: (bannerId: string) => void;
 }
 
-const BannerItem: React.FC<{ banner: AdminBanner; onToggleBanner: (bannerId: string) => void }> = ({ banner, onToggleBanner }) => (
+const BannerItem: React.FC<{ banner: AdminBanner; onToggleBanner: (bannerId: string) => void; onDeleteBanner?: (bannerId: string) => void }> = ({ banner, onToggleBanner, onDeleteBanner }) => (
   <View style={bannerStyles.bannerCard}>
     <Image source={{ uri: banner.image_url || 'https://images.pexels.com/photos/5632402/pexels-photo-5632402.jpeg?auto=compress&cs=tinysrgb&w=400' }} style={bannerStyles.bannerImage} />
     <View style={bannerStyles.bannerInfo}>
@@ -17,16 +18,35 @@ const BannerItem: React.FC<{ banner: AdminBanner; onToggleBanner: (bannerId: str
       <Text style={bannerStyles.bannerDescription}>{banner.description}</Text>
       <Text style={bannerStyles.bannerPriority}>Priority: {banner.priority}</Text>
     </View>
-    <Switch
-      value={banner.is_active}
-      onValueChange={() => onToggleBanner(banner.id)}
-      trackColor={{ false: '#E5E7EB', true: '#10b981' }}
-      thumbColor={banner.is_active ? '#FFFFFF' : '#F3F4F6'}
-    />
+    <View style={bannerStyles.actions}>
+      <Switch
+        value={banner.is_active}
+        onValueChange={() => onToggleBanner(banner.id)}
+        trackColor={{ false: '#E5E7EB', true: '#10b981' }}
+        thumbColor={banner.is_active ? '#FFFFFF' : '#F3F4F6'}
+      />
+      {onDeleteBanner && (
+        <TouchableOpacity
+          style={bannerStyles.deleteButton}
+          onPress={() => {
+            Alert.alert(
+              'Delete Banner',
+              `Are you sure you want to delete "${banner.title}"?`,
+              [
+                { text: 'Cancel', style: 'cancel' },
+                { text: 'Delete', style: 'destructive', onPress: () => onDeleteBanner(banner.id) }
+              ]
+            );
+          }}
+        >
+          <Trash2 size={16} color="#ef4444" />
+        </TouchableOpacity>
+      )}
+    </View>
   </View>
 );
 
-export const BannerManagement: React.FC<BannerManagementProps> = ({ banners, onToggleBanner, onAddNewBanner }) => {
+export const BannerManagement: React.FC<BannerManagementProps> = ({ banners, onToggleBanner, onAddNewBanner, onDeleteBanner }) => {
   return (
     <View style={bannerStyles.container}>
       <View style={bannerStyles.header}>
@@ -37,7 +57,7 @@ export const BannerManagement: React.FC<BannerManagementProps> = ({ banners, onT
       </View>
       <FlatList
         data={banners}
-        renderItem={({ item }) => <BannerItem banner={item} onToggleBanner={onToggleBanner} />}
+        renderItem={({ item }) => <BannerItem banner={item} onToggleBanner={onToggleBanner} onDeleteBanner={onDeleteBanner} />}
         keyExtractor={(item) => item.id}
         showsVerticalScrollIndicator={false}
         contentContainerStyle={bannerStyles.listContent}
@@ -96,6 +116,16 @@ const bannerStyles = StyleSheet.create({
   bannerInfo: {
     flex: 1,
     marginRight: 12,
+  },
+  actions: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+  },
+  deleteButton: {
+    padding: 8,
+    borderRadius: 6,
+    backgroundColor: '#fef2f2',
   },
   bannerTitle: {
     fontSize: 16,

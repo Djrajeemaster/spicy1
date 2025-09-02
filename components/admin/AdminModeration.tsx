@@ -257,24 +257,6 @@ export default function AdminModeration() {
         <Text style={styles.statsText}>
           {items.length} items pending review
         </Text>
-        {items.length > 0 && (
-          <View style={styles.statusBreakdown}>
-            <Text style={styles.statusBreakdownTitle}>Content Status Breakdown:</Text>
-            {items.reduce((acc: any, item) => {
-              const status = item.status || 'unknown';
-              acc[status] = (acc[status] || 0) + 1;
-              return acc;
-            }, {}) && Object.entries(items.reduce((acc: any, item) => {
-              const status = item.status || 'unknown';
-              acc[status] = (acc[status] || 0) + 1;
-              return acc;
-            }, {})).map(([status, count]) => (
-              <Text key={status} style={styles.statusBreakdownItem}>
-                {status}: {String(count)}
-              </Text>
-            ))}
-          </View>
-        )}
       </View>
 
       <FlatList
@@ -294,12 +276,10 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: '#f8fafc',
+    padding: 20,
   },
   header: {
-    backgroundColor: '#fff',
-    padding: 20,
-    borderBottomWidth: 1,
-    borderBottomColor: '#e5e7eb',
+    marginBottom: 20,
   },
   title: {
     fontSize: 24,
@@ -336,8 +316,8 @@ const styles = StyleSheet.create({
   statsContainer: {
     padding: 16,
     backgroundColor: '#fff',
-    borderBottomWidth: 1,
-    borderBottomColor: '#e5e7eb',
+    borderRadius: 8,
+    marginBottom: 16,
   },
   statsText: {
     fontSize: 14,
@@ -349,8 +329,7 @@ const styles = StyleSheet.create({
   },
   itemCard: {
     backgroundColor: '#fff',
-    margin: 16,
-    marginBottom: 8,
+    marginBottom: 16,
     borderRadius: 12,
     padding: 16,
     shadowColor: '#000',
@@ -473,22 +452,5 @@ const styles = StyleSheet.create({
     fontSize: 12,
     fontWeight: '600',
     color: '#fff',
-  },
-  statusBreakdown: {
-    marginTop: 8,
-    padding: 12,
-    backgroundColor: '#f1f5f9',
-    borderRadius: 8,
-  },
-  statusBreakdownTitle: {
-    fontSize: 12,
-    fontWeight: '600',
-    color: '#475569',
-    marginBottom: 4,
-  },
-  statusBreakdownItem: {
-    fontSize: 11,
-    color: '#64748b',
-    marginLeft: 8,
   },
 });

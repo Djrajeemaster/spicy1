@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { View, Text, StyleSheet, FlatList, TouchableOpacity, TextInput, Alert, Modal } from 'react-native';
-import { Send, MessageSquare, Users, Bell, BellOff, Filter } from 'lucide-react-native';
+import { Send, MessageSquare, Users, Bell, BellOff, Filter, Trash2 } from 'lucide-react-native';
 import { elevate } from '../../services/adminElevation';
 import { useAuth } from '../../contexts/AuthProvider';
 
@@ -123,6 +123,27 @@ export default function AdminCommunication() {
     }
   };
 
+  const handleDeleteAnnouncement = (announcementId: string) => {
+    const announcement = announcements.find(a => a.id === announcementId);
+    if (!announcement) return;
+
+    Alert.alert(
+      'Delete Announcement',
+      `Are you sure you want to delete "${announcement.title}"?`,
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Delete',
+          style: 'destructive',
+          onPress: () => {
+            setAnnouncements(prev => prev.filter(a => a.id !== announcementId));
+            Alert.alert('Success', 'Announcement deleted successfully');
+          }
+        }
+      ]
+    );
+  };
+
   const renderAnnouncement = ({ item }: { item: Announcement }) => (
     <View style={styles.announcementCard}>
       <View style={styles.announcementHeader}>
@@ -135,6 +156,9 @@ export default function AdminCommunication() {
           </Text>
           {item.send_push && <Bell size={14} color="#4f46e5" />}
           <Text style={styles.viewsText}>{item.views || 0} views</Text>
+          <TouchableOpacity onPress={() => handleDeleteAnnouncement(item.id)} style={styles.deleteButton}>
+            <Trash2 size={16} color="#ef4444" />
+          </TouchableOpacity>
         </View>
       </View>
       
@@ -285,15 +309,13 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: '#f8fafc',
+    padding: 20,
   },
   header: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    padding: 20,
-    backgroundColor: '#ffffff',
-    borderBottomWidth: 1,
-    borderBottomColor: '#e2e8f0',
+    marginBottom: 20,
   },
   title: {
     fontSize: 24,
@@ -308,7 +330,7 @@ const styles = StyleSheet.create({
     borderRadius: 8,
   },
   listContainer: {
-    padding: 16,
+    paddingBottom: 20,
   },
   announcementCard: {
     backgroundColor: '#ffffff',
@@ -512,5 +534,10 @@ const styles = StyleSheet.create({
   pushOptionText: {
     fontSize: 16,
     color: '#1e293b',
+  },
+  deleteButton: {
+    padding: 4,
+    borderRadius: 4,
+    backgroundColor: '#fef2f2',
   },
 });

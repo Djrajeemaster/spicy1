@@ -1,3 +1,4 @@
+
 const cors = require('cors');
 const express = require('express');
 const { Pool } = require('pg');
@@ -23,6 +24,153 @@ app.use(cors({
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
   allowedHeaders: ['Content-Type', 'Authorization', 'Cookie']
 }));
+
+// Role request endpoints
+
+// Get available roles (excluding admin/superadmin)
+app.get('/api/role-requests/available-roles', async (req, res) => {
+  try {
+    const availableRoles = ['user', 'verified', 'moderator'];
+    res.json(availableRoles);
+  } catch (error) {
+    console.error('Error fetching available roles:', error);
+    res.status(500).json({ error: 'Failed to fetch available roles' });
+  }
+});
+
+// Submit role request
+app.post('/api/role-requests', async (req, res) => {
+  try {
+    const { userId, role, reason } = req.body;
+
+    if (!userId || !role || !reason) {
+      return res.status(400).json({ error: 'Missing required fields' });
+    }
+
+    // Check if user already has a pending request
+    const existingRequest = await pool.query(
+      'SELECT id FROM verification_requests WHERE user_id = $1 AND status = $2',
+      [userId, 'pending']
+    );
+
+    if (existingRequest.rows.length > 0) {
+      return res.status(400).json({ error: 'You already have a pending request' });
+    }
+
+    // Insert new request
+    const result = await pool.query(
+      'INSERT INTO verification_requests (user_id, role, reason, status) VALUES ($1, $2, $3, $4) RETURNING *',
+      [userId, role, reason, 'pending']
+    );
+
+    res.json({ message: 'Role request submitted successfully', request: result.rows[0] });
+  } catch (error) {
+    console.error('Error submitting role request:', error);
+    res.status(500).json({ error: 'Failed to submit role request' });
+  }
+});
+
+// Get all role requests (admin only)
+app.get('/api/role-requests', async (req, res) => {
+  try {
+    const result = await pool.query(`
+      SELECT * FROM verification_requests 
+      ORDER BY created_at DESC
+    `);
+    res.json(result.rows);
+  } catch (error) {
+    console.error('Error fetching role requests:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// Approve/reject role request (admin only)
+app.put('/api/role-requests/:id', async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { status, adminId } = req.body;
+
+    if (!['approved', 'rejected'].includes(status)) {
+      return res.status(400).json({ error: 'Invalid status' });
+    }
+
+    // Get request details
+    const request = await pool.query(
+      'SELECT * FROM verification_requests WHERE id = $1',
+      [id]
+    );
+
+    if (request.rows.length === 0) {
+      return res.status(404).json({ error: 'Request not found' });
+    }
+
+    const requestData = request.rows[0];
+
+    // Update request status
+    await pool.query(
+      'UPDATE verification_requests SET status = $1 WHERE id = $2',
+      [status, id]
+    );
+
+    // If approved, update user role
+    if (status === 'approved') {
+      await pool.query(
+        'UPDATE users SET role = $1 WHERE id = $2',
+        [requestData.role, requestData.user_id]
+      );
+    }
+
+    res.json({ message: `Request ${status} successfully` });
+  } catch (error) {
+    console.error('Error updating role request:', error);
+    res.status(500).json({ error: 'Failed to update role request' });
+  }
+});
+
+// Create new role (admin only)
+app.post('/api/roles', async (req, res) => {
+  try {
+    const { name, description, permissions } = req.body;
+    
+    if (!name) {
+      return res.status(400).json({ error: 'Role name is required' });
+    }
+
+    // For now, just return success as we're using predefined roles
+    // In a full implementation, you'd store this in a roles table
+    res.json({ message: 'Role created successfully', role: { name, description, permissions } });
+  } catch (error) {
+    console.error('Error creating role:', error);
+    res.status(500).json({ error: 'Failed to create role' });
+  }
+});
+
+// Legacy endpoints for backward compatibility
+app.post('/api/verification-request', async (req, res) => {
+  const { user_id, role, reason } = req.body;
+  if (!user_id || !role || !reason) {
+    return res.status(400).json({ error: 'Missing required fields.' });
+  }
+  try {
+    await pool.query(
+      'INSERT INTO verification_requests (user_id, role, reason, status, created_at) VALUES ($1, $2, $3, $4, NOW())',
+      [user_id, role, reason, 'pending']
+    );
+    res.json({ success: true });
+  } catch (err) {
+    console.error('Error submitting verification request:', err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.get('/api/verification-requests', async (req, res) => {
+  try {
+    const { rows } = await pool.query('SELECT * FROM verification_requests ORDER BY created_at DESC');
+    res.json(rows);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
 
 // Get all banners
 app.get('/api/banners', async (req, res) => {
@@ -1911,10 +2059,11 @@ app.get('/api/categories/:id', async (req, res) => {
 
 app.post('/api/categories', async (req, res) => {
   try {
-    const { name, emoji, description, is_active } = req.body;
+    const { name, emoji, is_active } = req.body;
+    const slug = name.toLowerCase().replace(/\s+/g, '-').replace(/[^a-z0-9-]/g, '');
     const { rows } = await pool.query(
-      'INSERT INTO categories (name, emoji, description, is_active, created_at) VALUES ($1, $2, $3, $4, NOW()) RETURNING *',
-      [name, emoji, description, is_active !== false]
+      'INSERT INTO categories (name, slug, emoji, is_active, created_at) VALUES ($1, $2, $3, $4, NOW()) RETURNING *',
+      [name, slug, emoji, is_active !== false]
     );
     res.status(201).json(rows[0]);
   } catch (err) {
@@ -2039,16 +2188,36 @@ app.post('/api/banners', async (req, res) => {
 app.put('/api/banners/:id', async (req, res) => {
   try {
     const { id } = req.params;
-    const { title, description, image_url, is_active, priority } = req.body;
-    const { rows } = await pool.query(
-      'UPDATE banners SET title = $1, description = $2, image_url = $3, is_active = $4, priority = $5, updated_at = NOW() WHERE id = $6 RETURNING *',
-      [title, description, image_url, is_active, priority, id]
-    );
+    const updates = req.body;
+    
+    const updateFields = [];
+    const updateValues = [];
+    let paramCount = 1;
+    
+    Object.keys(updates).forEach(key => {
+      if (updates[key] !== undefined && key !== 'id') {
+        updateFields.push(`${key} = $${paramCount}`);
+        updateValues.push(updates[key]);
+        paramCount++;
+      }
+    });
+    
+    if (updateFields.length === 0) {
+      return res.status(400).json({ error: 'No fields to update' });
+    }
+    
+    updateFields.push('updated_at = NOW()');
+    updateValues.push(id);
+    
+    const query = `UPDATE banners SET ${updateFields.join(', ')} WHERE id = $${paramCount} RETURNING *`;
+    const { rows } = await pool.query(query, updateValues);
+    
     if (rows.length === 0) {
       return res.status(404).json({ error: 'Banner not found' });
     }
     res.json(rows[0]);
   } catch (err) {
+    console.error('Error updating banner:', err);
     res.status(500).json({ error: err.message });
   }
 });
@@ -2261,6 +2430,34 @@ app.post('/api/debug/reset-admin-password', async (req, res) => {
     
     res.json({ message: 'Admin password reset successfully', user: rows[0] });
   } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// Create new user endpoint
+app.post('/api/users', async (req, res) => {
+  try {
+    const { username, email, password, role = 'user' } = req.body;
+    
+    if (!username || !email || !password) {
+      return res.status(400).json({ error: 'Missing required fields' });
+    }
+    
+    // Hash password
+    const saltRounds = 10;
+    const password_hash = await bcrypt.hash(password, saltRounds);
+    
+    // Generate UUID for the user
+    const userId = require('crypto').randomUUID();
+    
+    const { rows } = await pool.query(
+      'INSERT INTO users (id, username, email, password_hash, role, created_at) VALUES ($1, $2, $3, $4, $5, NOW()) RETURNING id, username, email, role',
+      [userId, username, email, password_hash, role]
+    );
+    
+    res.status(201).json(rows[0]);
+  } catch (err) {
+    console.error('Error creating user:', err);
     res.status(500).json({ error: err.message });
   }
 });
