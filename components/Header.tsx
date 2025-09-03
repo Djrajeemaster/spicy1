@@ -302,9 +302,10 @@ export function Header({
         <View style={[styles.mainRow, isDesktopWeb && showFullSearch && styles.mainRowDesktop]}>
           <View style={[styles.leftSection, isDesktopWeb && styles.leftSectionDesktop]}>
             <TouchableOpacity onPress={() => router.push('/')} style={styles.logoContainer}>
-              <LinearGradient colors={['#0A2540', '#1e40af', '#3b82f6']} style={styles.logo}>
-                <Image source={{ uri: `http://localhost:3000/${siteLogoFilenameRaw}${logoCacheBuster ? `?cb=${logoCacheBuster}` : ''}` }} style={{ width: 24, height: 24 }} />
-              </LinearGradient>
+              <Image
+                source={{ uri: `http://localhost:3000/${siteLogoFilenameRaw}${logoCacheBuster ? `?cb=${logoCacheBuster}` : ''}` }}
+                style={{ width: 50, height: 50, marginRight: 12, resizeMode: 'contain' }}
+              />
               {/* Show full text only on desktop, just icon on mobile */}
               {isDesktopWeb && (() => {
                 if (headerGradientStart && headerGradientEnd && Platform.OS === 'web') {
