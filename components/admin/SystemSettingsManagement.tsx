@@ -3,6 +3,7 @@ import { View, Text, StyleSheet, Switch, TextInput, TouchableOpacity, ScrollView
 import { SystemSettings } from '@/hooks/useAdminData';
 import { Settings, Globe, Shield, Users, Clock, Star, DollarSign, Bell } from 'lucide-react-native';
 import { LinearGradient } from 'expo-linear-gradient';
+import { apiUrl, assetUrl } from '@/utils/api';
 
 interface SystemSettingsManagementProps {
   settings: SystemSettings;
@@ -45,10 +46,9 @@ export const SystemSettingsManagement: React.FC<SystemSettingsManagementProps> =
   const [focusedField, setFocusedField] = useState<string | null>(null);
   const [testLog, setTestLog] = useState<string[]>([]);
   const isDev = typeof __DEV__ !== 'undefined' ? (__DEV__ as boolean) : false;
-  // If admin UI is served from a different dev port (e.g. :8081), point API calls to :3000
-  const apiBase = (typeof window !== 'undefined' && window.location && window.location.port === '8081') ? 'http://localhost:3000' : '';
-  const api = (path: string) => apiBase ? `${apiBase}${path}` : path;
-  const assetUrl = (filename: string) => apiBase ? `${apiBase}/${filename}` : `/${filename}`;
+
+  // Use centralized API utilities
+  const api = apiUrl;
 
   useEffect(() => {
     // load current site settings

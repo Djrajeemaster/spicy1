@@ -1,6 +1,6 @@
 // components/admin/AdminHeader.tsx
-import React from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, Alert, Platform } from 'react-native';
+import React, { useState } from 'react';
+import { View, Text, StyleSheet, TouchableOpacity, Alert, Platform, ActivityIndicator, Modal } from 'react-native';
 import { Shield, LogOut } from 'lucide-react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { UserBadge } from '@/components/UserBadge';
@@ -12,77 +12,105 @@ interface AdminHeaderProps {
 }
 
 export const AdminHeader: React.FC<AdminHeaderProps> = ({ currentUserRole }) => {
+  const [showExitConfirm, setShowExitConfirm] = useState(false);
+  const [exiting, setExiting] = useState(false);
+
   const handleExitAdmin = () => {
     console.log('Exit admin button pressed');
-    
-    // For web, use confirm dialog, for native use Alert
-    if (Platform.OS === 'web') {
-      const confirmExit = window.confirm('Exit Admin Mode? Return to normal user view?');
-      if (confirmExit) {
-        console.log('Exiting admin mode...');
-        try {
-          router.replace('/(tabs)');
-          console.log('Successfully navigated to main tabs');
-        } catch (error) {
-          console.error('Navigation error:', error);
-          // Fallback navigation
-          router.push('/');
-        }
-      }
-    } else {
-      Alert.alert(
-        'Exit Admin Mode',
-        'Return to normal user view?',
-        [
-          { 
-            text: 'Cancel', 
-            style: 'cancel',
-            onPress: () => console.log('Exit cancelled')
-          },
-          { 
-            text: 'Exit', 
-            onPress: () => {
-              console.log('Exiting admin mode...');
-              try {
-                router.replace('/(tabs)');
-                console.log('Successfully navigated to main tabs');
-              } catch (error) {
-                console.error('Navigation error:', error);
-                // Fallback navigation
-                router.push('/');
-              }
-            }
-          }
-        ]
-      );
+    setShowExitConfirm(true);
+  };
+
+  const confirmExit = async () => {
+    setExiting(true);
+    try {
+      console.log('Exiting admin mode...');
+      router.replace('/(tabs)');
+      console.log('Successfully navigated to main tabs');
+    } catch (error) {
+      console.error('Navigation error:', error);
+      // Fallback navigation
+      router.push('/');
+    } finally {
+      setExiting(false);
+      setShowExitConfirm(false);
     }
   };
 
+  const cancelExit = () => {
+    setShowExitConfirm(false);
+  };
+
   return (
-    <LinearGradient
-      colors={['#1f2937', '#111827']}
-      style={styles.header}
-    >
-      <View style={styles.headerContent}>
-        <View style={styles.headerLeft}>
-          <Shield size={24} color="#FFFFFF" />
-          <Text style={styles.headerTitle}>Admin Panel</Text>
-          <UserBadge role={currentUserRole} size="small" />
+    <>
+      <LinearGradient
+        colors={['#1f2937', '#111827']}
+        style={styles.header}
+      >
+        <View style={styles.headerContent}>
+          <View style={styles.headerLeft}>
+            <Shield size={24} color="#FFFFFF" />
+            <Text style={styles.headerTitle}>Admin Panel</Text>
+            <UserBadge role={currentUserRole} size="small" />
+          </View>
+          
+          <TouchableOpacity 
+            style={styles.exitButton}
+            onPress={handleExitAdmin}
+            activeOpacity={0.7}
+            accessible={true}
+            accessibilityLabel="Exit admin mode"
+            accessibilityRole="button"
+          >
+            <LogOut size={18} color="#FFFFFF" />
+            <Text style={styles.exitButtonText}>Exit</Text>
+          </TouchableOpacity>
         </View>
-        
-        <TouchableOpacity 
-          style={styles.exitButton}
-          onPress={handleExitAdmin}
-          activeOpacity={0.7}
-          accessible={true}
-          accessibilityLabel="Exit admin mode"
-          accessibilityRole="button"
-        >
-          <LogOut size={18} color="#FFFFFF" />
-          <Text style={styles.exitButtonText}>Exit</Text>
-        </TouchableOpacity>
-      </View>
-    </LinearGradient>
+      </LinearGradient>
+
+      {/* Exit Confirmation Modal */}
+      <Modal
+        visible={showExitConfirm}
+        transparent={true}
+        animationType="fade"
+        statusBarTranslucent={true}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalCard}>
+            <Text style={styles.modalTitle}>Exit Admin Mode</Text>
+            <Text style={styles.modalMessage}>
+              Are you sure you want to return to normal user view?
+            </Text>
+
+            <View style={styles.modalActions}>
+              <TouchableOpacity
+                style={[styles.modalBtn, styles.modalCancel]}
+                onPress={cancelExit}
+                disabled={exiting}
+              >
+                <Text style={styles.modalCancelText}>Cancel</Text>
+              </TouchableOpacity>
+
+              <TouchableOpacity
+                style={[styles.modalBtn, styles.modalConfirm]}
+                onPress={confirmExit}
+                disabled={exiting}
+              >
+                <LinearGradient
+                  colors={['#ef4444', '#dc2626']}
+                  style={styles.modalConfirmGradient}
+                >
+                  {exiting ? (
+                    <ActivityIndicator color="#fff" size="small" />
+                  ) : (
+                    <Text style={styles.modalConfirmText}>Exit</Text>
+                  )}
+                </LinearGradient>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
+    </>
   );
 };
 
@@ -126,5 +154,64 @@ const styles = StyleSheet.create({
     color: '#FFFFFF',
     fontSize: 12,
     fontWeight: '600',
+  },
+  
+  // Modal styles
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.6)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    paddingHorizontal: 20,
+  },
+  modalCard: {
+    width: '90%',
+    maxWidth: 420,
+    backgroundColor: '#fff',
+    borderRadius: 16,
+    paddingHorizontal: 18,
+    paddingVertical: 16,
+  },
+  modalTitle: {
+    fontSize: 18,
+    fontWeight: '800',
+    color: '#111827',
+    marginBottom: 6,
+  },
+  modalMessage: {
+    fontSize: 14,
+    color: '#374151',
+    marginBottom: 12,
+  },
+  modalActions: {
+    flexDirection: 'row',
+    justifyContent: 'flex-end',
+    marginTop: 8,
+  },
+  modalBtn: {
+    marginLeft: 10,
+  },
+  modalCancel: {
+    paddingVertical: 10,
+    paddingHorizontal: 12,
+    borderRadius: 10,
+    backgroundColor: '#f3f4f6',
+  },
+  modalCancelText: {
+    color: '#374151',
+    fontWeight: '700',
+  },
+  modalConfirm: {
+    borderRadius: 10,
+    overflow: 'hidden',
+  },
+  modalConfirmGradient: {
+    paddingVertical: 10,
+    paddingHorizontal: 16,
+    borderRadius: 10,
+  },
+  modalConfirmText: {
+    color: '#fff',
+    fontWeight: '800',
   },
 });

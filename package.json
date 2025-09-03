@@ -5,8 +5,8 @@
   "private": true,
   "scripts": {
     "dev": "EXPO_NO_TELEMETRY=1 expo start",
-    "server": "NODE_ENV=development node server.js",
-    "server:prod": "NODE_ENV=production node server.js",
+    "server": "set NODE_ENV=development && node server.js",
+    "server:prod": "set NODE_ENV=production && node server.js",
     "build:web": "expo export --platform web",
     "lint": "expo lint",
     "create-users": "node scripts/createLocalUsers.js",

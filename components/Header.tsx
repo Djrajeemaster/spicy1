@@ -10,6 +10,8 @@ import {
   ActivityIndicator,
   Animated,
   ScrollView,
+  TouchableWithoutFeedback,
+  Modal,
 } from 'react-native';
 import { Bell, ChevronDown, LogIn, Search, Filter, Navigation } from 'lucide-react-native';
 import { Image } from 'react-native';
@@ -19,6 +21,7 @@ import { getRolePrivileges } from '@/types/user';
 import { useAuth } from '@/contexts/AuthProvider';
 import { useTheme } from '@/contexts/ThemeProvider';
 import { alertService } from '@/services/alertService';
+import { apiUrl, assetUrl } from '@/utils/api';
 
 // import canAccessAdmin from '@/lib/db'; // Removed: Node.js-only code
 import { router } from 'expo-router';
@@ -57,6 +60,8 @@ export function Header({
   const [siteLogoFilenameRaw, setSiteLogoFilenameRaw] = useState<string>('sdicon.PNG');
   const [logoCacheBuster, setLogoCacheBuster] = useState<number>(Date.now());
   const [headerTextColor, setHeaderTextColor] = useState<string>('#0A2540');
+  
+  const userMenuRef = useRef<View>(null);
   const [headerGradientStart, setHeaderGradientStart] = useState<string | null>(null);
   const [headerGradientEnd, setHeaderGradientEnd] = useState<string | null>(null);
   const [animatedLogo, setAnimatedLogo] = useState<boolean>(false);
@@ -109,7 +114,7 @@ export function Header({
 
     (async () => {
       try {
-        const res = await fetch('http://localhost:3000/api/site/settings', { credentials: 'include' });
+        const res = await fetch(apiUrl('/api/site/settings'), { credentials: 'include' });
         if (!res.ok) return;
         const data = await res.json();
         if (stopped) return;
@@ -148,7 +153,7 @@ export function Header({
 
       const onFocus = async () => {
         try {
-          const res = await fetch('http://localhost:3000/api/site/settings');
+          const res = await fetch(apiUrl('/api/site/settings'));
           if (!res.ok) return;
           const data = await res.json();
           if (data.logoFilename) { setSiteLogoFilenameRaw(data.logoFilename); setLogoCacheBuster(Date.now()); }
@@ -172,7 +177,7 @@ export function Header({
       const poll = setInterval(async () => {
         polls += 1;
         try {
-          const res = await fetch('http://localhost:3000/api/site/settings');
+          const res = await fetch(apiUrl('/api/site/settings'));
           if (!res.ok) return;
           const data = await res.json();
           if (data.logoFilename && data.logoFilename !== siteLogoFilenameRaw) { setSiteLogoFilenameRaw(data.logoFilename); setLogoCacheBuster(Date.now()); }
@@ -300,7 +305,7 @@ export function Header({
   }, []);
 
   return (
-  <Animated.View style={styles.container}>
+    <Animated.View style={styles.container}>
       <LinearGradient
         colors={['#030849', '#1e40af', '#3b82f6']}
         start={{ x: 0, y: 0 }}
@@ -311,7 +316,7 @@ export function Header({
           <View style={[styles.leftSection, isDesktopWeb && styles.leftSectionDesktop]}>
             <TouchableOpacity onPress={() => router.push('/')} style={styles.logoContainer}>
               <Image
-                source={{ uri: `http://localhost:3000/${siteLogoFilenameRaw}${logoCacheBuster ? `?cb=${logoCacheBuster}` : ''}` }}
+                source={{ uri: assetUrl(siteLogoFilenameRaw) + (logoCacheBuster ? `?cb=${logoCacheBuster}` : '') }}
                 style={{ width: 60, height: 60, marginRight: 12, resizeMode: 'contain' }}
               />
               {/* Show full text only on desktop, just icon on mobile */}
@@ -542,37 +547,53 @@ export function Header({
       </LinearGradient>
 
       {/* User Menu Dropdown */}
-      {showUserMenu && (
-        <View style={styles.userMenu}>
-          <TouchableOpacity
-            style={styles.userMenuItem}
-            onPress={() => {
-              setShowUserMenu(false);
-              router.push('/profile');
-            }}
-          >
-            <Text style={styles.userMenuText}>Profile</Text>
-          </TouchableOpacity>
-          <TouchableOpacity
-            style={styles.userMenuItem}
-            onPress={() => {
-              setShowUserMenu(false);
-              router.push('/settings');
-            }}
-          >
-            <Text style={styles.userMenuText}>Settings</Text>
-          </TouchableOpacity>
-          <TouchableOpacity
-            style={[styles.userMenuItem, styles.userMenuItemLast]}
-            onPress={openSignOutDialog}
-          >
-            <Text style={styles.userMenuText}>Sign Out</Text>
-          </TouchableOpacity>
-        </View>
-      )}
+      <Modal
+        visible={showUserMenu}
+        transparent={true}
+        animationType="none"
+        onRequestClose={() => setShowUserMenu(false)}
+      >
+        <TouchableWithoutFeedback onPress={() => setShowUserMenu(false)}>
+          <View style={styles.userMenuModalOverlay}>
+            <TouchableWithoutFeedback onPress={() => {}}>
+              <View style={styles.userMenu} ref={userMenuRef}>
+                <TouchableOpacity
+                  style={styles.userMenuItem}
+                  onPress={() => {
+                    setShowUserMenu(false);
+                    router.push('/profile');
+                  }}
+                >
+                  <Text style={styles.userMenuText}>Profile</Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  style={styles.userMenuItem}
+                  onPress={() => {
+                    setShowUserMenu(false);
+                    router.push('/settings');
+                  }}
+                >
+                  <Text style={styles.userMenuText}>Settings</Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  style={[styles.userMenuItem, styles.userMenuItemLast]}
+                  onPress={openSignOutDialog}
+                >
+                  <Text style={styles.userMenuText}>Sign Out</Text>
+                </TouchableOpacity>
+              </View>
+            </TouchableWithoutFeedback>
+          </View>
+        </TouchableWithoutFeedback>
+      </Modal>
 
       {/* Sign-out Confirm Dialog (custom, works on web & native) */}
-      {showSignOutConfirm && (
+      <Modal
+        visible={showSignOutConfirm}
+        transparent={true}
+        animationType="fade"
+        statusBarTranslucent={true}
+      >
         <View style={styles.modalOverlay}>
           <View style={styles.modalCard}>
             <Text style={styles.modalTitle}>Sign Out</Text>
@@ -612,7 +633,7 @@ export function Header({
             </View>
           </View>
         </View>
-      )}
+      </Modal>
     </Animated.View>
   );
 }
@@ -694,9 +715,16 @@ const styles = StyleSheet.create({
   avatarText: { color: '#FFFFFF', fontSize: 12, fontWeight: '700' },
 
   userMenu: {
-    position: 'absolute', top: 60, right: 20, backgroundColor: '#FFFFFF',
+    backgroundColor: '#FFFFFF',
     borderRadius: 12, shadowColor: '#000', shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.15, shadowRadius: 8, elevation: 8, zIndex: 1000, minWidth: 150,
+    shadowOpacity: 0.15, shadowRadius: 8, elevation: 8, minWidth: 150,
+  },
+  userMenuModalOverlay: {
+    flex: 1,
+    justifyContent: 'flex-start',
+    alignItems: 'flex-end',
+    paddingTop: 60,
+    paddingRight: 20,
   },
   userMenuItem: { paddingHorizontal: 16, paddingVertical: 12, borderBottomWidth: 1, borderBottomColor: '#f1f5f9' },
   userMenuItemLast: { borderBottomWidth: 0 },
@@ -790,13 +818,25 @@ const styles = StyleSheet.create({
 
   /* Modal styles */
   modalOverlay: {
-    position: 'absolute', top: 0, left: 0, right: 0, bottom: 0,
-    backgroundColor: 'rgba(0,0,0,0.35)', justifyContent: 'center', alignItems: 'center',
-    zIndex: 2000,
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.6)', 
+    justifyContent: 'center', 
+    alignItems: 'center',
+    paddingHorizontal: 20,
   },
   modalCard: {
-    width: '90%', maxWidth: 420, backgroundColor: '#fff', borderRadius: 16,
-    paddingHorizontal: 18, paddingVertical: 16,
+    width: '90%', 
+    maxWidth: 420, 
+    backgroundColor: '#fff', 
+    borderRadius: 16,
+    paddingHorizontal: 20, 
+    paddingVertical: 20,
+    marginHorizontal: 20,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.25,
+    shadowRadius: 8,
+    elevation: 8,
   },
   modalTitle: { fontSize: 18, fontWeight: '800', color: '#111827', marginBottom: 6 },
   modalMessage: { fontSize: 14, color: '#374151', marginBottom: 12 },

@@ -19,5 +19,5 @@
   "max_daily_posts_per_user": 3,
   "min_reputation_to_post": 0,
   "soft_delete_retention_days": 30,
-  "siteFont": "Quicksand"
+  "siteFont": "Poppins"
 }

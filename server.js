@@ -107,7 +107,16 @@ app.use(cors({
     // Allow requests with no origin (like mobile apps or curl requests)
     if (!origin) return callback(null, true);
     
-    // Allow localhost and 127.0.0.1 on any port
+    // Production: check allowed origins from environment
+    if (process.env.NODE_ENV === 'production') {
+      const allowedOrigins = process.env.ALLOWED_ORIGINS ? process.env.ALLOWED_ORIGINS.split(',') : [];
+      if (allowedOrigins.includes(origin)) {
+        return callback(null, true);
+      }
+      return callback(new Error('Not allowed by CORS'));
+    }
+    
+    // Development: Allow localhost and local IPs
     if (origin.includes('localhost') || origin.includes('127.0.0.1') || origin.includes('192.168.')) {
       return callback(null, true);
     }
@@ -1285,9 +1294,9 @@ app.post('/api/auth/signin', async (req, res) => {
     // Set session cookie with proper domain and path
     res.cookie('session_id', user.id, { 
       httpOnly: true, 
-      secure: false, // Set to true in production with HTTPS
+      secure: process.env.NODE_ENV === 'production', // Use HTTPS in production
       maxAge: 24 * 60 * 60 * 1000, // 24 hours
-      sameSite: 'lax',
+      sameSite: process.env.NODE_ENV === 'production' ? 'strict' : 'lax',
       path: '/'
     });
     
