@@ -115,7 +115,7 @@ export default function NearbyScreen() {
     if (!locationEnabled) {
       Alert.alert(
         "Enable Location",
-        "Allow SpicyBeats to access your location to show nearby deals?",
+        "Allow SaversDream to access your location to show nearby deals?",
         [
           { text: "Not Now", style: "cancel" },
           { 
@@ -147,7 +147,7 @@ export default function NearbyScreen() {
   const handleVote = (dealId: any, voteType: any) => {
     if (isGuest) {
       Alert.alert(
-        "Join SpicyBeats",
+        "Join SaversDream",
         "Sign in to vote on nearby deals!",
         [
           { text: "Maybe Later", style: "cancel" },
@@ -198,7 +198,30 @@ export default function NearbyScreen() {
         </LinearGradient>
       </View>
 
-      {!locationEnabled ? (
+      {isGuest ? (
+        <View style={styles.locationPrompt}>
+          <LinearGradient
+            colors={['#f8fafc', '#f1f5f9']}
+            style={styles.promptContainer}
+          >
+            <View style={styles.promptIcon}>
+              <MapPin size={48} color="#10b981" />
+            </View>
+            <Text style={styles.promptTitle}>Sign in for nearby deals</Text>
+            <Text style={styles.promptDescription}>
+              Sign in to discover amazing deals near your location
+            </Text>
+            <TouchableOpacity style={styles.enableButton} onPress={() => router.push('/sign-in')}>
+              <LinearGradient
+                colors={['#10b981', '#059669']}
+                style={styles.enableButtonGradient}
+              >
+                <Text style={styles.enableButtonText}>Sign In</Text>
+              </LinearGradient>
+            </TouchableOpacity>
+          </LinearGradient>
+        </View>
+      ) : !locationEnabled ? (
         <View style={styles.locationPrompt}>
           <LinearGradient
             colors={['#f8fafc', '#f1f5f9']}

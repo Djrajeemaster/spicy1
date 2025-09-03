@@ -342,7 +342,7 @@ export default function EditDealScreen() {
       };
 
       // Use admin update if user is admin/super_admin and not the creator
-      const isAdminEdit = (profile?.role === 'admin' || profile?.role === 'super_admin') && deal.created_by !== user.id;
+  const isAdminEdit = (profile?.role === 'admin' || profile?.role === 'superadmin' || profile?.role === 'super_admin') && deal.created_by !== user.id;
       
       const [error] = isAdminEdit 
         ? await dealService.adminUpdateDeal(deal.id, updateData, user.id, profile?.role)

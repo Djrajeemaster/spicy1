@@ -51,7 +51,7 @@ export default function SignUpScreen() {
     } else if (Platform.OS !== 'web') {
       // Give user confirmation, then redirect
       Alert.alert(
-        'Welcome to SpicyBeats!',
+        'Welcome to SaversDream!',
         'Please check your email to verify your account.',
         [{ text: 'OK', onPress: () => router.replace('/(tabs)') }]
       );
@@ -67,7 +67,7 @@ export default function SignUpScreen() {
           <LinearGradient colors={['#030849', '#1e40af']} style={styles.desktopBrandingPanel}>
             <View style={styles.brandingContent}>
               <Sparkles size={48} color="#fbbf24" />
-              <Text style={styles.desktopAppName}>SpicyBeats</Text>
+              <Text style={styles.desktopAppName}>SaversDream</Text>
               <Text style={styles.desktopTagline}>Join the community. Share the heat.</Text>
               <View style={styles.featureList}>
                 <View style={styles.featureItem}><CheckSquare size={16} color="#10b981" /><Text style={styles.featureText}>Post and vote on deals</Text></View>
@@ -187,7 +187,17 @@ const styles = StyleSheet.create({
     padding: 48,
   },
   brandingContent: { alignItems: 'center' },
-  desktopAppName: { fontSize: 48, fontWeight: '900', color: '#FFFFFF', marginTop: 16, letterSpacing: -1 },
+  desktopAppName: {
+    fontSize: 48,
+    fontWeight: '900',
+    letterSpacing: -1,
+    textAlign: 'center',
+    marginTop: 16,
+    backgroundImage: 'linear-gradient(90deg, #0A2540 0%, #00C2A8 100%)',
+    WebkitBackgroundClip: 'text',
+    WebkitTextFillColor: 'transparent',
+    backgroundClip: 'text',
+  },
   desktopTagline: { fontSize: 18, color: 'rgba(255,255,255,0.8)', marginTop: 8, textAlign: 'center', maxWidth: 300, marginBottom: 32 },
   featureList: { alignSelf: 'flex-start', gap: 16 },
   featureItem: { flexDirection: 'row', alignItems: 'center', gap: 12 },

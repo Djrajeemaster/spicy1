@@ -33,24 +33,34 @@ export default function UpDealsScreen() {
   const [selectedCategory, setSelectedCategory] = useState('all');
   const { width } = useWindowDimensions();
   const isDesktop = Platform.OS === 'web' && width >= 768;
-  const [showFilters, setShowFilters] = useState(false);
-  const [locationEnabled, setLocationEnabled] = useState(false);
   const [loading, setLoading] = useState(true);
   const [categories, setCategories] = useState<Category[]>([]);
-  const [trendingDeals, setTrendingDeals] = useState<any[]>([]);
+  const [personalizedDeals, setPersonalizedDeals] = useState<any[]>([]);
 
   const loadData = useCallback(async () => {
+    if (isGuest) {
+      setLoading(false);
+      return;
+    }
+
     setLoading(true);
     try {
-      // For now, show a mix of popular and recent deals for "For You" experience
-      // In the future, this could be enhanced with actual user preference algorithms
-      const [dealsRes, categoriesRes] = await Promise.all([
-        dealService.getDeals({ sortBy: 'popular', limit: 20 }),
-        categoryService.getCategories()
-      ]);
+      // Load categories
+      const categoriesRes = await categoryService.getCategories();
+      if (categoriesRes.data) {
+        setCategories([{ id: 'all' as any, name: 'All', emoji: '🔥', slug: 'all', is_active: true, deal_count: 0, created_at: '', updated_at: '' }, ...categoriesRes.data]);
+      }
 
-      if (dealsRes[1]) {
-        const mappedDeals = (dealsRes[1] as DealWithRelations[]).map((d: any) => ({
+      // Load personalized deals based on saved deals and alerts
+      const savedDealsResponse = await fetch(`http://localhost:3000/api/deals/saved?userId=${user!.id}`, {
+        credentials: 'include'
+      });
+      
+      let personalizedDealsData: any[] = [];
+      
+      if (savedDealsResponse.ok) {
+        const savedDeals = await savedDealsResponse.json();
+        personalizedDealsData = savedDeals.map((d: any) => ({
           ...d,
           id: String(d.id),
           price: d.price,
@@ -61,18 +71,36 @@ export default function UpDealsScreen() {
           postedBy: d.created_by_user?.username || 'Unknown',
           created_at: d.created_at,
         }));
-        setTrendingDeals(mappedDeals);
       }
 
-      if (categoriesRes.data) {
-        setCategories([{ id: 'all' as any, name: 'All', emoji: '🔥', slug: 'all', is_active: true, deal_count: 0, created_at: '', updated_at: '' }, ...categoriesRes.data]);
+      // If no saved deals, show popular deals as fallback
+      if (personalizedDealsData.length === 0) {
+        const [dealsRes] = await Promise.all([
+          dealService.getDeals({ sortBy: 'popular', limit: 10 })
+        ]);
+        
+        if (dealsRes[1]) {
+          personalizedDealsData = (dealsRes[1] as DealWithRelations[]).map((d: any) => ({
+            ...d,
+            id: String(d.id),
+            price: d.price,
+            original_price: d.original_price,
+            image: d.images?.[0] || 'https://images.pexels.com/photos/3394650/pexels-photo-3394650.jpeg',
+            votes: { up: d.votes_up || 0, down: d.votes_down || 0 },
+            comments: d.comment_count || 0,
+            postedBy: d.created_by_user?.username || 'Unknown',
+            created_at: d.created_at,
+          }));
+        }
       }
+      
+      setPersonalizedDeals(personalizedDealsData);
     } catch (error) {
-      console.error("Failed to load trending deals:", error);
+      console.error("Failed to load personalized deals:", error);
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [isGuest, user]);
 
   useEffect(() => {
     loadData();
@@ -84,24 +112,26 @@ export default function UpDealsScreen() {
 
   useFocusEffect(
     useCallback(() => {
+      if (isGuest) return;
+      
       const now = Date.now();
       const timeSinceLastLoad = now - lastLoadTimeRef.current;
       
       // Only reload if data is stale or empty
-      if (trendingDeals.length === 0 || timeSinceLastLoad > RELOAD_THRESHOLD) {
+      if (personalizedDeals.length === 0 || timeSinceLastLoad > RELOAD_THRESHOLD) {
         console.log('🔄 For You: Reloading deals on focus');
         loadData();
         lastLoadTimeRef.current = now;
       } else {
         console.log('📱 For You: Skipping reload, data is fresh');
       }
-    }, [trendingDeals.length, loadData])
+    }, [personalizedDeals.length, loadData, isGuest])
   );
 
   const handleVote = (dealId: string | number, voteType: 'up' | 'down') => {
     if (isGuest) {
       Alert.alert(
-        "Join SpicyBeats",
+        "Join SaversDream",
         "Sign in to vote on recommended deals!",
         [
           { text: "Maybe Later", style: "cancel" },
@@ -114,13 +144,7 @@ export default function UpDealsScreen() {
     dealService.voteDeal(String(dealId), user!.id, voteType).then(() => loadData());
   };
 
-  const handleLocationToggle = () => {
-    setLocationEnabled(!locationEnabled);
-    Alert.alert(
-      locationEnabled ? "Location Disabled" : "Location Enabled",
-      locationEnabled ? "Location services turned off" : "Now showing deals near you!"
-    );
-  };
+
 
   return (
     <SafeAreaView style={styles.container} edges={['top']}>
@@ -142,41 +166,61 @@ export default function UpDealsScreen() {
       </View>
 
 
-      <CategoryFilter
-        categories={categories}
-        selectedCategory={selectedCategory}
-        onSelectCategory={setSelectedCategory}
-      />
+      {isGuest ? (
+        <View style={styles.signInPrompt}>
+          <View style={styles.promptContainer}>
+            <TrendingUp size={64} color="#6366f1" />
+            <Text style={styles.promptTitle}>Sign in for personalized deals</Text>
+            <Text style={styles.promptDescription}>
+              Get deals tailored to your interests based on your alerts and saved deals
+            </Text>
+            <TouchableOpacity 
+              style={styles.signInButton} 
+              onPress={() => router.push('/sign-in')}
+            >
+              <Text style={styles.signInButtonText}>Sign In</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      ) : (
+        <>
+          <CategoryFilter
+            categories={categories}
+            selectedCategory={selectedCategory}
+            onSelectCategory={setSelectedCategory}
+          />
 
-      <ScrollView style={styles.dealsContainer} showsVerticalScrollIndicator={false}>
-        {loading ? (
-          <ActivityIndicator style={{ marginTop: 50 }} size="large" color="#6366f1" />
-        ) : (
-          <>
-            {trendingDeals.length === 0 ? (
-              <View style={styles.emptyState}>
-                <TrendingUp size={48} color="#6366f1" />
-                <Text style={styles.emptyStateTitle}>No recommendations yet</Text>
-                <Text style={styles.emptyStateSubtitle}>
-                  Set up alerts to get personalized deal recommendations!
-                </Text>
-              </View>
+          <ScrollView style={styles.dealsContainer} showsVerticalScrollIndicator={false}>
+            {loading ? (
+              <ActivityIndicator style={{ marginTop: 50 }} size="large" color="#6366f1" />
             ) : (
-              trendingDeals.map(deal => (
-                <DealCard
-                  key={deal.id}
-                  deal={deal}
-                  isGuest={isGuest}
-                  onVote={handleVote}
-                  userRole={user?.role}
-                  userId={user?.id}
-                />
-              ))
+              <>
+                {personalizedDeals.length === 0 ? (
+                  <View style={styles.emptyState}>
+                    <TrendingUp size={48} color="#6366f1" />
+                    <Text style={styles.emptyStateTitle}>No personalized deals yet</Text>
+                    <Text style={styles.emptyStateSubtitle}>
+                      Save deals and set up alerts to get personalized recommendations!
+                    </Text>
+                  </View>
+                ) : (
+                  personalizedDeals.map(deal => (
+                    <DealCard
+                      key={deal.id}
+                      deal={deal}
+                      isGuest={isGuest}
+                      onVote={handleVote}
+                      userRole={user?.role}
+                      userId={user?.id}
+                    />
+                  ))
+                )}
+              </>
             )}
-          </>
-        )}
-        <View style={styles.bottomPadding} />
-      </ScrollView>
+            <View style={styles.bottomPadding} />
+          </ScrollView>
+        </>
+      )}
     </SafeAreaView>
   );
 }
@@ -239,5 +283,48 @@ const styles = StyleSheet.create({
   },
   bottomPadding: {
     height: 100,
+  },
+  signInPrompt: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    paddingHorizontal: 32,
+  },
+  promptContainer: {
+    alignItems: 'center',
+    backgroundColor: '#FFFFFF',
+    borderRadius: 20,
+    padding: 40,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 8,
+    elevation: 4,
+  },
+  promptTitle: {
+    fontSize: 24,
+    fontWeight: '700',
+    color: '#1f2937',
+    marginTop: 20,
+    marginBottom: 12,
+    textAlign: 'center',
+  },
+  promptDescription: {
+    fontSize: 16,
+    color: '#6b7280',
+    textAlign: 'center',
+    lineHeight: 24,
+    marginBottom: 32,
+  },
+  signInButton: {
+    backgroundColor: '#6366f1',
+    paddingHorizontal: 32,
+    paddingVertical: 16,
+    borderRadius: 12,
+  },
+  signInButtonText: {
+    color: '#FFFFFF',
+    fontSize: 16,
+    fontWeight: '600',
   },
 });

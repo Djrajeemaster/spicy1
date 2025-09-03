@@ -43,7 +43,7 @@ export default function TestAdminScreen() {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         credentials: 'include',
-        body: JSON.stringify({ role: 'super_admin' })
+  body: JSON.stringify({ role: 'superadmin' })
       });
 
       const data = await response.json();

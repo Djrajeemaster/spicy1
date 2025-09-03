@@ -61,7 +61,7 @@ export default function SignInScreen() {
           <LinearGradient colors={['#030849', '#1e40af']} style={styles.desktopBrandingPanel}>
             <View style={styles.brandingContent}>
               <Sparkles size={48} color="#fbbf24" />
-              <Text style={styles.desktopAppName}>SpicyBeats</Text>
+              <Text style={styles.desktopAppName}>SaversDream</Text>
               <Text style={styles.desktopTagline}>Discover, Share, and Save on the Hottest Deals.</Text>
             </View>
           </LinearGradient>
@@ -73,7 +73,7 @@ export default function SignInScreen() {
           <View style={isDesktopWeb ? styles.desktopCard : styles.formContainer}>
             <Text style={isDesktopWeb ? styles.desktopTitle : styles.title}>Welcome Back</Text>
             <Text style={isDesktopWeb ? styles.desktopSubtitle : styles.subtitle}>
-              Sign in to your SpicyBeats account
+              Sign in to your SaversDream account
             </Text>
 
             {error && <Text style={styles.errorText}>{error}</Text>}
@@ -172,7 +172,17 @@ const styles = StyleSheet.create({
     padding: 48,
   },
   brandingContent: { alignItems: 'center' },
-  desktopAppName: { fontSize: 48, fontWeight: '900', color: '#FFFFFF', marginTop: 16, letterSpacing: -1 },
+  desktopAppName: {
+    fontSize: 48,
+    fontWeight: '900',
+    letterSpacing: -1,
+    textAlign: 'center',
+    marginTop: 16,
+    backgroundImage: 'linear-gradient(90deg, #0A2540 0%, #00C2A8 100%)',
+    WebkitBackgroundClip: 'text',
+    WebkitTextFillColor: 'transparent',
+    backgroundClip: 'text',
+  },
   desktopTagline: { fontSize: 18, color: 'rgba(255,255,255,0.8)', marginTop: 8, textAlign: 'center', maxWidth: 300 },
   desktopFormPanel: {
     flex: 1,

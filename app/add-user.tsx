@@ -5,7 +5,7 @@ import { ArrowLeft, UserPlus } from 'lucide-react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 // Direct API call for user creation
 
-const ROLES = ['user', 'verified_user', 'business', 'moderator', 'admin', 'super_admin'];
+const ROLES = ['user', 'verified_user', 'business', 'moderator', 'admin', 'superadmin'];
 
 export default function AddUserScreen() {
   const [username, setUsername] = useState('');

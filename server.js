@@ -3,9 +3,101 @@ const cors = require('cors');
 const express = require('express');
 const { Pool } = require('pg');
 const app = express();
+const path = require('path');
+const fs = require('fs');
+const multer = require('multer');
+// store uploads temporarily then move into assets
+const upload = multer({ dest: path.join(__dirname, 'tmp_uploads') });
 
 // Parse JSON bodies
 app.use(express.json());
+
+// Development-friendly Content Security Policy to allow browser Console fetches
+// (only loosened for local development). This ensures connect-src includes self so
+// fetch('/api/...') from the served pages is allowed.
+if (process.env.NODE_ENV !== 'production') {
+  app.use((req, res, next) => {
+    // Allow scripts/styles/images from self, and allow XHR/fetch to same origin
+    const policy = "default-src 'self'; connect-src 'self' http://localhost:3000; img-src 'self' data:; style-src 'self' 'unsafe-inline'; script-src 'self' 'unsafe-inline'";
+    res.setHeader('Content-Security-Policy', policy);
+    next();
+  });
+}
+
+// Serve static assets (logos etc.) from the project assets folder at the web root
+app.use(express.static(path.join(__dirname, 'assets')));
+app.use('/assets', express.static(path.join(__dirname, 'assets')));
+
+// Ensure assets and tmp_uploads directories exist so uploads and static serving work
+try {
+  fs.mkdirSync(path.join(__dirname, 'assets'), { recursive: true });
+  fs.mkdirSync(path.join(__dirname, 'tmp_uploads'), { recursive: true });
+} catch (e) {
+  console.error('Failed to ensure asset directories exist', e);
+}
+
+// Parse cookies early so middleware that relies on req.cookies works (requireSuperAdmin)
+const cookieParser = require('cookie-parser');
+app.use(cookieParser());
+
+const SETTINGS_PATH = path.join(__dirname, 'site-settings.json');
+function readSettings() {
+  if (!fs.existsSync(SETTINGS_PATH)) {
+    const defaults = {
+      logoFilename: 'sdicon.PNG',
+      headerTextColor: '#0A2540',
+  // optional gradient: [startColor, endColor]
+  headerGradient: null,
+  // animated logo flag
+  animatedLogo: false,
+      // Feature toggles and numeric config
+      require_deal_images: false,
+      enable_content_filtering: true,
+      enable_location_services: true,
+      enable_push_notifications: true,
+      enable_social_sharing: true,
+      maintenance_mode: false,
+      enable_analytics: true,
+      enable_error_reporting: true,
+      enable_performance_monitoring: true,
+      auto_delete_expired_days: 7,
+      max_daily_posts_per_user: 5,
+      min_reputation_to_post: 0,
+      soft_delete_retention_days: 30
+    };
+    fs.writeFileSync(SETTINGS_PATH, JSON.stringify(defaults, null, 2));
+    return defaults;
+  }
+  try {
+    return JSON.parse(fs.readFileSync(SETTINGS_PATH));
+  } catch (err) {
+    console.error('Failed to read settings, recreating defaults', err);
+    const defaults = { logoFilename: 'sdicon.PNG', headerTextColor: '#0A2540' };
+    fs.writeFileSync(SETTINGS_PATH, JSON.stringify(defaults, null, 2));
+    return defaults;
+  }
+}
+function writeSettings(obj) {
+  fs.writeFileSync(SETTINGS_PATH, JSON.stringify(obj, null, 2));
+}
+
+// simple middleware to require super_admin based on session cookie
+async function requireSuperAdmin(req, res, next) {
+  try {
+    const sessionId = req.cookies && req.cookies.session_id;
+  console.log('requireSuperAdmin: sessionId from cookie =', sessionId);
+  if (!sessionId) return res.status(403).json({ error: 'Not authenticated' });
+  const { rows } = await pool.query('SELECT id, role FROM users WHERE id = $1', [sessionId]);
+  console.log('requireSuperAdmin: db lookup result =', rows && rows[0] ? rows[0] : 'no rows');
+  // accept both common variants just in case, but prefer 'superadmin'
+  // Accept common privileged roles in development: 'superadmin', 'super_admin', and 'admin'
+  if (!rows[0] || (rows[0].role !== 'superadmin' && rows[0].role !== 'super_admin' && rows[0].role !== 'admin')) return res.status(403).json({ error: 'Forbidden' });
+    next();
+  } catch (err) {
+    console.error('requireSuperAdmin error', err);
+    res.status(500).json({ error: err.message });
+  }
+}
 
 // CORS configuration - allow all localhost origins for development
 app.use(cors({
@@ -181,9 +273,177 @@ app.get('/api/banners', async (req, res) => {
     res.status(500).json({ error: err.message });
   }
 });
+
+// Upload a new logo (super_admin only)
+app.post('/api/site/logo', upload.single('logo'), requireSuperAdmin, async (req, res) => {
+  try {
+    console.log('Logo upload request received');
+    console.log('File info:', req.file ? { originalname: req.file.originalname, size: req.file.size, mimetype: req.file.mimetype } : 'No file');
+    
+    if (!req.file) {
+      console.error('No file uploaded');
+      return res.status(400).json({ error: 'No file uploaded' });
+    }
+
+    // Validate file type
+    if (!req.file.mimetype.startsWith('image/')) {
+      console.error('Invalid file type:', req.file.mimetype);
+      // Clean up uploaded file
+      try { fs.unlinkSync(req.file.path); } catch (e) {}
+      return res.status(400).json({ error: 'Invalid file type. Please upload an image file.' });
+    }
+
+    // Validate file size (5MB limit)
+    if (req.file.size > 5 * 1024 * 1024) {
+      console.error('File too large:', req.file.size);
+      // Clean up uploaded file
+      try { fs.unlinkSync(req.file.path); } catch (e) {}
+      return res.status(400).json({ error: 'File too large. Maximum size is 5MB.' });
+    }
+
+    const ext = path.extname(req.file.originalname) || '.png';
+    const filename = `site-logo${ext}`;
+    const target = path.join(__dirname, 'assets', filename);
+
+    console.log('Moving file from', req.file.path, 'to', target);
+
+    // Backup existing logo if it exists
+    if (fs.existsSync(target)) {
+      const backupPath = path.join(__dirname, 'assets', `site-logo-backup-${Date.now()}${ext}`);
+      try {
+        fs.copyFileSync(target, backupPath);
+        console.log('Backed up existing logo to', backupPath);
+      } catch (backupErr) {
+        console.warn('Failed to backup existing logo:', backupErr);
+      }
+    }
+
+    // move file into assets
+    fs.renameSync(req.file.path, target);
+    console.log('Logo file moved successfully');
+
+    const settings = readSettings();
+    settings.logoFilename = filename;
+    writeSettings(settings);
+    console.log('Settings updated with new logo filename:', filename);
+
+    res.json({ message: 'Logo uploaded successfully', filename });
+  } catch (err) {
+    console.error('Logo upload error:', err);
+    // Clean up uploaded file if it exists
+    if (req.file && req.file.path) {
+      try { fs.unlinkSync(req.file.path); } catch (e) {}
+    }
+    res.status(500).json({ error: err.message || 'Failed to upload logo' });
+  }
+});
+
+// Update site settings (header text color etc.) (super_admin only)
+app.put('/api/site/settings', requireSuperAdmin, (req, res) => {
+  try {
+    const body = req.body || {};
+    console.log('Settings update request:', body);
+    
+    const settings = readSettings();
+    console.log('Current settings:', settings);
+
+    // Apply branding updates (allow empty/false values)
+    if (typeof body.headerTextColor !== 'undefined') {
+      settings.headerTextColor = body.headerTextColor;
+      console.log('Updated headerTextColor to:', body.headerTextColor);
+    }
+    if (typeof body.logoFilename !== 'undefined') {
+      settings.logoFilename = body.logoFilename;
+      console.log('Updated logoFilename to:', body.logoFilename);
+    }
+
+    // Feature toggles (booleans) and numeric values
+    const keys = [
+      'require_deal_images',
+      'enable_content_filtering',
+      'headerGradient',
+      'animatedLogo',
+      'enable_location_services',
+      'enable_push_notifications',
+      'enable_social_sharing',
+      'maintenance_mode',
+      'enable_analytics',
+      'enable_error_reporting',
+      'enable_performance_monitoring',
+      'auto_delete_expired_days',
+      'max_daily_posts_per_user',
+      'min_reputation_to_post',
+      'soft_delete_retention_days'
+    ];
+
+    keys.forEach(k => {
+      if (typeof body[k] !== 'undefined') {
+        settings[k] = body[k];
+        console.log(`Updated ${k} to:`, body[k]);
+      }
+    });
+
+    writeSettings(settings);
+    console.log('Settings saved successfully:', settings);
+    
+    res.json({ message: 'Settings updated successfully', settings });
+  } catch (err) {
+    console.error('Settings update error:', err);
+    res.status(500).json({ error: err.message || 'Failed to update settings' });
+  }
+});
+
+// Read current site settings
+app.get('/api/site/settings', (req, res) => {
+  try {
+    const settings = readSettings();
+    console.log('Serving site settings:', settings);
+    res.json(settings);
+  } catch (err) {
+    console.error('Error reading site settings:', err);
+    res.status(500).json({ error: err.message || 'Failed to read settings' });
+  }
+});
+
+// Development-only endpoint to write site settings without auth (safe in dev only)
+if (process.env.NODE_ENV === 'development') {
+  app.put('/api/site/settings/dev-write', (req, res) => {
+    try {
+      const body = req.body || {};
+      const settings = readSettings();
+      const keys = [
+  'headerTextColor',
+  'headerGradient',
+  'animatedLogo',
+        'logoFilename',
+        'require_deal_images',
+        'enable_content_filtering',
+        'enable_location_services',
+        'enable_push_notifications',
+        'enable_social_sharing',
+        'maintenance_mode',
+        'enable_analytics',
+        'enable_error_reporting',
+        'enable_performance_monitoring',
+        'auto_delete_expired_days',
+        'max_daily_posts_per_user',
+        'min_reputation_to_post',
+        'soft_delete_retention_days'
+      ];
+
+      keys.forEach(k => {
+        if (typeof body[k] !== 'undefined') settings[k] = body[k];
+      });
+
+      writeSettings(settings);
+      res.json({ message: 'Dev: settings updated', settings });
+    } catch (err) {
+      console.error('Dev settings update error', err);
+      res.status(500).json({ error: err.message });
+    }
+  });
+}
 // Session endpoint
-const cookieParser = require('cookie-parser');
-app.use(cookieParser());
 const bcrypt = require('bcrypt');
 
 app.get('/api/auth/session', async (req, res) => {
@@ -1645,7 +1905,7 @@ app.put('/api/users/:id/role', async (req, res) => {
       [sessionId]
     );
 
-    if (adminCheck.length === 0 || !['admin', 'super_admin'].includes(adminCheck[0].role)) {
+  if (adminCheck.length === 0 || !['admin', 'superadmin', 'super_admin'].includes(adminCheck[0].role)) {
       return res.status(403).json({ error: 'Insufficient permissions' });
     }
 

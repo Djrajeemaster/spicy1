@@ -53,36 +53,41 @@ export function Header({
   const { theme, colors } = useTheme();
 
   const [showUserMenu, setShowUserMenu] = useState(false);
-  const [alertCount, setAlertCount] = useState(0);
-  
-  // Animation value for subheader (search/filter bar)
+  const [siteLogoFilename, setSiteLogoFilename] = useState<string>('sdicon.PNG');
+  const [siteLogoFilenameRaw, setSiteLogoFilenameRaw] = useState<string>('sdicon.PNG');
+  const [logoCacheBuster, setLogoCacheBuster] = useState<number>(Date.now());
+  const [headerTextColor, setHeaderTextColor] = useState<string>('#0A2540');
+  const [headerGradientStart, setHeaderGradientStart] = useState<string | null>(null);
+  const [headerGradientEnd, setHeaderGradientEnd] = useState<string | null>(null);
+  const [animatedLogo, setAnimatedLogo] = useState<boolean>(false);
+  // Missing UI-state used below
+  const [alertCount, setAlertCount] = useState<number>(0);
+  const [isDesktopWeb, setIsDesktopWeb] = useState<boolean>(
+    Platform.OS === 'web' && typeof window !== 'undefined' ? window.innerWidth >= 1024 : false
+  );
   const searchOpacity = useRef(new Animated.Value(1)).current;
   const filtersOpacity = useRef(new Animated.Value(1)).current;
-  const [isDesktopWeb, setIsDesktopWeb] = useState(
-    Platform.OS === 'web' && typeof window !== 'undefined' && window.innerWidth >= 1024
-  );
 
-  // Fetch alert count
-  useEffect(() => {
-    if (user?.id) {
-      const fetchAlertCount = async () => {
-        try {
-          const { data } = await alertService.getUnreadCount(user.id);
-          setAlertCount(data || 0);
-        } catch (error) {
-          logger.error('Failed to fetch alert count', error);
-        }
-      };
-      
-      fetchAlertCount();
-      
-      // Refresh alert count every 30 seconds
-      const interval = setInterval(fetchAlertCount, 30000);
-      return () => clearInterval(interval);
-    } else {
+  // Fetch alert count helper
+  const fetchAlertCount = useCallback(async () => {
+    if (!user?.id) {
       setAlertCount(0);
+      return;
+    }
+    try {
+      const { data, error } = await alertService.getUnreadCount(user.id);
+      if (!error && typeof data === 'number') setAlertCount(data);
+    } catch (e) {
+      // ignore
     }
   }, [user?.id]);
+
+  // Keep alert count fresh while mounted
+  useEffect(() => {
+    fetchAlertCount();
+    const interval = setInterval(fetchAlertCount, 30000);
+    return () => clearInterval(interval);
+  }, [fetchAlertCount]);
 
   // Handle window resize for responsive layout
   useEffect(() => {
@@ -96,6 +101,99 @@ export function Header({
       return () => window.removeEventListener('resize', handleResize);
     }
   }, []);
+
+  // Load site-wide branding settings (logo + header text color)
+  useEffect(() => {
+    let stopped = false;
+
+    (async () => {
+      try {
+        const res = await fetch('http://localhost:3000/api/site/settings', { credentials: 'include' });
+        if (!res.ok) return;
+        const data = await res.json();
+        if (stopped) return;
+        if (data.logoFilename) { setSiteLogoFilenameRaw(data.logoFilename); setLogoCacheBuster(Date.now()); }
+        if (data.headerTextColor) setHeaderTextColor(data.headerTextColor || '#0A2540');
+        if (data.headerGradient && Array.isArray(data.headerGradient) && data.headerGradient.length >= 2) {
+          setHeaderGradientStart(data.headerGradient[0]);
+          setHeaderGradientEnd(data.headerGradient[1]);
+        }
+        if (typeof data.animatedLogo === 'boolean') setAnimatedLogo(data.animatedLogo);
+      } catch (err) {
+        // ignore
+      }
+    })();
+
+    if (Platform.OS === 'web' && typeof window !== 'undefined') {
+      const handler = (e: any) => {
+        try {
+          const d = e?.detail || {};
+          if (d.logoFilename) { setSiteLogoFilenameRaw(d.logoFilename); setLogoCacheBuster(Date.now()); }
+          if (typeof d.animatedLogo === 'boolean') setAnimatedLogo(d.animatedLogo);
+          if (d.headerGradient && Array.isArray(d.headerGradient) && d.headerGradient.length >= 2) {
+            setHeaderGradientStart(d.headerGradient[0]);
+            setHeaderGradientEnd(d.headerGradient[1]);
+          } else if (d.headerTextColor) {
+            setHeaderGradientStart(null);
+            setHeaderGradientEnd(null);
+            setHeaderTextColor(d.headerTextColor);
+          }
+        } catch (e) { /* ignore */ }
+      };
+
+      const onFocus = async () => {
+        try {
+          const res = await fetch('http://localhost:3000/api/site/settings');
+          if (!res.ok) return;
+          const data = await res.json();
+          if (data.logoFilename) { setSiteLogoFilenameRaw(data.logoFilename); setLogoCacheBuster(Date.now()); }
+          if (data.headerGradient && Array.isArray(data.headerGradient) && data.headerGradient.length >= 2) {
+            setHeaderGradientStart(data.headerGradient[0]);
+            setHeaderGradientEnd(data.headerGradient[1]);
+          } else if (data.headerTextColor) {
+            setHeaderGradientStart(null);
+            setHeaderGradientEnd(null);
+            setHeaderTextColor(data.headerTextColor);
+          }
+          if (typeof data.animatedLogo === 'boolean') setAnimatedLogo(data.animatedLogo);
+        } catch (e) { /* ignore */ }
+      };
+
+      window.addEventListener('siteSettingsUpdated', handler as EventListener);
+      window.addEventListener('focus', onFocus);
+
+      // Short polling fallback: poll for up to ~10s after mount if settings not updated
+      let polls = 0;
+      const poll = setInterval(async () => {
+        polls += 1;
+        try {
+          const res = await fetch('http://localhost:3000/api/site/settings');
+          if (!res.ok) return;
+          const data = await res.json();
+          if (data.logoFilename && data.logoFilename !== siteLogoFilenameRaw) { setSiteLogoFilenameRaw(data.logoFilename); setLogoCacheBuster(Date.now()); }
+          if (data.headerGradient && Array.isArray(data.headerGradient) && data.headerGradient.length >= 2) {
+            if (data.headerGradient[0] !== headerGradientStart || data.headerGradient[1] !== headerGradientEnd) {
+              setHeaderGradientStart(data.headerGradient[0]);
+              setHeaderGradientEnd(data.headerGradient[1]);
+            }
+          } else if (data.headerTextColor && data.headerTextColor !== headerTextColor) {
+            setHeaderGradientStart(null);
+            setHeaderGradientEnd(null);
+            setHeaderTextColor(data.headerTextColor);
+          }
+        } catch (e) { /* ignore */ }
+        if (polls >= 5) clearInterval(poll); // stop after ~10s
+      }, 2000);
+
+      return () => {
+        stopped = true;
+        window.removeEventListener('siteSettingsUpdated', handler as EventListener);
+        window.removeEventListener('focus', onFocus);
+        clearInterval(poll);
+      };
+    }
+    return () => { stopped = true; };
+  }, [headerGradientStart, headerGradientEnd, headerTextColor, siteLogoFilenameRaw]);
 
   // Scroll-based subheader animation (only search/filter bar)
   useEffect(() => {
@@ -140,7 +238,7 @@ export function Header({
   const showFullSearch = !!onSearchChange;
 
   const showAdminButton = useMemo(() => 
-    profile && profile.role === 'admin', // Simplified: check for admin role
+    profile && (profile.role === 'admin' || profile.role === 'superadmin' || profile.role === 'super_admin'),
     [profile?.role]
   );
 
@@ -205,10 +303,26 @@ export function Header({
           <View style={[styles.leftSection, isDesktopWeb && styles.leftSectionDesktop]}>
             <TouchableOpacity onPress={() => router.push('/')} style={styles.logoContainer}>
               <LinearGradient colors={['#0A2540', '#1e40af', '#3b82f6']} style={styles.logo}>
-                <Image source={{ uri: '/app-icon-32.png' }} style={{ width: 24, height: 24 }} />
+                <Image source={{ uri: `http://localhost:3000/${siteLogoFilenameRaw}${logoCacheBuster ? `?cb=${logoCacheBuster}` : ''}` }} style={{ width: 24, height: 24 }} />
               </LinearGradient>
               {/* Show full text only on desktop, just icon on mobile */}
-              {isDesktopWeb && <Text style={{ color: '#0A2540', fontFamily: 'Poppins, sans-serif', fontSize: 28,fontWeight: 'bold', textAlign: 'center' }}>SaversDream</Text>}
+              {isDesktopWeb && (() => {
+                if (headerGradientStart && headerGradientEnd && Platform.OS === 'web') {
+                  const gradientTextStyle: any = {
+                    // gradient text on web using CSS background-clip technique
+                    backgroundImage: `linear-gradient(90deg, ${headerGradientStart}, ${headerGradientEnd})`,
+                    WebkitBackgroundClip: 'text',
+                    color: 'transparent',
+                    fontFamily: 'Poppins, sans-serif',
+                    fontSize: 28,
+                    fontWeight: 'bold',
+                    textAlign: 'center'
+                  };
+                  return <Text style={gradientTextStyle}>SaversDream</Text>;
+                }
+
+                return <Text style={{ color: headerTextColor, fontFamily: 'Poppins, sans-serif', fontSize: 28,fontWeight: 'bold', textAlign: 'center' }}>SaversDream</Text>;
+              })()}
             </TouchableOpacity>
           </View>
 

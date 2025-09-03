@@ -107,35 +107,14 @@ export default function TabLayout() {
           ),
         }}
       />
-      <Tabs.Screen
-        name="alerts"
-        options={{
-          href: null, 
-        }}
-      />
-      <Tabs.Screen
-        name="admin"
-        options={{
-          href: null, 
-        }}
-      />
+      <Tabs.Screen name="alerts" options={{ href: null }} />
+      <Tabs.Screen name="admin" options={{ href: null }} />
       <Tabs.Screen name="following" options={{ href: null }} />
       <Tabs.Screen name="saved" options={{ href: null }} />
-
-      {/* NEW: Add the settings screen here */}
-      <Tabs.Screen
-        name="settings"
-        options={{
-          href: null, // This hides it from the tab bar
-        }}
-      />
-      {/* NEW: Add the edit-profile screen here */}
-      <Tabs.Screen
-        name="edit-profile"
-        options={{
-          href: null, // This hides it from the tab bar
-        }}
-      />
+      <Tabs.Screen name="settings" options={{ href: null }} />
+      <Tabs.Screen name="edit-profile" options={{ href: null }} />
+      <Tabs.Screen name="business-dashboard" options={{ href: null }} />
+      <Tabs.Screen name="moderator-dashboard" options={{ href: null }} />
     </Tabs>
   );
 }

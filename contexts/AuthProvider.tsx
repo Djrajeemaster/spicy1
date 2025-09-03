@@ -37,6 +37,13 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     }
   };
 
+  const normalizeUserRole = (u: any) => {
+    if (!u) return u;
+    const copy = { ...u };
+    if (copy.role === 'super_admin') copy.role = 'superadmin';
+    return copy;
+  };
+
   // Top-level fetchSession for reuse
   const fetchSession = async () => {
     setLoading(true);
@@ -51,12 +58,13 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
       if (response.ok) {
         const sessionData = await response.json();
         console.log('Session data received:', sessionData);
-        
+
         if (sessionData.authenticated && sessionData.user) {
-          setSession(sessionData.session || { user_id: sessionData.user.id });
-          setUser(sessionData.user);
-          setProfile(sessionData.user);
-          console.log('User authenticated:', sessionData.user);
+          const normalized = normalizeUserRole(sessionData.user);
+          setSession(sessionData.session || { user_id: normalized.id });
+          setUser(normalized);
+          setProfile(normalized);
+          console.log('User authenticated:', normalized);
         } else {
           console.log('No authenticated user found');
           setSession(null);
@@ -104,10 +112,11 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
       
       // Set the user and session data immediately from signin response
       if (data.authenticated && data.user) {
-        setSession(data.session || { user_id: data.user.id });
-        setUser(data.user);
-        setProfile(data.user);
-        console.log('User signed in successfully:', data.user);
+        const normalized = normalizeUserRole(data.user);
+        setSession(data.session || { user_id: normalized.id });
+        setUser(normalized);
+        setProfile(normalized);
+        console.log('User signed in successfully:', normalized);
       } else {
         console.error('Signin response missing user data');
         return { error: new Error('Invalid response from server') };
