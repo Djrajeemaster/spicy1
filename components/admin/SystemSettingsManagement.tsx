@@ -26,6 +26,7 @@ export const SystemSettingsManagement: React.FC<SystemSettingsManagementProps> =
   // Branding/site settings (from server-side site-settings.json)
   const [headerColor, setHeaderColor] = useState<string>('#0A2540');
   const [logoFilename, setLogoFilename] = useState<string>('sdicon.PNG');
+  const [availableLogos, setAvailableLogos] = useState<string[]>([]);
   const [uploading, setUploading] = useState(false);
   const [logoPreviewUrl, setLogoPreviewUrl] = useState<string | null>(null);
   const [selectedLogoFile, setSelectedLogoFile] = useState<File | null>(null);
@@ -33,6 +34,14 @@ export const SystemSettingsManagement: React.FC<SystemSettingsManagementProps> =
   const [headerGradientStart, setHeaderGradientStart] = useState<string>('#6366f1');
   const [headerGradientEnd, setHeaderGradientEnd] = useState<string>('#4f46e5');
   const [animatedLogo, setAnimatedLogo] = useState<boolean>(false);
+  // Site font selection (branding)
+  // Expanded list of common Google fonts; admins can also load any Google Font by name below.
+  const fontOptions = [
+    'Inter', 'Poppins', 'Rubik', 'Manrope', 'Montserrat', 'Roboto', 'Open Sans', 'Lato',
+    'Nunito', 'Raleway', 'Oswald', 'Merriweather', 'Source Sans 3', 'Work Sans', 'Quicksand'
+  ];
+  const [siteFont, setSiteFont] = useState<string>(fontOptions[0]);
+  const [customFontInput, setCustomFontInput] = useState<string>('');
   const [focusedField, setFocusedField] = useState<string | null>(null);
   const [testLog, setTestLog] = useState<string[]>([]);
   const isDev = typeof __DEV__ !== 'undefined' ? (__DEV__ as boolean) : false;
@@ -56,14 +65,103 @@ export const SystemSettingsManagement: React.FC<SystemSettingsManagementProps> =
         }
         if (typeof data.animatedLogo === 'boolean') setAnimatedLogo(data.animatedLogo);
         if (data.logoFilename) setLogoFilename(data.logoFilename);
+  if (data.siteFont) setSiteFont(data.siteFont);
+        // also fetch available uploaded logos
+        fetchAvailableLogos();
       } catch (err) {
         // ignore silently
       }
     })();
   }, []);
 
+  async function fetchAvailableLogos() {
+    if (Platform.OS !== 'web') return; // server listing only used in web admin UI
+    try {
+      const res = await fetch(api('/api/site/logos'), { credentials: 'include' });
+      if (!res.ok) return;
+      const json = await res.json();
+      if (Array.isArray(json)) {
+        // prioritize: 1) currently active logoFilename, 2) files starting with 'site-logo', then alphabetical
+        const active = typeof logoFilename === 'string' && logoFilename ? logoFilename : null;
+        const sorted = [...json].sort((a: string, b: string) => {
+          // active first
+          if (active) {
+            if (a === active && b !== active) return -1;
+            if (b === active && a !== active) return 1;
+          }
+          const aSite = a.toLowerCase().startsWith('site-logo');
+          const bSite = b.toLowerCase().startsWith('site-logo');
+          if (aSite && !bSite) return -1;
+          if (!aSite && bSite) return 1;
+          return a.localeCompare(b, undefined, { sensitivity: 'base' });
+        });
+        setAvailableLogos(sorted);
+      }
+    } catch (e) {
+      console.error('Failed to fetch available logos', e);
+    }
+  }
+
   // Web-friendly professional toast and confirm helpers to avoid native browser popups
   const isWeb = Platform.OS === 'web';
+  // Load a Google Font dynamically on web and select it for preview.
+  async function loadGoogleFont(fontName: string) {
+    if (!fontName) return webToast('No font', 'Please enter a font name');
+    if (!isWeb || typeof document === 'undefined') {
+      webToast('Not supported', 'Dynamic font loading is available on web only');
+      return;
+    }
+
+    try {
+      const idSafe = fontName.replace(/[^a-z0-9\-]/gi, '-');
+      const linkId = `spicy-font-${idSafe}`;
+      if (document.getElementById(linkId)) {
+        // already loaded
+        setSiteFont(fontName);
+        return;
+      }
+
+      // Ensure preconnects exist
+      if (!document.getElementById('spicy-fonts-pre1')) {
+        const pre1 = document.createElement('link');
+        pre1.rel = 'preconnect';
+        pre1.href = 'https://fonts.googleapis.com';
+        pre1.id = 'spicy-fonts-pre1';
+        document.head.appendChild(pre1);
+      }
+      if (!document.getElementById('spicy-fonts-pre2')) {
+        const pre2 = document.createElement('link');
+        pre2.rel = 'preconnect';
+        pre2.href = 'https://fonts.gstatic.com';
+        pre2.crossOrigin = 'anonymous';
+        pre2.id = 'spicy-fonts-pre2';
+        document.head.appendChild(pre2);
+      }
+
+      const family = fontName.trim().replace(/\s+/g, '+');
+      const link = document.createElement('link');
+      link.rel = 'stylesheet';
+      link.href = `https://fonts.googleapis.com/css2?family=${family}:wght@400;700&display=swap`;
+      link.id = linkId;
+      document.head.appendChild(link);
+
+      // select immediately; but wait for the font to be available then re-apply so preview updates
+      setSiteFont(fontName);
+      try {
+        // wait for the font to load (this is web-only and may not be supported in older browsers)
+        if ((document as any).fonts && (document as any).fonts.load) {
+          await (document as any).fonts.load(`1em "${fontName}"`);
+          // trigger a small re-render
+          setSiteFont(prev => prev + '');
+        }
+      } catch (e) {
+        // ignore font load failures; browser will swap when ready
+      }
+    } catch (err) {
+      console.error('Failed to load font', err);
+      webToast('Error', 'Failed to load font from Google Fonts');
+    }
+  }
   function webToast(title: string, message: string) {
     if (!isWeb || typeof document === 'undefined') return Alert.alert(title, message);
 
@@ -312,6 +410,9 @@ export const SystemSettingsManagement: React.FC<SystemSettingsManagementProps> =
         payload.headerGradient = null; // Clear gradient when using single color
       }
 
+  // include selected site font
+  if (siteFont) payload.siteFont = siteFont;
+
       console.log('Saving branding settings:', payload);
 
       const res = await fetch(api('/api/site/settings'), {
@@ -482,6 +583,8 @@ export const SystemSettingsManagement: React.FC<SystemSettingsManagementProps> =
           </View>
         </View>
 
+        
+
         <View style={settingsStyles.settingItem}>
           <Text style={settingsStyles.settingName}>Header Text Color</Text>
           <Text style={settingsStyles.settingDescription}>Pick the color or a gradient used for the header text (SaversDream). You can enable a two-color gradient instead of a single color.</Text>
@@ -574,6 +677,121 @@ export const SystemSettingsManagement: React.FC<SystemSettingsManagementProps> =
                 </View>
               </>
             )}
+          </View>
+        </View>
+
+        <View style={settingsStyles.settingItem}>
+          <Text style={settingsStyles.settingName}>Uploaded Images</Text>
+          <Text style={settingsStyles.settingDescription}>Select an existing uploaded image to use as the site logo, or delete unused uploads.</Text>
+          <View style={{ marginTop: 12 }}>
+            <View style={{ flexDirection: 'row', gap: 8, flexWrap: 'wrap' }}>
+              {
+                // Only show site-logo* files (and ensure active logo is included)
+                (() => {
+                  const siteOnly = availableLogos.filter(f => f.toLowerCase().startsWith('site-logo'));
+                  if (logoFilename && !siteOnly.includes(logoFilename) && availableLogos.includes(logoFilename)) {
+                    siteOnly.unshift(logoFilename);
+                  }
+                  if (siteOnly.length === 0) {
+                    return <Text style={settingsStyles.settingDescription}>No uploaded site-logo images found.</Text>;
+                  }
+                  return siteOnly.map((f, idx) => (
+                    <View key={idx} style={{ width: 88, marginRight: 8, marginBottom: 12 }}>
+                      <TouchableOpacity onPress={() => {
+                        // set as selected logo and save
+                        setLogoFilename(f);
+                        saveBranding();
+                      }} style={{ borderRadius: 8, overflow: 'hidden', borderWidth: logoFilename === f ? 2 : 1, borderColor: logoFilename === f ? '#059669' : '#e2e8f0' }}>
+                        <Image source={{ uri: assetUrl(f) }} style={{ width: 88, height: 88 }} />
+                      </TouchableOpacity>
+                      <View style={{ flexDirection: 'row', justifyContent: 'space-between', marginTop: 6 }}>
+                        <Text style={{ fontSize: 12, maxWidth: 68 }} numberOfLines={1}>{f}</Text>
+                        <TouchableOpacity onPress={async () => {
+                          const ok = await (isWeb ? webConfirm(`Delete ${f}? This cannot be undone`) : Promise.resolve(false));
+                          if (!ok) return;
+                          try {
+                            const res = await fetch(api(`/api/site/logo/${encodeURIComponent(f)}`), { method: 'DELETE', credentials: 'include' });
+                            if (!res.ok) {
+                              const txt = await res.text();
+                              webToast('Delete failed', txt || `${res.status}`);
+                            } else {
+                              webToast('Deleted', `${f} deleted`);
+                              // if deleted current logo, header will revert to defaults via server logic
+                              await fetchAvailableLogos();
+                              const sres = await fetch(api('/api/site/settings'), { credentials: 'include' });
+                              if (sres.ok) {
+                                const sjson = await sres.json();
+                                if (sjson.logoFilename) setLogoFilename(sjson.logoFilename);
+                              }
+                            }
+                          } catch (e) {
+                            console.error('Delete error', e);
+                            webToast('Error', 'Failed to delete');
+                          }
+                        }} style={{ paddingHorizontal: 6, paddingVertical: 4 }}>
+                          <Text style={{ color: '#ef4444', fontSize: 12 }}>Delete</Text>
+                        </TouchableOpacity>
+                      </View>
+                    </View>
+                  ));
+                })()
+              }
+            </View>
+          </View>
+          <View style={{ marginTop: 8 }}>
+            <TouchableOpacity style={settingsStyles.saveButton} onPress={fetchAvailableLogos}>
+              <Text style={settingsStyles.saveButtonText}>Refresh List</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+
+        <View style={settingsStyles.settingItem}>
+          <Text style={settingsStyles.settingName}>Header Text Font</Text>
+          <Text style={settingsStyles.settingDescription}>Choose the font used for the header text. Preview updates are applied immediately (web only for custom fonts).</Text>
+
+          {/* Row: preview box + font name + controls */}
+          <View style={{ flexDirection: 'row', alignItems: 'center', marginTop: 12 }}>
+            {/* Preview box */}
+            <View style={{ width: 140, marginRight: 12 }}>
+              <View style={{ width: '100%', borderRadius: 8, borderWidth: 1, borderColor: '#e2e8f0', padding: 12, backgroundColor: '#fff', alignItems: 'center', justifyContent: 'center' }}>
+                {/* Quote the family name so multi-word font names (e.g. "Open Sans") work correctly */}
+                <Text style={{ fontFamily: `"${siteFont}", Poppins, sans-serif`, fontSize: 20, fontWeight: '700', color: '#0f172a' }}>Aa</Text>
+                <Text style={{ fontFamily: `"${siteFont}", Poppins, sans-serif`, fontSize: 14, fontWeight: '700', color: '#64748b', marginTop: 6 }}>{/* show the sample word */}SaversDream</Text>
+              </View>
+            </View>
+
+            {/* Font name and controls */}
+            <View style={{ flex: 1 }}>
+              <Text style={[settingsStyles.settingDescription, { fontWeight: '700' }]}>{siteFont}</Text>
+            </View>
+
+            <TouchableOpacity
+              style={[settingsStyles.saveButton, { marginRight: 8, backgroundColor: '#6366f1' }]}
+              onPress={() => {
+                // cycle to next font option
+                const idx = fontOptions.indexOf(siteFont);
+                const next = fontOptions[(idx + 1) % fontOptions.length];
+                setSiteFont(next);
+              }}
+            >
+              <Text style={settingsStyles.saveButtonText}>Next</Text>
+            </TouchableOpacity>
+            <TouchableOpacity style={[settingsStyles.saveButton, { backgroundColor: '#059669' }]} onPress={() => saveBranding()}>
+              <Text style={settingsStyles.saveButtonText}>Save Font</Text>
+            </TouchableOpacity>
+          </View>
+          {/* Custom Google Font loader (web only) */}
+          <View style={{ flexDirection: 'row', alignItems: 'center', marginTop: 12 }}>
+            <TextInput
+              value={customFontInput}
+              onChangeText={setCustomFontInput}
+              placeholder="e.g. Satoshi, Space Grotesk"
+              placeholderTextColor="#94a3b8"
+              style={[settingsStyles.numberInput, { flex: 1, marginRight: 8, paddingVertical: 8 }]}
+            />
+            <TouchableOpacity style={[settingsStyles.saveButton, { backgroundColor: '#6366f1' }]} onPress={() => loadGoogleFont(customFontInput)}>
+              <Text style={settingsStyles.saveButtonText}>Load & Select</Text>
+            </TouchableOpacity>
           </View>
         </View>
       </View>

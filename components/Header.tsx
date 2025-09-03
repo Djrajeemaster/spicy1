@@ -60,6 +60,7 @@ export function Header({
   const [headerGradientStart, setHeaderGradientStart] = useState<string | null>(null);
   const [headerGradientEnd, setHeaderGradientEnd] = useState<string | null>(null);
   const [animatedLogo, setAnimatedLogo] = useState<boolean>(false);
+  const [siteFont, setSiteFont] = useState<string>('Inter');
   // Missing UI-state used below
   const [alertCount, setAlertCount] = useState<number>(0);
   const [isDesktopWeb, setIsDesktopWeb] = useState<boolean>(
@@ -119,6 +120,7 @@ export function Header({
           setHeaderGradientEnd(data.headerGradient[1]);
         }
         if (typeof data.animatedLogo === 'boolean') setAnimatedLogo(data.animatedLogo);
+  if (data.siteFont) setSiteFont(data.siteFont);
       } catch (err) {
         // ignore
       }
@@ -137,6 +139,9 @@ export function Header({
             setHeaderGradientStart(null);
             setHeaderGradientEnd(null);
             setHeaderTextColor(d.headerTextColor);
+              }
+              if (d.siteFont) {
+                setSiteFont(d.siteFont);
           }
         } catch (e) { /* ignore */ }
       };
@@ -180,6 +185,9 @@ export function Header({
             setHeaderGradientStart(null);
             setHeaderGradientEnd(null);
             setHeaderTextColor(data.headerTextColor);
+          }
+          if (data.siteFont && data.siteFont !== siteFont) {
+            setSiteFont(data.siteFont);
           }
         } catch (e) { /* ignore */ }
         if (polls >= 5) clearInterval(poll); // stop after ~10s
@@ -304,17 +312,17 @@ export function Header({
             <TouchableOpacity onPress={() => router.push('/')} style={styles.logoContainer}>
               <Image
                 source={{ uri: `http://localhost:3000/${siteLogoFilenameRaw}${logoCacheBuster ? `?cb=${logoCacheBuster}` : ''}` }}
-                style={{ width: 50, height: 50, marginRight: 12, resizeMode: 'contain' }}
+                style={{ width: 60, height: 60, marginRight: 12, resizeMode: 'contain' }}
               />
               {/* Show full text only on desktop, just icon on mobile */}
               {isDesktopWeb && (() => {
-                if (headerGradientStart && headerGradientEnd && Platform.OS === 'web') {
+        if (headerGradientStart && headerGradientEnd && Platform.OS === 'web') {
                   const gradientTextStyle: any = {
                     // gradient text on web using CSS background-clip technique
                     backgroundImage: `linear-gradient(90deg, ${headerGradientStart}, ${headerGradientEnd})`,
                     WebkitBackgroundClip: 'text',
                     color: 'transparent',
-                    fontFamily: 'Poppins, sans-serif',
+          fontFamily: `${siteFont}, Poppins, sans-serif`,
                     fontSize: 28,
                     fontWeight: 'bold',
                     textAlign: 'center'
@@ -322,7 +330,7 @@ export function Header({
                   return <Text style={gradientTextStyle}>SaversDream</Text>;
                 }
 
-                return <Text style={{ color: headerTextColor, fontFamily: 'Poppins, sans-serif', fontSize: 28,fontWeight: 'bold', textAlign: 'center' }}>SaversDream</Text>;
+        return <Text style={{ color: headerTextColor, fontFamily: `${siteFont}, Poppins, sans-serif`, fontSize: 28,fontWeight: 'bold', textAlign: 'center' }}>SaversDream</Text>;
               })()}
             </TouchableOpacity>
           </View>

@@ -1,5 +1,5 @@
 {
-  "logoFilename": "site-logo.PNG",
+  "logoFilename": "site-logo.png",
   "headerTextColor": null,
   "headerGradient": [
     "#e1e2ef",
@@ -18,5 +18,6 @@
   "auto_delete_expired_days": 2,
   "max_daily_posts_per_user": 3,
   "min_reputation_to_post": 0,
-  "soft_delete_retention_days": 30
+  "soft_delete_retention_days": 30,
+  "siteFont": "Quicksand"
 }

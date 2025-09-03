@@ -50,6 +50,8 @@ function readSettings() {
   headerGradient: null,
   // animated logo flag
   animatedLogo: false,
+  // site font choice (branding)
+  siteFont: 'Inter',
       // Feature toggles and numeric config
       require_deal_images: false,
       enable_content_filtering: true,
@@ -274,6 +276,20 @@ app.get('/api/banners', async (req, res) => {
   }
 });
 
+// Get available logos (super_admin only)
+app.get('/api/site/logos', requireSuperAdmin, (req, res) => {
+  try {
+    const assetsDir = path.join(__dirname, 'assets');
+    const files = fs.readdirSync(assetsDir)
+      .filter(file => /\.(png|jpg|jpeg|gif|webp|svg)$/i.test(file))
+      .sort();
+    res.json(files);
+  } catch (err) {
+    console.error('Error listing logos:', err);
+    res.status(500).json({ error: err.message || 'Failed to list logos' });
+  }
+});
+
 // Upload a new logo (super_admin only)
 app.post('/api/site/logo', upload.single('logo'), requireSuperAdmin, async (req, res) => {
   try {
@@ -338,6 +354,80 @@ app.post('/api/site/logo', upload.single('logo'), requireSuperAdmin, async (req,
   }
 });
 
+// List uploaded logos (super_admin only)
+app.get('/api/site/logos', requireSuperAdmin, (req, res) => {
+  try {
+    const assetsDir = path.join(__dirname, 'assets');
+    if (!fs.existsSync(assetsDir)) return res.json([]);
+    let files = fs.readdirSync(assetsDir)
+      .filter(f => /\.(png|jpe?g|gif|webp|svg)$/i.test(f))
+      .map(f => f);
+    try {
+      const settings = readSettings();
+      const active = settings && settings.logoFilename ? settings.logoFilename : null;
+      files = files.sort((a, b) => {
+        if (active) {
+          if (a === active && b !== active) return -1;
+          if (b === active && a !== active) return 1;
+        }
+        const aSite = a.toLowerCase().startsWith('site-logo');
+        const bSite = b.toLowerCase().startsWith('site-logo');
+        if (aSite && !bSite) return -1;
+        if (!aSite && bSite) return 1;
+        return a.localeCompare(b, undefined, { sensitivity: 'base' });
+      });
+    } catch (e) {
+      console.warn('Failed to read settings for logo sorting', e);
+    }
+    res.json(files);
+  } catch (err) {
+    console.error('Error listing logos:', err);
+    res.status(500).json({ error: 'Failed to list uploaded logos' });
+  }
+});
+
+// Delete an uploaded logo (super_admin only)
+app.delete('/api/site/logo/:filename', requireSuperAdmin, (req, res) => {
+  try {
+    const { filename } = req.params;
+    if (!filename || typeof filename !== 'string') return res.status(400).json({ error: 'Missing filename' });
+
+    // basic validation to avoid directory traversal
+    if (!/^[a-zA-Z0-9._\-]+$/.test(filename)) return res.status(400).json({ error: 'Invalid filename' });
+
+    const target = path.join(__dirname, 'assets', filename);
+    if (!fs.existsSync(target)) return res.status(404).json({ error: 'File not found' });
+
+    // Prevent deletion of a built-in default file
+    const defaults = ['sdicon.PNG', 'icon.png'];
+    if (defaults.includes(filename)) return res.status(403).json({ error: 'Cannot delete default asset' });
+
+    // Remove the file
+    try {
+      fs.unlinkSync(target);
+    } catch (e) {
+      console.error('Failed to delete file', target, e);
+      return res.status(500).json({ error: 'Failed to delete file' });
+    }
+
+    // If deleted file was current logo in settings, reset to default
+    try {
+      const settings = readSettings();
+      if (settings.logoFilename === filename) {
+        settings.logoFilename = 'sdicon.PNG';
+        writeSettings(settings);
+      }
+    } catch (e) {
+      console.error('Failed to update settings after delete', e);
+    }
+
+    res.json({ message: 'Deleted', filename });
+  } catch (err) {
+    console.error('Delete logo error:', err);
+    res.status(500).json({ error: err.message || 'Failed to delete logo' });
+  }
+});
+
 // Update site settings (header text color etc.) (super_admin only)
 app.put('/api/site/settings', requireSuperAdmin, (req, res) => {
   try {
@@ -363,6 +453,7 @@ app.put('/api/site/settings', requireSuperAdmin, (req, res) => {
       'enable_content_filtering',
       'headerGradient',
       'animatedLogo',
+  'siteFont',
       'enable_location_services',
       'enable_push_notifications',
       'enable_social_sharing',
@@ -405,6 +496,30 @@ app.get('/api/site/settings', (req, res) => {
   }
 });
 
+// Delete logo file (super_admin only)
+app.delete('/api/site/logo/:filename', requireSuperAdmin, (req, res) => {
+  try {
+    const { filename } = req.params;
+    const logoPath = path.join(__dirname, 'assets', filename);
+    
+    if (!fs.existsSync(logoPath)) {
+      return res.status(404).json({ error: 'Logo file not found' });
+    }
+    
+    // Don't allow deletion of current active logo
+    const settings = readSettings();
+    if (settings.logoFilename === filename) {
+      return res.status(400).json({ error: 'Cannot delete currently active logo' });
+    }
+    
+    fs.unlinkSync(logoPath);
+    res.json({ message: 'Logo deleted successfully' });
+  } catch (err) {
+    console.error('Logo delete error:', err);
+    res.status(500).json({ error: err.message || 'Failed to delete logo' });
+  }
+});
+
 // Development-only endpoint to write site settings without auth (safe in dev only)
 if (process.env.NODE_ENV === 'development') {
   app.put('/api/site/settings/dev-write', (req, res) => {
@@ -415,6 +530,7 @@ if (process.env.NODE_ENV === 'development') {
   'headerTextColor',
   'headerGradient',
   'animatedLogo',
+  'siteFont',
         'logoFilename',
         'require_deal_images',
         'enable_content_filtering',
