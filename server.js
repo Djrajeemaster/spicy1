@@ -3114,3 +3114,7 @@ app.post('/api/users', async (req, res) => {
 app.listen(port, () => {
   console.log(`Server running on port ${port}`);
 });
+
+app.get('/health', (req, res) => {
+  res.json({ status: 'healthy', timestamp: new Date().toISOString(), environment: process.env.NODE_ENV });
+});
