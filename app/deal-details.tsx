@@ -18,6 +18,7 @@ import CommentThread from '@/components/CommentThread';
 import DealDetailsSkeleton from '@/components/DealDetailsSkeleton';
 import { DealCard } from '@/components/DealCard';
 import { commentService, CommentNode } from '@/services/commentService';
+import { getShareUrl } from '@/utils/config';
 
 export default function DealDetailsScreen() {
   const [guestPromptVisible, setGuestPromptVisible] = useState(false);
@@ -131,7 +132,7 @@ export default function DealDetailsScreen() {
   };
   const handleShare = async () => {
     if (!deal) return;
-    await Share.share({ message: `Check out this deal: ${deal.title}`, url: `https://spicybeats.com/deal-details?id=${deal.id}` });
+    await Share.share({ message: `Check out this deal: ${deal.title}`, url: getShareUrl(`/deal-details?id=${deal.id}`) });
   };
 
   const handleSave = async () => {

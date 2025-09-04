@@ -1,5 +1,6 @@
 
 import { Database } from '@/types/database';
+import { apiClient } from '@/utils/apiClient';
 
 type Alert = Database['public']['Tables']['alerts']['Row'];
 type AlertInsert = Database['public']['Tables']['alerts']['Insert'];
@@ -22,11 +23,7 @@ class AlertService {
    */
   async getUserAlerts(userId: string): Promise<{ data: Alert[]; error: any }> {
     try {
-      const response = await fetch(`http://localhost:3000/api/alerts?userId=${userId}&active=true`, {
-        credentials: 'include'
-      });
-      if (!response.ok) throw new Error('Failed to fetch alerts');
-      const data = await response.json();
+      const data = await apiClient.get(`/alerts?userId=${userId}&active=true`) as Alert[];
       return { data: data || [], error: null };
     } catch (error) {
       console.error('Error fetching user alerts:', error);
@@ -40,14 +37,7 @@ class AlertService {
    */
   async createAlert(alertData: AlertInsert): Promise<{ data: Alert | null; error: any }> {
     try {
-      const response = await fetch('http://localhost:3000/api/alerts', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(alertData),
-        credentials: 'include'
-      });
-      if (!response.ok) throw new Error('Failed to create alert');
-      const data = await response.json();
+      const data = await apiClient.post('/alerts', alertData) as Alert;
       return { data, error: null };
     } catch (error) {
       console.error('Error creating alert:', error);
@@ -62,14 +52,7 @@ class AlertService {
    */
   async updateAlert(alertId: string, updates: AlertUpdate): Promise<{ data: Alert | null; error: any }> {
     try {
-      const response = await fetch(`http://localhost:3000/api/alerts/${alertId}`, {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(updates),
-        credentials: 'include'
-      });
-      if (!response.ok) throw new Error('Failed to update alert');
-      const data = await response.json();
+      const data = await apiClient.put(`/alerts/${alertId}`, updates) as Alert;
       return { data, error: null };
     } catch (error) {
       console.error('Error updating alert:', error);
@@ -83,11 +66,7 @@ class AlertService {
    */
   async deactivateAlert(alertId: string): Promise<{ error: any }> {
     try {
-      const response = await fetch(`http://localhost:3000/api/alerts/${alertId}/deactivate`, {
-        method: 'PUT',
-        credentials: 'include'
-      });
-      if (!response.ok) throw new Error('Failed to deactivate alert');
+      await apiClient.put(`/alerts/${alertId}/deactivate`);
       return { error: null };
     } catch (error) {
       console.error('Error deactivating alert:', error);
@@ -101,11 +80,7 @@ class AlertService {
    */
   async activateAlert(alertId: string): Promise<{ error: any }> {
     try {
-      const response = await fetch(`http://localhost:3000/api/alerts/${alertId}/activate`, {
-        method: 'PUT',
-        credentials: 'include'
-      });
-      if (!response.ok) throw new Error('Failed to activate alert');
+      await apiClient.put(`/alerts/${alertId}/activate`);
       return { error: null };
     } catch (error) {
       console.error('Error activating alert:', error);

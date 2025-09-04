@@ -70,9 +70,15 @@ export default function UserDetailModal({ visible, onClose, userId, onUserUpdate
   const [suspendDuration, setSuspendDuration] = useState('');
   const [hardDelete, setHardDelete] = useState(false);
   const [newRole, setNewRole] = useState('');
+  const [validationError, setValidationError] = useState('');
 
   // Check if current admin is super admin
   const isSuperAdmin = currentAdminProfile?.role === 'superadmin';
+
+  const setActionFormAndClearError = (actionType: string | null) => {
+    setValidationError(''); // Clear any previous validation errors
+    setShowActionForm(actionType);
+  };
 
   useEffect(() => {
     if (visible && userId) {
@@ -106,28 +112,49 @@ export default function UserDetailModal({ visible, onClose, userId, onUserUpdate
   };
 
   const handleAction = async (actionType: string) => {
-    // Only require reason if not super admin
+    setValidationError(''); // Clear previous errors
+
+    // Validate required fields before making any API calls
     if (!isSuperAdmin && !actionReason.trim()) {
-      Alert.alert('Error', 'Please provide a reason for this action');
+      const errorMsg = 'Please provide a reason for this action';
+      setValidationError(errorMsg);
+      Alert.alert('Validation Error', errorMsg);
+      return;
+    }
+
+    // Validate action-specific required fields
+    if (actionType === 'suspend' && !suspendDuration.trim()) {
+      const errorMsg = 'Please specify suspend duration (in days)';
+      setValidationError(errorMsg);
+      Alert.alert('Validation Error', errorMsg);
+      return;
+    }
+
+    if (actionType === 'suspend' && (isNaN(parseInt(suspendDuration)) || parseInt(suspendDuration) <= 0)) {
+      const errorMsg = 'Please enter a valid suspend duration (must be a positive number)';
+      setValidationError(errorMsg);
+      Alert.alert('Validation Error', errorMsg);
+      return;
+    }
+
+    if (actionType === 'ban' && banDuration && (isNaN(parseInt(banDuration)) || parseInt(banDuration) <= 0)) {
+      const errorMsg = 'Please enter a valid ban duration (must be a positive number)';
+      setValidationError(errorMsg);
+      Alert.alert('Validation Error', errorMsg);
+      return;
+    }
+
+    if (actionType === 'changeRole' && !newRole) {
+      const errorMsg = 'Please select a new role';
+      setValidationError(errorMsg);
+      Alert.alert('Validation Error', errorMsg);
       return;
     }
 
     try {
       setActionLoading(true);
       
-      // Debug current user info
-      console.log('Admin action debug info:', {
-        actionType,
-        currentAdminProfile,
-        currentRole: currentAdminProfile?.role,
-        isSuperAdmin,
-        hasReason: !!actionReason.trim(),
-        userId
-      });
-      
-      console.log('Requesting admin elevation...');
       const elevationToken = await elevate(10);
-      console.log('Elevation token received:', elevationToken ? 'Yes' : 'No');
       
       let result;
       const baseRequest: UserActionRequest = {
@@ -149,20 +176,12 @@ export default function UserDetailModal({ visible, onClose, userId, onUserUpdate
           result = await adminUserService.unbanUser(baseRequest);
           break;
         case 'changeRole':
-          if (!newRole) {
-            Alert.alert('Error', 'Please select a new role');
-            return;
-          }
           result = await adminUserService.changeUserRole({
             ...baseRequest,
             newRole,
           });
           break;
         case 'suspend':
-          if (!suspendDuration) {
-            Alert.alert('Error', 'Please specify suspend duration');
-            return;
-          }
           result = await adminUserService.suspendUser({
             ...baseRequest,
             suspendDays: parseInt(suspendDuration),
@@ -182,7 +201,6 @@ export default function UserDetailModal({ visible, onClose, userId, onUserUpdate
           break;
         case 'resetPassword':
           result = await adminUserService.resetUserPassword(baseRequest);
-          console.log('🔑 Password reset response:', result);
           if (result.tempPassword) {
             setTempPassword(result.tempPassword);
             Alert.alert('Password Reset', `Temporary password: ${result.tempPassword}`);
@@ -216,6 +234,7 @@ export default function UserDetailModal({ visible, onClose, userId, onUserUpdate
         setSuspendDuration('');
         setHardDelete(false);
         setNewRole('');
+        setValidationError(''); // Clear validation error
         loadUserStats();
         onUserUpdated();
       } else {
@@ -249,6 +268,13 @@ export default function UserDetailModal({ visible, onClose, userId, onUserUpdate
         <Text style={styles.actionFormTitle}>
           {showActionForm.charAt(0).toUpperCase() + showActionForm.slice(1)} User
         </Text>
+        
+        {/* Validation Error Display */}
+        {validationError ? (
+          <View style={styles.errorDisplay}>
+            <Text style={styles.errorDisplayText}>⚠️ {validationError}</Text>
+          </View>
+        ) : null}
         
         <TextInput
           style={styles.textArea}
@@ -350,7 +376,7 @@ export default function UserDetailModal({ visible, onClose, userId, onUserUpdate
         <View style={styles.actionButtons}>
           <TouchableOpacity
             style={styles.cancelBtn}
-            onPress={() => setShowActionForm(null)}
+            onPress={() => setActionFormAndClearError(null)}
           >
             <Text style={styles.cancelBtnText}>Cancel</Text>
           </TouchableOpacity>
@@ -415,7 +441,7 @@ export default function UserDetailModal({ visible, onClose, userId, onUserUpdate
           {!stats?.is_suspended ? (
             <TouchableOpacity
               style={[styles.actionBtn, styles.warningBtn]}
-              onPress={() => setShowActionForm('suspend')}
+              onPress={() => setActionFormAndClearError('suspend')}
             >
               <Clock size={16} color="#fff" />
               <Text style={styles.actionBtnText}>Suspend</Text>
@@ -866,5 +892,19 @@ const styles = StyleSheet.create({
     color: '#10b981',
     fontStyle: 'italic',
     marginTop: 4,
+  },
+  errorDisplay: {
+    backgroundColor: '#fef2f2',
+    borderColor: '#fecaca',
+    borderWidth: 1,
+    borderRadius: 8,
+    padding: 12,
+    marginBottom: 16,
+  },
+  errorDisplayText: {
+    color: '#ef4444',
+    fontSize: 14,
+    fontWeight: '600',
+    textAlign: 'center',
   },
 });

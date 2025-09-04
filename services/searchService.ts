@@ -1,4 +1,5 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { apiClient } from '@/utils/apiClient';
 
 export interface SearchHistory {
   query: string;

@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { View, Text, StyleSheet, ScrollView, RefreshControl, Alert, ActivityIndicator } from 'react-native';
 import { BarChart3, Users, MessageSquare, TrendingUp, Calendar, Eye, Heart, DollarSign } from 'lucide-react-native';
+import { apiClient } from '@/utils/apiClient';
 
 interface AnalyticsData {
   userStats: {
@@ -78,9 +79,9 @@ export const AdminAnalytics: React.FC = () => {
       setLoading(true);
       // Fetch data from backend API endpoints
       const [usersRes, dealsRes, commentsRes] = await Promise.all([
-        fetch('http://localhost:3000/api/users'),
-        fetch('http://localhost:3000/api/deals'),
-        fetch('http://localhost:3000/api/comments'),
+        apiClient.get('/users'),
+        apiClient.get('/deals'),
+        apiClient.get('/comments'),
       ]);
       if (!usersRes.ok || !dealsRes.ok || !commentsRes.ok) {
         throw new Error('Failed to fetch analytics data');

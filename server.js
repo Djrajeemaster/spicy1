@@ -1,4 +1,6 @@
 
+require('dotenv').config();
+
 const cors = require('cors');
 const express = require('express');
 const { Pool } = require('pg');
@@ -87,16 +89,32 @@ function writeSettings(obj) {
 async function requireSuperAdmin(req, res, next) {
   try {
     const sessionId = req.cookies && req.cookies.session_id;
-  console.log('requireSuperAdmin: sessionId from cookie =', sessionId);
-  if (!sessionId) return res.status(403).json({ error: 'Not authenticated' });
-  const { rows } = await pool.query('SELECT id, role FROM users WHERE id = $1', [sessionId]);
-  console.log('requireSuperAdmin: db lookup result =', rows && rows[0] ? rows[0] : 'no rows');
-  // accept both common variants just in case, but prefer 'superadmin'
-  // Accept common privileged roles in development: 'superadmin', 'super_admin', and 'admin'
-  if (!rows[0] || (rows[0].role !== 'superadmin' && rows[0].role !== 'super_admin' && rows[0].role !== 'admin')) return res.status(403).json({ error: 'Forbidden' });
+    if (!sessionId) return res.status(403).json({ error: 'Not authenticated' });
+    const { rows } = await pool.query('SELECT id, role FROM users WHERE id = $1', [sessionId]);
+    // accept both common variants just in case, but prefer 'superadmin'
+    // Accept common privileged roles in development: 'superadmin', 'super_admin', and 'admin'
+    if (!rows[0] || (rows[0].role !== 'superadmin' && rows[0].role !== 'super_admin' && rows[0].role !== 'admin')) return res.status(403).json({ error: 'Forbidden' });
     next();
   } catch (err) {
     console.error('requireSuperAdmin error', err);
+    res.status(500).json({ error: err.message });
+  }
+}
+
+// general middleware to require authentication
+async function requireAuth(req, res, next) {
+  try {
+    const sessionId = req.cookies && req.cookies.session_id;
+    if (!sessionId) return res.status(401).json({ error: 'Not authenticated' });
+    
+    const { rows } = await pool.query('SELECT id, role FROM users WHERE id = $1', [sessionId]);
+    if (!rows[0]) return res.status(401).json({ error: 'Invalid session' });
+    
+    // Attach user info to request
+    req.session = { id: sessionId, userId: sessionId, role: rows[0].role };
+    next();
+  } catch (err) {
+    console.error('requireAuth error', err);
     res.status(500).json({ error: err.message });
   }
 }
@@ -125,7 +143,7 @@ app.use(cors({
   },
   credentials: true,
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
-  allowedHeaders: ['Content-Type', 'Authorization', 'Cookie']
+  allowedHeaders: ['Content-Type', 'Authorization', 'Cookie', 'x-admin-elevation']
 }));
 
 // Role request endpoints
@@ -497,7 +515,6 @@ app.put('/api/site/settings', requireSuperAdmin, (req, res) => {
 app.get('/api/site/settings', (req, res) => {
   try {
     const settings = readSettings();
-    console.log('Serving site settings:', settings);
     res.json(settings);
   } catch (err) {
     console.error('Error reading site settings:', err);
@@ -573,11 +590,8 @@ const bcrypt = require('bcrypt');
 
 app.get('/api/auth/session', async (req, res) => {
   const sessionId = req.cookies.session_id;
-  console.log('Session check - sessionId:', sessionId);
-  console.log('All cookies:', req.cookies);
   
   if (!sessionId) {
-    console.log('No session ID found');
     return res.json({ user: null, authenticated: false });
   }
   
@@ -588,10 +602,7 @@ app.get('/api/auth/session', async (req, res) => {
       [sessionId]
     );
     
-    console.log('Session check - user found:', rows.length > 0 ? rows[0] : 'none');
-    
     if (rows.length === 0) {
-      console.log('User not found for session ID:', sessionId);
       return res.json({ user: null, authenticated: false });
     }
     
@@ -635,9 +646,6 @@ app.get('/api/categories', async (req, res) => {
     res.status(500).json({ error: err.message });
   }
 });
-require('dotenv').config();
-
-
 
 const port = process.env.PORT || 3000;
 
@@ -649,7 +657,43 @@ const pool = new Pool({
 // Example endpoint: Get all users
 app.get('/api/users', async (req, res) => {
   try {
-    const { rows } = await pool.query('SELECT * FROM users');
+    const { q, role, limit = 30, cursor } = req.query;
+    
+    let query = 'SELECT * FROM users';
+    const queryParams = [];
+    const conditions = [];
+    
+    // Add search filter
+    if (q) {
+      conditions.push(`(username ILIKE $${queryParams.length + 1} OR email ILIKE $${queryParams.length + 1})`);
+      queryParams.push(`%${q}%`);
+    }
+    
+    // Add role filter
+    if (role) {
+      conditions.push(`role = $${queryParams.length + 1}`);
+      queryParams.push(role);
+    }
+    
+    // Add cursor filter for pagination
+    if (cursor) {
+      conditions.push(`id > $${queryParams.length + 1}`);
+      queryParams.push(cursor);
+    }
+    
+    // Build the WHERE clause
+    if (conditions.length > 0) {
+      query += ' WHERE ' + conditions.join(' AND ');
+    }
+    
+    // Add ordering and limit
+    query += ' ORDER BY id ASC';
+    if (limit) {
+      query += ` LIMIT $${queryParams.length + 1}`;
+      queryParams.push(parseInt(limit));
+    }
+    
+    const { rows } = await pool.query(query, queryParams);
     res.json(rows);
   } catch (err) {
     res.status(500).json({ error: err.message });
@@ -1294,9 +1338,9 @@ app.post('/api/auth/signin', async (req, res) => {
     // Set session cookie with proper domain and path
     res.cookie('session_id', user.id, { 
       httpOnly: true, 
-      secure: process.env.NODE_ENV === 'production', // Use HTTPS in production
+      secure: false, // Set to false for HTTP
       maxAge: 24 * 60 * 60 * 1000, // 24 hours
-      sameSite: process.env.NODE_ENV === 'production' ? 'strict' : 'lax',
+      sameSite: 'lax',
       path: '/'
     });
     
@@ -2252,48 +2296,165 @@ app.get('/api/admin/user-stats/:userId', async (req, res) => {
 });
 
 // Admin user action endpoints
-app.post('/api/admin/admin-ban-user', async (req, res) => {
+app.post('/api/admin/admin-ban-user', requireAuth, async (req, res) => {
   try {
+    console.log('🔧 Ban user request received:', req.body);
+    console.log('🔧 Headers:', req.headers);
+    
+    const sessionId = req.session.id;
+    const elevationToken = req.headers['x-admin-elevation'];
+    
+    console.log('🔧 Session ID:', sessionId);
+    console.log('🔧 Elevation token:', elevationToken ? 'Present' : 'Missing');
+    
+    if (!elevationToken) {
+      console.log('🔧 ERROR: No elevation token provided');
+      return res.status(428).json({ error: 'Admin elevation required' });
+    }
+    
+    // Verify user is admin/superadmin
+    const { rows } = await pool.query('SELECT role FROM users WHERE id = $1', [req.session.userId]);
+    console.log('🔧 User role check:', rows[0]);
+    
+    if (rows.length === 0 || !['admin', 'superadmin'].includes(rows[0].role)) {
+      console.log('🔧 ERROR: Insufficient permissions');
+      return res.status(403).json({ error: 'Insufficient permissions' });
+    }
+    
     const { user_id, reason, duration_days } = req.body;
-    await pool.query('UPDATE users SET status = $1 WHERE id = $2', ['banned', user_id]);
+    const banExpiry = duration_days ? new Date(Date.now() + duration_days * 24 * 60 * 60 * 1000) : null;
+    
+    console.log('🔧 Banning user:', user_id, 'for', duration_days, 'days');
+    console.log('🔧 Ban expiry:', banExpiry);
+    
+    const result = await pool.query(
+      'UPDATE users SET status = $1, ban_expiry = $2 WHERE id = $3', 
+      ['banned', banExpiry, user_id]
+    );
+    
+    console.log('🔧 Database update result:', result.rowCount, 'rows affected');
+    
     res.json({ success: true, message: 'User banned successfully' });
   } catch (err) {
+    console.error('🔧 ERROR in ban user:', err);
     res.status(500).json({ error: err.message });
   }
 });
 
-app.post('/api/admin/admin-unban-user', async (req, res) => {
+app.post('/api/admin/admin-unban-user', requireAuth, async (req, res) => {
   try {
+    const sessionId = req.session.id;
+    const elevationToken = req.headers['x-admin-elevation'];
+    
+    if (!elevationToken) {
+      return res.status(428).json({ error: 'Admin elevation required' });
+    }
+    
+    // Verify user is admin/superadmin
+    const { rows } = await pool.query('SELECT role FROM users WHERE id = $1', [req.session.userId]);
+    if (rows.length === 0 || !['admin', 'superadmin'].includes(rows[0].role)) {
+      return res.status(403).json({ error: 'Insufficient permissions' });
+    }
+    
     const { user_id, reason } = req.body;
-    await pool.query('UPDATE users SET status = $1 WHERE id = $2', ['active', user_id]);
+    await pool.query(
+      'UPDATE users SET status = $1, ban_expiry = NULL WHERE id = $2', 
+      ['active', user_id]
+    );
+    
     res.json({ success: true, message: 'User unbanned successfully' });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
 });
 
-app.post('/api/admin/admin-suspend-user', async (req, res) => {
+app.post('/api/admin/admin-suspend-user', requireAuth, async (req, res) => {
   try {
+    console.log('🔧 Suspend user request received:', req.body);
+    console.log('🔧 Headers:', req.headers);
+    
+    const sessionId = req.session.id;
+    const elevationToken = req.headers['x-admin-elevation'];
+    
+    console.log('🔧 Session ID:', sessionId);
+    console.log('🔧 Elevation token:', elevationToken ? 'Present' : 'Missing');
+    
+    if (!elevationToken) {
+      console.log('🔧 ERROR: No elevation token provided');
+      return res.status(428).json({ error: 'Admin elevation required' });
+    }
+    
+    // Verify user is admin/superadmin
+    const { rows } = await pool.query('SELECT role FROM users WHERE id = $1', [req.session.userId]);
+    console.log('🔧 User role check:', rows[0]);
+    
+    if (rows.length === 0 || !['admin', 'superadmin'].includes(rows[0].role)) {
+      console.log('🔧 ERROR: Insufficient permissions');
+      return res.status(403).json({ error: 'Insufficient permissions' });
+    }
+    
     const { user_id, reason, duration_days } = req.body;
-    await pool.query('UPDATE users SET status = $1 WHERE id = $2', ['suspended', user_id]);
+    const suspendExpiry = duration_days ? new Date(Date.now() + duration_days * 24 * 60 * 60 * 1000) : null;
+    
+    console.log('🔧 Suspending user:', user_id, 'for', duration_days, 'days');
+    console.log('🔧 Suspend expiry:', suspendExpiry);
+    
+    const result = await pool.query(
+      'UPDATE users SET status = $1, suspend_expiry = $2 WHERE id = $3', 
+      ['suspended', suspendExpiry, user_id]
+    );
+    
+    console.log('🔧 Database update result:', result.rowCount, 'rows affected');
+    
     res.json({ success: true, message: 'User suspended successfully' });
   } catch (err) {
+    console.error('🔧 ERROR in suspend user:', err);
     res.status(500).json({ error: err.message });
   }
 });
 
-app.post('/api/admin/admin-unsuspend-user', async (req, res) => {
+app.post('/api/admin/admin-unsuspend-user', requireAuth, async (req, res) => {
   try {
+    const sessionId = req.session.id;
+    const elevationToken = req.headers['x-admin-elevation'];
+    
+    if (!elevationToken) {
+      return res.status(428).json({ error: 'Admin elevation required' });
+    }
+    
+    // Verify user is admin/superadmin
+    const { rows } = await pool.query('SELECT role FROM users WHERE id = $1', [req.session.userId]);
+    if (rows.length === 0 || !['admin', 'superadmin'].includes(rows[0].role)) {
+      return res.status(403).json({ error: 'Insufficient permissions' });
+    }
+    
     const { user_id, reason } = req.body;
-    await pool.query('UPDATE users SET status = $1 WHERE id = $2', ['active', user_id]);
+    await pool.query(
+      'UPDATE users SET status = $1, suspend_expiry = NULL WHERE id = $2', 
+      ['active', user_id]
+    );
+    
     res.json({ success: true, message: 'User unsuspended successfully' });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
 });
 
-app.post('/api/admin/admin-change-role', async (req, res) => {
+app.post('/api/admin/admin-change-role', requireAuth, async (req, res) => {
   try {
+    const sessionId = req.session.id;
+    const elevationToken = req.headers['x-admin-elevation'];
+    
+    if (!elevationToken) {
+      return res.status(428).json({ error: 'Admin elevation required' });
+    }
+    
+    // Verify user is admin/superadmin
+    const { rows } = await pool.query('SELECT role FROM users WHERE id = $1', [req.session.userId]);
+    if (rows.length === 0 || !['admin', 'superadmin'].includes(rows[0].role)) {
+      return res.status(403).json({ error: 'Insufficient permissions' });
+    }
+    
     const { user_id, new_role, reason } = req.body;
     await pool.query('UPDATE users SET role = $1 WHERE id = $2', [new_role, user_id]);
     res.json({ success: true, message: 'User role changed successfully' });
@@ -2302,8 +2463,21 @@ app.post('/api/admin/admin-change-role', async (req, res) => {
   }
 });
 
-app.post('/api/admin/admin-delete-user', async (req, res) => {
+app.post('/api/admin/admin-delete-user', requireAuth, async (req, res) => {
   try {
+    const sessionId = req.session.id;
+    const elevationToken = req.headers['x-admin-elevation'];
+    
+    if (!elevationToken) {
+      return res.status(428).json({ error: 'Admin elevation required' });
+    }
+    
+    // Verify user is admin/superadmin
+    const { rows } = await pool.query('SELECT role FROM users WHERE id = $1', [req.session.userId]);
+    if (rows.length === 0 || !['admin', 'superadmin'].includes(rows[0].role)) {
+      return res.status(403).json({ error: 'Insufficient permissions' });
+    }
+    
     const { user_id, reason, hard_delete } = req.body;
     if (hard_delete) {
       await pool.query('DELETE FROM users WHERE id = $1', [user_id]);
@@ -2360,18 +2534,61 @@ app.post('/api/admin/admin-unverify-user', async (req, res) => {
   }
 });
 
-app.post('/api/admin/admin-bulk-user-action', async (req, res) => {
+app.post('/api/admin/admin-bulk-user-action', requireAuth, async (req, res) => {
   try {
+    const sessionId = req.session.id;
+    const elevationToken = req.headers['x-admin-elevation'];
+    
+    if (!elevationToken) {
+      return res.status(428).json({ error: 'Admin elevation required' });
+    }
+    
+    // Verify user is admin/superadmin
+    const { rows } = await pool.query('SELECT role FROM users WHERE id = $1', [req.session.userId]);
+    if (rows.length === 0 || !['admin', 'superadmin'].includes(rows[0].role)) {
+      return res.status(403).json({ error: 'Insufficient permissions' });
+    }
+    
     const { user_ids, action, reason, duration } = req.body;
-    // Simplified bulk action implementation
+    const results = [];
+    
+    // Process each user individually to track success/failure
     for (const userId of user_ids) {
-      if (action === 'ban') {
-        await pool.query('UPDATE users SET status = $1 WHERE id = $2', ['banned', userId]);
-      } else if (action === 'suspend') {
-        await pool.query('UPDATE users SET status = $1 WHERE id = $2', ['suspended', userId]);
+      try {
+        if (action === 'ban') {
+          const banExpiry = duration ? new Date(Date.now() + duration * 24 * 60 * 60 * 1000) : null;
+          await pool.query(
+            'UPDATE users SET status = $1, ban_expiry = $2 WHERE id = $3', 
+            ['banned', banExpiry, userId]
+          );
+        } else if (action === 'suspend') {
+          const suspendExpiry = duration ? new Date(Date.now() + duration * 24 * 60 * 60 * 1000) : null;
+          await pool.query(
+            'UPDATE users SET status = $1, suspend_expiry = $2 WHERE id = $3', 
+            ['suspended', suspendExpiry, userId]
+          );
+        } else if (action === 'unban') {
+          await pool.query(
+            'UPDATE users SET status = $1, ban_expiry = NULL WHERE id = $2', 
+            ['active', userId]
+          );
+        } else if (action === 'unsuspend') {
+          await pool.query(
+            'UPDATE users SET status = $1, suspend_expiry = NULL WHERE id = $2', 
+            ['active', userId]
+          );
+        }
+        results.push({ userId, success: true });
+      } catch (error) {
+        results.push({ userId, success: false, error: error.message });
       }
     }
-    res.json({ success: true, message: `Bulk ${action} completed successfully` });
+    
+    res.json({ 
+      success: true, 
+      message: `Bulk ${action} completed`, 
+      results 
+    });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }

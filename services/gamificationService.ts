@@ -1,3 +1,5 @@
+import { apiClient } from '@/utils/apiClient';
+
 
 
 export interface UserBadge {
@@ -34,11 +36,7 @@ export interface UserStats {
 class GamificationService {
   async getUserStats(userId: string): Promise<{ data: UserStats | null; error: any }> {
     try {
-      const response = await fetch(`http://localhost:3000/api/gamification/stats/${userId}`, {
-        credentials: 'include'
-      });
-      if (!response.ok) throw new Error('Failed to fetch user stats');
-      const data = await response.json();
+      const data = await apiClient.get(`/gamification/stats/${userId}`) as UserStats;
       return { data, error: null };
     } catch (error) {
       return { data: null, error };
@@ -47,13 +45,7 @@ class GamificationService {
 
   async awardPoints(userId: string, points: number, action: string) {
     try {
-      const response = await fetch('http://localhost:3000/api/gamification/award-points', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ userId, points, action }),
-        credentials: 'include'
-      });
-      if (!response.ok) throw new Error('Failed to award points');
+      await apiClient.post('/gamification/award-points', { userId, points, action });
       return { error: null };
     } catch (error) {
       return { error };
@@ -86,13 +78,7 @@ class GamificationService {
 
   async awardBadge(userId: string, badgeId: string) {
     try {
-      const response = await fetch('http://localhost:3000/api/gamification/award-badge', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ userId, badgeId }),
-        credentials: 'include'
-      });
-      if (!response.ok) throw new Error('Failed to award badge');
+      await apiClient.post('/gamification/award-badge', { userId, badgeId });
       return { error: null };
     } catch (error) {
       return { error };
@@ -101,11 +87,7 @@ class GamificationService {
 
   async getLeaderboard(limit = 10) {
     try {
-      const response = await fetch(`http://localhost:3000/api/gamification/leaderboard?limit=${limit}`, {
-        credentials: 'include'
-      });
-      if (!response.ok) throw new Error('Failed to fetch leaderboard');
-      const data = await response.json();
+      const data = await apiClient.get(`/gamification/leaderboard?limit=${limit}`);
       return { data, error: null };
     } catch (error) {
       return { data: null, error };

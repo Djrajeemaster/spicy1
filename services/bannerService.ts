@@ -1,3 +1,5 @@
+import { apiClient } from '@/utils/apiClient';
+
 
 
 export interface Banner {
@@ -31,9 +33,7 @@ export interface BannerUpdate {
 class BannerService {
         async getBanners(): Promise<{ data: Banner[]; error: any }> {
           try {
-            const response = await fetch('http://localhost:3000/api/banners');
-            if (!response.ok) throw new Error('Failed to fetch banners');
-            const data = await response.json();
+            const data = await apiClient.get('/banners') as Banner[];
             return { data: data || [], error: null };
           } catch (error) {
             console.error('Error fetching banners:', error);
@@ -43,13 +43,7 @@ class BannerService {
 
         async createBanner(bannerData: BannerInsert): Promise<{ data: Banner | null; error: any }> {
           try {
-            const response = await fetch('http://localhost:3000/api/banners', {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify(bannerData),
-            });
-            if (!response.ok) throw new Error('Failed to create banner');
-            const data = await response.json();
+            const data = await apiClient.post('/banners', bannerData) as Banner;
             return { data, error: null };
           } catch (error) {
             console.error('Error creating banner:', error);
@@ -59,13 +53,7 @@ class BannerService {
 
         async updateBanner(id: string, updates: BannerUpdate): Promise<{ data: Banner | null; error: any }> {
           try {
-            const response = await fetch(`http://localhost:3000/api/banners/${id}`, {
-              method: 'PUT',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify(updates),
-            });
-            if (!response.ok) throw new Error('Failed to update banner');
-            const data = await response.json();
+            const data = await apiClient.put(`/banners/${id}`, updates) as Banner;
             return { data, error: null };
           } catch (error) {
             console.error('Error updating banner:', error);
@@ -75,10 +63,7 @@ class BannerService {
 
         async deleteBanner(id: string): Promise<{ error: any }> {
           try {
-            const response = await fetch(`http://localhost:3000/api/banners/${id}`, {
-              method: 'DELETE',
-            });
-            if (!response.ok) throw new Error('Failed to delete banner');
+            await apiClient.delete(`/banners/${id}`);
             return { error: null };
           } catch (error) {
             console.error('Error deleting banner:', error);

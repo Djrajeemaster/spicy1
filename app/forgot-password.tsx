@@ -12,8 +12,10 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { router } from 'expo-router';
 import { LinearGradient } from 'expo-linear-gradient';
 import { AtSign, Send, MailQuestion, ArrowLeft } from 'lucide-react-native';
+import { useAuth } from '@/contexts/AuthProvider';
 
 export default function ForgotPasswordScreen() {
+  const { user, loading: authLoading } = useAuth();
   const [email, setEmail] = useState('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -23,12 +25,33 @@ export default function ForgotPasswordScreen() {
     Platform.OS === 'web' && typeof window !== 'undefined' && window.innerWidth >= 768
   );
 
+  // Redirect if user is already logged in
+  useEffect(() => {
+    if (!authLoading && user) {
+      console.log('User already logged in, redirecting to home');
+      router.replace('/(tabs)');
+    }
+  }, [authLoading, user]);
+
+  // Handle window resize for web
   useEffect(() => {
     if (Platform.OS !== 'web') return;
     const handleResize = () => setIsDesktopWeb(window.innerWidth >= 768);
     window.addEventListener('resize', handleResize);
     return () => window.removeEventListener('resize', handleResize);
   }, []);
+
+  // If still checking auth or user is logged in, show loading
+  if (authLoading || user) {
+    return (
+      <View style={[styles.container, { justifyContent: 'center', alignItems: 'center' }]}>
+        <ActivityIndicator size="large" color="#6366f1" />
+        <Text style={styles.loadingText}>
+          {user ? 'Redirecting...' : 'Checking authentication...'}
+        </Text>
+      </View>
+    );
+  }
 
   const handlePasswordReset = async () => {
     if (loading) return;
@@ -152,6 +175,7 @@ const styles = StyleSheet.create({
   // --- Common Styles ---
   errorText: { color: '#ef4444', textAlign: 'center', marginBottom: 16, fontWeight: '600' },
   successText: { color: '#10b981', textAlign: 'center', marginBottom: 16, fontWeight: '600', lineHeight: 20 },
+  loadingText: { color: '#64748b', textAlign: 'center', marginTop: 16, fontSize: 16 },
   icon: { marginRight: 12 },
   buttonWrapper: { borderRadius: 12, overflow: 'hidden', marginTop: 8 },
   button: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', paddingVertical: 16 },

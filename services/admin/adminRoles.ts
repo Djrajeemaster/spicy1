@@ -1,7 +1,8 @@
-
+import { apiClient } from '@/utils/apiClient';
+import { getApiUrl } from '@/utils/config';
 
 export async function setUserRole(userId: string, role: string, opts?: { elevationToken?: string }) {
-  const url = `http://localhost:3000/api/users/${userId}/role`;
+  const url = getApiUrl(`/users/${userId}/role`);
   
   const headers: Record<string,string> = {
     'Content-Type':'application/json',
@@ -21,7 +22,7 @@ export async function setUserRole(userId: string, role: string, opts?: { elevati
 export async function listUsers(params?: { q?: string; role?: string; limit?: number; cursor?: string }) {
   try {
     // Try the API endpoint first
-    const apiUrl = 'http://localhost:3000/api/users';
+    const apiUrl = getApiUrl('/users');
     const urlParams = new URLSearchParams();
     if (params?.q) urlParams.set('q', params.q);
     if (params?.role) urlParams.set('role', params.role);
@@ -52,16 +53,8 @@ export async function listUsers(params?: { q?: string; role?: string; limit?: nu
   console.log('Using direct database query for listUsers');
   
   try {
-    const response = await fetch('http://localhost:3000/api/users', {
-      credentials: 'include'
-    });
-    
-    if (response.ok) {
-      const data = await response.json();
-      return { items: data || [], next_cursor: null };
-    }
-    
-    throw new Error(`API request failed: ${response.status}`);
+    const data = await apiClient.get('/users');
+    return { items: (data as any[]) || [], next_cursor: null };
   } catch (error) {
     console.error('Failed to fetch users:', error);
     return { items: [], next_cursor: null };

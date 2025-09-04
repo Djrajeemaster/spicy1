@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { View, Text, StyleSheet, ScrollView, TouchableOpacity, TextInput, Alert } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Shield, Plus, Settings } from 'lucide-react-native';
+import { apiClient } from '@/utils/apiClient';
 
 interface Role {
   name: string;
@@ -40,15 +41,11 @@ export const RolesManagement: React.FC = () => {
     try {
       const permissions = newRole.permissions.split(',').map(p => p.trim()).filter(p => p);
       
-      const response = await fetch('http://localhost:3000/api/roles', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          name: newRole.name,
-          description: newRole.description,
-          permissions
-        })
-      });
+      const response = await apiClient.post('/roles', {
+        name: newRole.name,
+        description: newRole.description,
+        permissions
+      }) as Response;
 
       const data = await response.json();
 

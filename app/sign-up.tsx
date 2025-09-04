@@ -8,25 +8,42 @@ import {
   ActivityIndicator,
   Platform,
   Alert,
+  Image,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { router } from 'expo-router';
 import { LinearGradient } from 'expo-linear-gradient';
 import { User, AtSign, Lock, Sparkles, CheckSquare } from 'lucide-react-native';
 import { useAuth } from '@/contexts/AuthProvider';
+import { useSiteSettings } from '@/hooks/useSiteSettings';
 
 export default function SignUpScreen() {
-  const { signUp } = useAuth();
+  const { signUp, user, loading: authLoading } = useAuth();
+  const { settings, logoUrl } = useSiteSettings();
   const [username, setUsername] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  const [isDesktopWeb, setIsDesktopWeb] = useState(
-    Platform.OS === 'web' && typeof window !== 'undefined' && window.innerWidth >= 768
-  );
+  const [isDesktopWeb, setIsDesktopWeb] = useState(false);
 
+  // Redirect if user is already logged in
+  useEffect(() => {
+    if (!authLoading && user) {
+      console.log('User already logged in, redirecting to home');
+      router.replace('/(tabs)');
+    }
+  }, [authLoading, user]);
+
+  // Initialize desktop detection for web
+  useEffect(() => {
+    if (Platform.OS === 'web' && typeof window !== 'undefined') {
+      setIsDesktopWeb(window.innerWidth >= 768);
+    }
+  }, []);
+
+  // Handle window resize for web
   useEffect(() => {
     if (Platform.OS !== 'web') return;
     const handleResize = () => {
@@ -35,6 +52,18 @@ export default function SignUpScreen() {
     window.addEventListener('resize', handleResize);
     return () => window.removeEventListener('resize', handleResize);
   }, []);
+
+  // If still checking auth or user is logged in, show loading
+  if (authLoading || user) {
+    return (
+      <View style={[styles.container, { justifyContent: 'center', alignItems: 'center' }]}>
+        <ActivityIndicator size="large" color="#6366f1" />
+        <Text style={styles.loadingText}>
+          {user ? 'Redirecting...' : 'Checking authentication...'}
+        </Text>
+      </View>
+    );
+  }
 
   const handleSignUp = async () => {
     if (loading) return;
@@ -51,7 +80,7 @@ export default function SignUpScreen() {
     } else if (Platform.OS !== 'web') {
       // Give user confirmation, then redirect
       Alert.alert(
-        'Welcome to SaversDream!',
+        `Welcome to ${settings?.appName || 'SaversDream'}!`,
         'Please check your email to verify your account.',
         [{ text: 'OK', onPress: () => router.replace('/(tabs)') }]
       );
@@ -66,9 +95,13 @@ export default function SignUpScreen() {
         {isDesktopWeb && (
           <LinearGradient colors={['#030849', '#1e40af']} style={styles.desktopBrandingPanel}>
             <View style={styles.brandingContent}>
-              <Sparkles size={48} color="#fbbf24" />
-              <Text style={styles.desktopAppName}>SaversDream</Text>
-              <Text style={styles.desktopTagline}>Join the community. Share the heat.</Text>
+              {logoUrl ? (
+                <Image source={{ uri: logoUrl }} style={styles.brandingLogo} />
+              ) : (
+                <Sparkles size={48} color="#fbbf24" />
+              )}
+              <Text style={styles.desktopAppName}>{settings?.appName || 'SaversDream'}</Text>
+              <Text style={styles.desktopTagline}>{settings?.tagline || 'Join the community. Share the heat.'}</Text>
               <View style={styles.featureList}>
                 <View style={styles.featureItem}><CheckSquare size={16} color="#10b981" /><Text style={styles.featureText}>Post and vote on deals</Text></View>
                 <View style={styles.featureItem}><CheckSquare size={16} color="#10b981" /><Text style={styles.featureText}>Set custom deal alerts</Text></View>
@@ -82,6 +115,17 @@ export default function SignUpScreen() {
           {!isDesktopWeb && <LinearGradient colors={['#030849', '#1e40af']} style={StyleSheet.absoluteFill} />}
           
           <View style={isDesktopWeb ? styles.desktopCard : styles.formContainer}>
+            {!isDesktopWeb && (
+              <View style={styles.mobileBranding}>
+                {logoUrl ? (
+                  <Image source={{ uri: logoUrl }} style={styles.mobileLogo} />
+                ) : (
+                  <Sparkles size={48} color="#fbbf24" />
+                )}
+                <Text style={styles.mobileAppName}>{settings?.appName || 'SaversDream'}</Text>
+              </View>
+            )}
+            
             <Text style={isDesktopWeb ? styles.desktopTitle : styles.title}>Create Account</Text>
             <Text style={isDesktopWeb ? styles.desktopSubtitle : styles.subtitle}>Join the best deal community</Text>
 
@@ -168,7 +212,6 @@ const styles = StyleSheet.create({
     marginBottom: 16,
     paddingHorizontal: 16,
   },
-  icon: { marginRight: 12 },
   input: {
     flex: 1,
     height: 50,
@@ -193,10 +236,7 @@ const styles = StyleSheet.create({
     letterSpacing: -1,
     textAlign: 'center',
     marginTop: 16,
-    backgroundImage: 'linear-gradient(90deg, #0A2540 0%, #00C2A8 100%)',
-    WebkitBackgroundClip: 'text',
-    WebkitTextFillColor: 'transparent',
-    backgroundClip: 'text',
+    color: '#fbbf24',
   },
   desktopTagline: { fontSize: 18, color: 'rgba(255,255,255,0.8)', marginTop: 8, textAlign: 'center', maxWidth: 300, marginBottom: 32 },
   featureList: { alignSelf: 'flex-start', gap: 16 },
@@ -235,8 +275,31 @@ const styles = StyleSheet.create({
   desktopInput: { flex: 1, height: 50, color: '#1e293b', fontSize: 16, fontWeight: '500' },
   desktopLinkText: { color: '#64748b', textAlign: 'center' },
 
+  // --- Branding Styles ---
+  brandingLogo: {
+    width: 64,
+    height: 64,
+    resizeMode: 'contain',
+  },
+  mobileBranding: {
+    alignItems: 'center',
+    marginBottom: 24,
+  },
+  mobileLogo: {
+    width: 48,
+    height: 48,
+    marginBottom: 8,
+  },
+  mobileAppName: {
+    fontSize: 24,
+    fontWeight: 'bold',
+    textAlign: 'center',
+    color: '#FFFFFF',
+  },
+
   // --- Common Styles ---
   errorText: { color: '#ef4444', textAlign: 'center', marginBottom: 16, fontWeight: '600' },
+  loadingText: { color: '#64748b', textAlign: 'center', marginTop: 16, fontSize: 16 },
   icon: { marginRight: 12 },
   buttonWrapper: { borderRadius: 12, overflow: 'hidden', marginTop: 8, marginBottom: 24 },
   button: {

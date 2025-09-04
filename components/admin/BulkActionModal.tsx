@@ -29,7 +29,7 @@ interface BulkActionModalProps {
   onActionComplete: () => void;
 }
 
-type BulkActionType = 'ban' | 'unban' | 'verify' | 'unverify' | 'suspend' | 'delete';
+type BulkActionType = 'ban' | 'unban' | 'verify' | 'unverify' | 'suspend' | 'unsuspend' | 'delete';
 
 export default function BulkActionModal({ 
   visible, 
@@ -43,48 +43,83 @@ export default function BulkActionModal({
   const [loading, setLoading] = useState(false);
 
   const handleBulkAction = async () => {
-    if (!selectedAction || !reason.trim()) {
-      Alert.alert('Error', 'Please select an action and provide a reason');
+    // Basic field validation
+    if (!selectedAction) {
+      Alert.alert('Error', 'Please select an action to perform');
       return;
     }
 
+    if (!reason.trim()) {
+      Alert.alert('Error', 'Please provide a reason for this bulk action');
+      return;
+    }
+
+    // Duration validation for ban/suspend actions
     if ((selectedAction === 'ban' || selectedAction === 'suspend') && !duration.trim()) {
-      Alert.alert('Error', 'Please specify duration for ban/suspend action');
+      Alert.alert('Error', 'Please specify duration (in days) for ban/suspend action');
       return;
     }
 
-    try {
-      setLoading(true);
-      const elevation = await elevate(15); // Longer elevation for bulk actions
-
-      const result = await adminUserService.bulkUserAction({
-        userIds: selectedUserIds,
-        action: selectedAction,
-        reason: reason.trim(),
-        elevationToken: elevation.token,
-        duration: duration ? parseInt(duration) : undefined,
-      });
-
-      if (result.success) {
-        const successCount = result.results.filter(r => r.success).length;
-        const failCount = result.results.length - successCount;
-        
-        Alert.alert(
-          'Bulk Action Complete',
-          `Successfully processed ${successCount} users${failCount > 0 ? `, ${failCount} failed` : ''}`
-        );
-        
-        onActionComplete();
-        onClose();
-        resetForm();
-      } else {
-        Alert.alert('Error', 'Bulk action failed');
+    // Validate duration is a positive number
+    if ((selectedAction === 'ban' || selectedAction === 'suspend')) {
+      const durationNum = parseInt(duration);
+      if (isNaN(durationNum) || durationNum <= 0) {
+        Alert.alert('Error', 'Duration must be a valid number greater than 0');
+        return;
       }
-    } catch (error: any) {
-      Alert.alert('Error', error.message || 'Bulk action failed');
-    } finally {
-      setLoading(false);
     }
+
+    // Confirm bulk action before proceeding
+    const actionText = selectedAction === 'ban' ? 'ban' : 
+                      selectedAction === 'suspend' ? 'suspend' : 
+                      selectedAction === 'unban' ? 'unban' : 
+                      selectedAction === 'unsuspend' ? 'unsuspend' : selectedAction;
+    
+    Alert.alert(
+      'Confirm Bulk Action',
+      `Are you sure you want to ${actionText} ${selectedUserIds.length} user(s)?`,
+      [
+        { text: 'Cancel', style: 'cancel' },
+        { 
+          text: 'Confirm', 
+          style: 'destructive',
+          onPress: async () => {
+            try {
+              setLoading(true);
+              const elevationToken = await elevate(15); // Longer elevation for bulk actions
+
+              const result = await adminUserService.bulkUserAction({
+                userIds: selectedUserIds,
+                action: selectedAction,
+                reason: reason.trim(),
+                elevationToken,
+                duration: duration ? parseInt(duration) : undefined,
+              });
+
+              if (result.success) {
+                const successCount = result.results.filter((r: any) => r.success).length;
+                const failCount = result.results.length - successCount;
+                
+                Alert.alert(
+                  'Bulk Action Complete',
+                  `Successfully processed ${successCount} users${failCount > 0 ? `, ${failCount} failed` : ''}`
+                );
+                
+                onActionComplete();
+                onClose();
+                resetForm();
+              } else {
+                Alert.alert('Error', 'Bulk action failed');
+              }
+            } catch (error: any) {
+              Alert.alert('Error', error.message || 'Bulk action failed');
+            } finally {
+              setLoading(false);
+            }
+          }
+        }
+      ]
+    );
   };
 
   const resetForm = () => {

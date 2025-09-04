@@ -1,14 +1,11 @@
 
 import { safeAsync } from '@/utils/errorHandler';
+import { apiClient } from '@/utils/apiClient';
 
 class SavedDealService {
   async isDealSaved(dealId: string, userId: string) {
     try {
-      const response = await fetch(`http://localhost:3000/api/saved-deals/check?dealId=${dealId}&userId=${userId}`, {
-        credentials: 'include'
-      });
-      if (!response.ok) return false;
-      const data = await response.json();
+      const data = await apiClient.get(`/saved-deals/check?dealId=${dealId}&userId=${userId}`) as { saved: boolean };
       return data.saved;
     } catch (error) {
       console.error('Error checking saved status:', error);
@@ -18,24 +15,14 @@ class SavedDealService {
 
   saveDeal(dealId: string, userId: string) {
     return safeAsync(async () => {
-      const response = await fetch('http://localhost:3000/api/saved-deals', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ dealId, userId }),
-        credentials: 'include'
-      });
-      if (!response.ok) throw new Error('Failed to save deal');
+      await apiClient.post('/saved-deals', { dealId, userId });
       return { success: true };
     }, 'SavedDealService.saveDeal');
   }
 
   unsaveDeal(dealId: string, userId: string) {
     return safeAsync(async () => {
-      const response = await fetch(`http://localhost:3000/api/saved-deals?dealId=${dealId}&userId=${userId}`, {
-        method: 'DELETE',
-        credentials: 'include'
-      });
-      if (!response.ok) throw new Error('Failed to unsave deal');
+      await apiClient.delete(`/saved-deals?dealId=${dealId}&userId=${userId}`);
       return { success: true };
     }, 'SavedDealService.unsaveDeal');
   }

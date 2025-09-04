@@ -1,3 +1,6 @@
+import { apiClient } from '@/utils/apiClient';
+import { getApiUrl } from '@/utils/config';
+
 
 
 export interface UserActionRequest {
@@ -58,7 +61,7 @@ export interface UserStats {
 
 class AdminUserService {
   private async makeRequest(endpoint: string, data: any, elevationToken: string) {
-    const response = await fetch(`http://localhost:3000/api/admin/${endpoint}`, {
+    const response = await fetch(getApiUrl(`/admin/${endpoint}`), {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
@@ -88,7 +91,7 @@ class AdminUserService {
   }
 
   async getUserStats(userId: string): Promise<UserStats> {
-    const response = await fetch(`http://localhost:3000/api/admin/user-stats?user_id=${userId}`, {
+    const response = await fetch(getApiUrl(`/admin/user-stats?user_id=${userId}`), {
       method: 'GET',
       headers: { 'Content-Type': 'application/json' },
       credentials: 'include'

@@ -1,3 +1,5 @@
+import { apiClient } from '@/utils/apiClient';
+
 /**
  * AI-Powered URL Data Extraction Service
  * Intelligently extracts product information from various store URLs

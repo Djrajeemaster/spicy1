@@ -14,7 +14,7 @@ export default function TestAdminScreen() {
     }
 
     try {
-      const response = await fetch(`http://localhost:3000/api/users/${user.id}/role`, {
+      const response = await fetch(`' + (await import('@/utils/apiClient')).getApiUrl('/users/${user.id}/role`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         credentials: 'include',
@@ -39,7 +39,7 @@ export default function TestAdminScreen() {
     }
 
     try {
-      const response = await fetch(`http://localhost:3000/api/users/${user.id}/role`, {
+      const response = await fetch(`' + (await import('@/utils/apiClient')).getApiUrl('/users/${user.id}/role`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         credentials: 'include',
@@ -64,7 +64,7 @@ export default function TestAdminScreen() {
     }
 
     try {
-      const response = await fetch(`http://localhost:3000/api/users/${user.id}/role`, {
+      const response = await fetch(`' + (await import('@/utils/apiClient')).getApiUrl('/users/${user.id}/role`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         credentials: 'include',

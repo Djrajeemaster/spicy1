@@ -31,6 +31,26 @@ export default function AdminScreen() {
   const { profile, user, loading } = useAuth();
   const currentUserRole = profile?.role || 'guest';
 
+  // Call useAdminData hook at the top level before any conditional returns
+  const {
+    users,
+    categories,
+    banners,
+    pendingDeals,
+    systemSettings,
+    adminStats,
+    loading: adminLoading,
+    handleUserAction,
+    handleDealAction,
+    toggleCategory,
+    addNewCategory,
+    toggleBanner,
+    addNewBanner,
+    deleteBanner,
+    updateSetting,
+    refreshData,
+  } = useAdminData();
+
   // Redirect unauthenticated users to login
   React.useEffect(() => {
     if (!loading && !user) {
@@ -45,7 +65,7 @@ export default function AdminScreen() {
   // Restrict access to settings tab for non-superadmin
   if (activeTab === 'settings' && currentUserRole !== 'superadmin') {
     return (
-      <View style={styles.container}>
+      <View style={styles.sidebarLayout}>
         <AdminHeader currentUserRole={currentUserRole} />
         <View style={styles.contentSection}>
           <Text style={{ color: '#dc2626', fontWeight: 'bold', fontSize: 18 }}>Access Denied</Text>
@@ -54,26 +74,6 @@ export default function AdminScreen() {
       </View>
     );
   }
-
-  const {
-    users,
-    categories,
-    banners,
-    pendingDeals,
-    systemSettings,
-    adminStats,
-    loading: adminLoading,
-    handleUserAction,
-    handleDealAction,
-    handleDealDelete,
-    toggleCategory,
-    addNewCategory,
-    toggleBanner,
-    addNewBanner,
-    deleteBanner,
-    updateSetting,
-    refreshData,
-  } = useAdminData();
 
   // Refresh admin data when screen comes into focus - but only if data is stale
   const lastAdminLoadRef = useRef(0);

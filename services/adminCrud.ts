@@ -1,3 +1,6 @@
+import { apiClient } from '@/utils/apiClient';
+import { getApiUrl } from '@/utils/config';
+
 
 
 export interface CrudOptions {
@@ -31,7 +34,7 @@ class AdminCrudService {
       headers['x-admin-elevation'] = options.elevationToken;
     }
 
-    const response = await fetch(`http://localhost:3000/api/admin/crud?${params}`, {
+    const response = await fetch(getApiUrl(`/admin/crud?${params}`), {
       method: options.data ? 'POST' : 'GET',
       headers,
       credentials: 'include',

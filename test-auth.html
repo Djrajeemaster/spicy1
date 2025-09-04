@@ -37,7 +37,26 @@
     </div>
 
     <script>
-        const API_BASE = 'http://localhost:3000/api';
+        // Environment-aware API configuration
+        function getApiBase() {
+            const hostname = window.location.hostname;
+            const isLocal = hostname === 'localhost' || hostname === '127.0.0.1' || hostname.includes('localhost');
+            
+            if (isLocal) {
+                return 'http://localhost:3000/api';
+            }
+            
+            // VPS/Production: use relative URLs
+            return '/api';
+        }
+        
+        const API_BASE = getApiBase();
+        
+        console.log('🔧 Environment detected:', {
+            hostname: window.location.hostname,
+            apiBase: API_BASE,
+            isLocal: API_BASE.includes('localhost')
+        });
         
         function log(message, data = null) {
             const result = document.getElementById('result');

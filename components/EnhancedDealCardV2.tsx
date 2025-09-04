@@ -7,6 +7,7 @@ import { useCurrency } from '@/contexts/CurrencyProvider';
 import { formatTimeAgo } from '@/utils/time';
 import { router } from 'expo-router';
 import { canEditAnyDeal } from '@/utils/adminUtils';
+import { getShareUrl } from '@/utils/config';
 
 interface Deal {
   id: string;
@@ -69,7 +70,7 @@ export function EnhancedDealCardV2({ deal, isGuest, onVote, userRole, userId }: 
     try {
       await Share.share({
         message: `Check out this amazing deal: ${deal.title} for ${deal.price}`,
-        url: `https://spicybeats.com/deal/${deal.id}`,
+        url: getShareUrl(`/deal/${deal.id}`),
       });
     } catch (error) {
       console.error('Error sharing:', error);

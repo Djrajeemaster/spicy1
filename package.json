@@ -13,7 +13,21 @@
     "add-auth": "node scripts/addAuth.js",
     "migrate": "node scripts/migrate.js",
     "create-tables": "node scripts/run-missing-tables.js",
-    "health-check": "node scripts/health-check.js"
+    "health-check": "node scripts/health-check.js",
+    "test": "jest",
+    "test:watch": "jest --watch",
+    "test:coverage": "jest --coverage",
+    "test:coverage-report": "jest --coverage && start coverage/lcov-report/index.html",
+    "test:coverage-summary": "jest --coverage --coverageReporters=text-summary",
+    "test:simple": "jest tests/simple.test.js",
+    "test:api-simple": "jest tests/api-simple.test.js",
+    "test:deals": "jest tests/deals.test.js",
+    "test:admin": "jest tests/admin.test.js",
+    "test:notifications": "jest tests/notifications.test.js",
+    "test:system": "jest tests/system.test.js",
+    "test:performance": "jest tests/performance.test.js",
+    "test:all": "jest tests/simple.test.js tests/api-simple.test.js tests/deals.test.js tests/admin.test.js tests/notifications.test.js tests/system.test.js tests/performance.test.js",
+    "test:working": "jest tests/simple.test.js tests/api-simple.test.js tests/performance.test.js"
   },
   "dependencies": {
     "@expo/vector-icons": "^14.1.0",
@@ -70,10 +84,16 @@
   },
   "devDependencies": {
     "@babel/core": "^7.25.2",
+    "@testing-library/jest-native": "^5.4.3",
+    "@testing-library/react-native": "^12.9.0",
     "@types/react": "~19.0.10",
     "@types/react-native": "^0.72.8",
+    "babel-jest": "^29.7.0",
     "eslint": "^9.0.0",
     "eslint-config-expo": "~9.2.0",
+    "jest": "^29.7.0",
+    "jest-expo": "^51.0.4",
+    "supertest": "^7.1.4",
     "typescript": "~5.8.3"
   }
 }

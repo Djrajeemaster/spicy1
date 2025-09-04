@@ -1,6 +1,8 @@
 import React, { createContext, useContext, useEffect, useState, ReactNode } from 'react';
 // import types for session and user if needed from your backend response
 import { logger } from '@/utils/logger';
+import { apiClient } from '@/utils/apiClient';
+import { getApiUrl } from '@/utils/config';
 
 export interface AuthContextType {
   session: any | null;
@@ -24,7 +26,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
   // Helper function to fetch user profile
   const fetchUserProfile = async (userId: string) => {
     try {
-      const response = await fetch(`http://localhost:3000/api/users/${userId}`);
+      const response = await fetch(getApiUrl(`/users/${userId}`));
       if (!response.ok) {
         // If user profile doesn't exist, just return the basic user data
         return null;
@@ -48,7 +50,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
   const fetchSession = async () => {
     setLoading(true);
     try {
-      const response = await fetch('http://localhost:3000/api/auth/session', { 
+      const response = await fetch(getApiUrl('/auth/session'), { 
         credentials: 'include',
         headers: {
           'Content-Type': 'application/json'
@@ -93,7 +95,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
   const signIn = async (email: string, password: string): Promise<{ error: Error | null }> => {
     logger.authEvent('signin_attempt', undefined, { email });
     try {
-      const response = await fetch('http://localhost:3000/api/auth/signin', {
+      const response = await fetch(getApiUrl('/auth/signin'), {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ email, password }),
@@ -133,7 +135,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
   const signUp = async (email: string, password: string, metadata: any): Promise<{ error: Error | null }> => {
     logger.authEvent('signup_attempt', undefined, { email, username: metadata?.username });
     try {
-      const response = await fetch('http://localhost:3000/api/auth/signup', {
+      const response = await fetch(getApiUrl('/auth/signup'), {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ email, password, username: metadata?.username }),
@@ -157,7 +159,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
 
   const signOut = async () => {
     try {
-      await fetch('http://localhost:3000/api/auth/signout', {
+      await fetch(getApiUrl('/auth/signout'), {
         method: 'POST',
         credentials: 'include',
         headers: {

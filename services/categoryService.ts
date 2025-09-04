@@ -1,5 +1,6 @@
 
 import { Database } from '@/types/database';
+import { apiClient } from '@/utils/apiClient';
 
 type Category = Database['public']['Tables']['categories']['Row'];
 type CategoryInsert = Database['public']['Tables']['categories']['Insert'];
@@ -8,9 +9,7 @@ type CategoryUpdate = Database['public']['Tables']['categories']['Update'];
 class CategoryService {
   async getCategories(): Promise<{ data: Category[]; error: any }> {
     try {
-      const response = await fetch('http://localhost:3000/api/categories?is_active=true');
-      if (!response.ok) throw new Error('Failed to fetch categories');
-      const data = await response.json();
+      const data = await apiClient.get('/categories?is_active=true') as Category[];
       return { data: data || [], error: null };
     } catch (error) {
       console.error('Error fetching categories:', error);
@@ -20,9 +19,7 @@ class CategoryService {
 
   async getAllCategories(): Promise<{ data: Category[]; error: any }> {
     try {
-      const response = await fetch('http://localhost:3000/api/categories');
-      if (!response.ok) throw new Error('Failed to fetch all categories');
-      const data = await response.json();
+      const data = await apiClient.get('/categories') as Category[];
       return { data: data || [], error: null };
     } catch (error) {
       console.error('Error fetching all categories:', error);
@@ -32,9 +29,7 @@ class CategoryService {
 
   async getCategoryById(id: string): Promise<{ data: Category | null; error: any }> {
     try {
-      const response = await fetch(`http://localhost:3000/api/categories/${id}`);
-      if (!response.ok) throw new Error('Failed to fetch category');
-      const data = await response.json();
+      const data = await apiClient.get(`/categories/${id}`) as Category;
       return { data, error: null };
     } catch (error) {
       console.error('Error fetching category:', error);
@@ -44,13 +39,7 @@ class CategoryService {
 
   async createCategory(categoryData: CategoryInsert): Promise<{ data: Category | null; error: any }> {
     try {
-      const response = await fetch('http://localhost:3000/api/categories', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(categoryData),
-      });
-      if (!response.ok) throw new Error('Failed to create category');
-      const data = await response.json();
+      const data = await apiClient.post('/categories', categoryData) as Category;
       return { data, error: null };
     } catch (error) {
       console.error('Error creating category:', error);
@@ -60,13 +49,7 @@ class CategoryService {
 
   async updateCategory(id: string, updates: CategoryUpdate): Promise<{ data: Category | null; error: any }> {
     try {
-      const response = await fetch(`http://localhost:3000/api/categories/${id}`, {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(updates),
-      });
-      if (!response.ok) throw new Error('Failed to update category');
-      const data = await response.json();
+      const data = await apiClient.put(`/categories/${id}`, updates) as Category;
       return { data, error: null };
     } catch (error) {
       console.error('Error updating category:', error);
@@ -76,10 +59,7 @@ class CategoryService {
 
   async deleteCategory(id: string): Promise<{ error: any }> {
     try {
-      const response = await fetch(`http://localhost:3000/api/categories/${id}`, {
-        method: 'DELETE',
-      });
-      if (!response.ok) throw new Error('Failed to delete category');
+      await apiClient.delete(`/categories/${id}`);
       return { error: null };
     } catch (error) {
       console.error('Error deleting category:', error);

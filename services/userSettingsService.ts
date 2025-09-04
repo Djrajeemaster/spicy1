@@ -1,4 +1,5 @@
 import { Platform } from 'react-native';
+import { apiClient } from '@/utils/apiClient';
 
 // Types for user settings
 export interface NotificationPreferences {

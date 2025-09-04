@@ -88,12 +88,8 @@ export function usePushNotifications() {
         };
 
         // Store push token via backend API
-        await fetch('http://localhost:3000/api/push-tokens', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          credentials: 'include',
-          body: JSON.stringify(row)
-        });
+        const { apiClient } = await import('@/utils/apiClient');
+        await apiClient.post('/push-tokens', row);
       } catch (e) {
         console.error('Push init error:', e);
       }

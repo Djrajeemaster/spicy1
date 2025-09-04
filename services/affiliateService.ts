@@ -1,5 +1,6 @@
 
 import { Database } from '@/types/database';
+import { apiClient } from '@/utils/apiClient';
 
 type AffiliateSettings = Database['public']['Tables']['affiliate_settings']['Row'];
 type AffiliateSettingsInsert = Database['public']['Tables']['affiliate_settings']['Insert'];
@@ -23,15 +24,7 @@ class AffiliateService {
     search?: string;
   }) {
     try {
-      const response = await fetch('http://localhost:3000/api/affiliate-settings', {
-        credentials: 'include'
-      });
-      
-      if (!response.ok) {
-        throw new Error(`Failed to fetch affiliate settings: ${response.status}`);
-      }
-      
-      const data = await response.json();
+      const data = await apiClient.get('/affiliate-settings');
       return { data, error: null };
     } catch (error) {
       return { data: null, error };
@@ -102,15 +95,7 @@ class AffiliateService {
    */
   async getAffiliateStats(): Promise<{ data: AffiliateStats | null; error: any }> {
     try {
-      const response = await fetch('http://localhost:3000/api/affiliate-stats', {
-        credentials: 'include'
-      });
-      
-      if (!response.ok) {
-        throw new Error(`Failed to fetch affiliate stats: ${response.status}`);
-      }
-      
-      const settings = await response.json();
+      const settings = await apiClient.get('/affiliate-stats');
 
       const stats: AffiliateStats = {
         total_stores: 0,

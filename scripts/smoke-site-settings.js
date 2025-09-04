@@ -3,7 +3,10 @@ const fs = require('fs');
 const path = require('path');
 
 async function main() {
-  const url = 'http://localhost:3000/api/site/settings/dev-write';
+  // Use environment-aware URL
+  const isLocal = process.env.NODE_ENV !== 'production';
+  const baseUrl = isLocal ? 'http://localhost:3000' : '';
+  const url = `${baseUrl}/api/site/settings/dev-write`;
   const payload = {
     enable_push_notifications: false,
     maintenance_mode: true,

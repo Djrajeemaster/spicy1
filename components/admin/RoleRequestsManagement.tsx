@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Alert } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Shield, Check, X, Clock, User } from 'lucide-react-native';
+import { apiClient } from '@/utils/apiClient';
 
 interface RoleRequest {
   id: number;
@@ -24,7 +25,7 @@ export const RoleRequestsManagement: React.FC = () => {
 
   const fetchRoleRequests = async () => {
     try {
-      const response = await fetch('http://localhost:3000/api/role-requests');
+      const response = await apiClient.get('/role-requests');
       const data = await response.json();
       setRequests(Array.isArray(data) ? data : []);
     } catch (error) {
@@ -37,7 +38,7 @@ export const RoleRequestsManagement: React.FC = () => {
 
   const handleRequestAction = async (requestId: number, status: 'approved' | 'rejected') => {
     try {
-      const response = await fetch(`http://localhost:3000/api/role-requests/${requestId}`, {
+      const response = await fetch(`/api/role-requests/${requestId}`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ status, adminId: 'admin' })

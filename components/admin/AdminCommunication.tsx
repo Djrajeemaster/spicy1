@@ -3,6 +3,7 @@ import { View, Text, StyleSheet, FlatList, TouchableOpacity, TextInput, Alert, M
 import { Send, MessageSquare, Users, Bell, BellOff, Filter, Trash2 } from 'lucide-react-native';
 import { elevate } from '../../services/adminElevation';
 import { useAuth } from '../../contexts/AuthProvider';
+import { apiClient } from '@/utils/apiClient';
 
 interface Announcement {
   id: string;
@@ -37,7 +38,7 @@ export default function AdminCommunication() {
     try {
       setLoading(true);
       // Load announcements from backend API
-      const res = await fetch('http://localhost:3000/api/announcements');
+      const res = await apiClient.get('/announcements');
       if (!res.ok) throw new Error('Failed to fetch announcements');
       const announcements = await res.json();
       const formattedAnnouncements: Announcement[] = announcements?.map((ann: any) => ({

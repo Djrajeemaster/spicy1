@@ -44,8 +44,8 @@ const RADIUS_OPTIONS = [1, 5, 10, 25];
 // Replace service calls with backend API fetch
 const fetchDealsFromApi = async () => {
   try {
-    const response = await fetch('http://localhost:3000/api/deals');
-    const data = await response.json();
+    const { apiClient } = await import('@/utils/apiClient');
+    const data = await apiClient.get('/deals');
     // Ensure data is always an array
     return Array.isArray(data) ? data : [];
   } catch (error) {

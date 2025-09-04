@@ -1,3 +1,5 @@
+import { apiClient } from '@/utils/apiClient';
+
 
 
 export interface DashboardStats {
@@ -30,9 +32,7 @@ export interface SystemAlert {
 class AdminDashboardService {
   async getDashboardStats(): Promise<DashboardStats> {
     try {
-      const response = await fetch('http://localhost:3000/api/admin/dashboard-stats', {
-        credentials: 'include'
-      });
+      const response = await apiClient.get('/admin/dashboard-stats');
       if (!response.ok) throw new Error('Failed to fetch dashboard stats');
       return await response.json();
     } catch (error) {
@@ -43,9 +43,7 @@ class AdminDashboardService {
 
   private async getRecentActivities(): Promise<RecentActivity[]> {
     try {
-      const response = await fetch('http://localhost:3000/api/admin/recent-activities', {
-        credentials: 'include'
-      });
+      const response = await apiClient.get('/admin/recent-activities'));
       if (!response.ok) return [];
       return await response.json();
     } catch (error) {
@@ -56,9 +54,7 @@ class AdminDashboardService {
 
   private async getSystemAlerts(): Promise<SystemAlert[]> {
     try {
-      const response = await fetch('http://localhost:3000/api/admin/system-alerts', {
-        credentials: 'include'
-      });
+      const response = await apiClient.get('/admin/system-alerts'));
       if (!response.ok) return [];
       return await response.json();
     } catch (error) {
@@ -74,9 +70,7 @@ class AdminDashboardService {
     error_rate: number;
   }> {
     try {
-      const response = await fetch('http://localhost:3000/api/admin/quick-stats', {
-        credentials: 'include'
-      });
+      const response = await apiClient.get('/admin/quick-stats'));
       if (!response.ok) throw new Error('Failed to fetch quick stats');
       return await response.json();
     } catch (error) {
@@ -93,11 +87,8 @@ class AdminDashboardService {
     comment_count: number;
   }>> {
     try {
-      const response = await fetch(`http://localhost:3000/api/admin/top-users?limit=${limit}`, {
-        credentials: 'include'
-      });
-      if (!response.ok) return [];
-      return await response.json();
+      const data = await apiClient.get(`/admin/top-users?limit=${limit}`);
+      return data as any[];
     } catch (error) {
       console.error('Error fetching top users:', error);
       return [];
@@ -111,9 +102,7 @@ class AdminDashboardService {
     cache: 'healthy' | 'degraded' | 'down';
   }> {
     try {
-      const response = await fetch('http://localhost:3000/api/admin/system-health', {
-        credentials: 'include'
-      });
+      const response = await apiClient.get('/admin/system-health'));
       if (!response.ok) throw new Error('Failed to check system health');
       return await response.json();
     } catch (error) {

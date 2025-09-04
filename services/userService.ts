@@ -1,5 +1,6 @@
 
 import { Database } from '@/types/database';
+import { apiClient } from '@/utils/apiClient';
 
 type UserProfile = Database['public']['Tables']['users']['Row'];
 
@@ -16,15 +17,7 @@ export interface PublicUserProfile {
 class UserService {
   async getAllUsers(): Promise<{ data: UserProfile[]; error: any }> {
     try {
-      const response = await fetch('http://localhost:3000/api/users', {
-        credentials: 'include'
-      });
-      
-      if (!response.ok) {
-        throw new Error(`HTTP error! status: ${response.status}`);
-      }
-      
-      const data = await response.json();
+      const data = await apiClient.get<UserProfile[]>('/users');
       return { data: data || [], error: null };
     } catch (error) {
       console.error('Error fetching all users:', error);
@@ -34,18 +27,7 @@ class UserService {
 
   async updateUserStatus(userId: string, status: string, adminId: string): Promise<{ data: any | null; error: any }> {
     try {
-      const response = await fetch(`http://localhost:3000/api/users/${userId}/status`, {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ status, adminId }),
-        credentials: 'include'
-      });
-      
-      if (!response.ok) {
-        throw new Error(`HTTP error! status: ${response.status}`);
-      }
-      
-      const data = await response.json();
+      const data = await apiClient.put(`/users/${userId}/status`, { status, adminId });
       return { data, error: null };
     } catch (error) {
       console.error('Error updating user status:', error);
@@ -57,15 +39,10 @@ class UserService {
     if (!prefix) return { data: [] as UserProfile[], error: null };
     
     try {
-      const response = await fetch(`http://localhost:3000/api/users/search?prefix=${encodeURIComponent(prefix)}&limit=${limit}`, {
-        credentials: 'include'
+      const data = await apiClient.get<UserProfile[]>('/users/search', { 
+        prefix, 
+        limit 
       });
-      
-      if (!response.ok) {
-        throw new Error(`HTTP error! status: ${response.status}`);
-      }
-      
-      const data = await response.json();
       return { data: (data || []) as UserProfile[], error: null };
     } catch (error) {
       return { data: [] as UserProfile[], error };
@@ -74,18 +51,7 @@ class UserService {
 
   async getUserByUsername(username: string): Promise<[any, PublicUserProfile | null]> {
     try {
-      const response = await fetch(`http://localhost:3000/api/users/username/${encodeURIComponent(username)}`, {
-        credentials: 'include'
-      });
-      
-      if (!response.ok) {
-        if (response.status === 404) {
-          return [null, null];
-        }
-        throw new Error(`HTTP error! status: ${response.status}`);
-      }
-      
-      const userData = await response.json();
+      const userData = await apiClient.get<any>(`/users/username/${encodeURIComponent(username)}`);
       
       const publicProfile: PublicUserProfile = {
         id: userData.id,
@@ -99,6 +65,9 @@ class UserService {
       
       return [null, publicProfile];
     } catch (error) {
+      if (error instanceof Error && error.message.includes('404')) {
+        return [null, null];
+      }
       console.error('Error fetching user by username:', error);
       return [error, null];
     }

@@ -1,3 +1,6 @@
+import { apiClient } from '@/utils/apiClient';
+import { getApiUrl } from '@/utils/config';
+
 
 
 export interface Announcement {
@@ -26,9 +29,7 @@ interface SendAnnouncementRequest {
 class AdminCommunicationService {
   async getAnnouncements(): Promise<Announcement[]> {
     try {
-      const response = await fetch('http://localhost:3000/api/announcements', {
-        credentials: 'include'
-      });
+      const response = await apiClient.get('/announcements');
       if (!response.ok) throw new Error('Failed to fetch announcements');
       return await response.json();
     } catch (error) {
@@ -39,7 +40,7 @@ class AdminCommunicationService {
 
   async sendAnnouncement(request: SendAnnouncementRequest): Promise<void> {
     try {
-      const response = await fetch('http://localhost:3000/api/admin/send-announcement', {
+      const response = await fetch(getApiUrl('/admin/send-announcement'), {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -73,9 +74,7 @@ class AdminCommunicationService {
     by_type: Record<string, number>;
   }> {
     try {
-      const response = await fetch('http://localhost:3000/api/admin/announcement-stats', {
-        credentials: 'include'
-      });
+      const response = await apiClient.get('/admin/announcement-stats'));
       if (!response.ok) throw new Error('Failed to fetch announcement stats');
       return await response.json();
     } catch (error) {
@@ -126,9 +125,7 @@ class AdminCommunicationService {
     created_at: string;
   }>> {
     try {
-      const response = await fetch('http://localhost:3000/api/admin/system-notifications', {
-        credentials: 'include'
-      });
+      const response = await apiClient.get('/admin/system-notifications'));
       if (!response.ok) return [];
       return await response.json();
     } catch (error) {

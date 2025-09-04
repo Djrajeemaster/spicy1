@@ -3,6 +3,7 @@ import { View, Text, StyleSheet, TouchableOpacity, TextInput, Alert, ScrollView 
 import { LinearGradient } from 'expo-linear-gradient';
 import { Shield, Send, X } from 'lucide-react-native';
 import { useAuth } from '@/contexts/AuthProvider';
+import { apiClient } from '@/utils/apiClient';
 
 interface RoleRequestFormProps {
   visible: boolean;
@@ -24,7 +25,7 @@ export default function RoleRequestForm({ visible, onClose }: RoleRequestFormPro
 
   const fetchAvailableRoles = async () => {
     try {
-      const response = await fetch('http://localhost:3000/api/role-requests/available-roles');
+      const response = await apiClient.get('/role-requests/available-roles') as Response;
       const roles = await response.json();
       setAvailableRoles(roles);
     } catch (error) {
@@ -40,15 +41,11 @@ export default function RoleRequestForm({ visible, onClose }: RoleRequestFormPro
 
     setLoading(true);
     try {
-      const response = await fetch('http://localhost:3000/api/role-requests', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          userId: user?.id,
-          role: selectedRole,
-          reason: reason.trim()
-        })
-      });
+      const response = await apiClient.post('/role-requests', {
+        userId: user?.id,
+        role: selectedRole,
+        reason: reason.trim()
+      }) as Response;
 
       const data = await response.json();
 

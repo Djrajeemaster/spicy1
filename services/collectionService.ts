@@ -1,3 +1,5 @@
+import { apiClient } from '@/utils/apiClient';
+
 
 
 export interface DealCollection {
@@ -22,11 +24,7 @@ export interface CollectionDeal {
 class CollectionService {
   async getUserCollections(userId: string) {
     try {
-      const response = await fetch(`http://localhost:3000/api/collections?userId=${userId}`, {
-        credentials: 'include'
-      });
-      if (!response.ok) throw new Error('Failed to fetch collections');
-      const data = await response.json();
+      const data = await apiClient.get(`/collections?userId=${userId}`);
       return { data, error: null };
     } catch (error) {
       return { data: null, error };
@@ -35,14 +33,7 @@ class CollectionService {
 
   async createCollection(userId: string, name: string, description?: string, isPublic = false) {
     try {
-      const response = await fetch('http://localhost:3000/api/collections', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ name, description, userId, isPublic }),
-        credentials: 'include'
-      });
-      if (!response.ok) throw new Error('Failed to create collection');
-      const data = await response.json();
+      const data = await apiClient.post('/collections', { name, description, userId, isPublic });
       return { data, error: null };
     } catch (error) {
       return { data: null, error };
@@ -51,14 +42,7 @@ class CollectionService {
 
   async addDealToCollection(collectionId: string, dealId: string) {
     try {
-      const response = await fetch(`http://localhost:3000/api/collections/${collectionId}/deals`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ dealId }),
-        credentials: 'include'
-      });
-      if (!response.ok) throw new Error('Failed to add deal to collection');
-      const data = await response.json();
+      const data = await apiClient.post(`/collections/${collectionId}/deals`, { dealId });
       return { data, error: null };
     } catch (error) {
       return { data: null, error };
@@ -67,11 +51,7 @@ class CollectionService {
 
   async removeDealFromCollection(collectionId: string, dealId: string) {
     try {
-      const response = await fetch(`http://localhost:3000/api/collections/${collectionId}/deals/${dealId}`, {
-        method: 'DELETE',
-        credentials: 'include'
-      });
-      if (!response.ok) throw new Error('Failed to remove deal from collection');
+      await apiClient.delete(`/collections/${collectionId}/deals/${dealId}`);
       return { error: null };
     } catch (error) {
       return { error };
@@ -80,11 +60,7 @@ class CollectionService {
 
   async getCollectionDeals(collectionId: string) {
     try {
-      const response = await fetch(`http://localhost:3000/api/collections/${collectionId}/deals`, {
-        credentials: 'include'
-      });
-      if (!response.ok) throw new Error('Failed to fetch collection deals');
-      const data = await response.json();
+      const data = await apiClient.get(`/collections/${collectionId}/deals`);
       return { data, error: null };
     } catch (error) {
       return { data: null, error };
@@ -93,11 +69,7 @@ class CollectionService {
 
   async deleteCollection(collectionId: string, userId: string) {
     try {
-      const response = await fetch(`http://localhost:3000/api/collections/${collectionId}?userId=${userId}`, {
-        method: 'DELETE',
-        credentials: 'include'
-      });
-      if (!response.ok) throw new Error('Failed to delete collection');
+      await apiClient.delete(`/collections/${collectionId}?userId=${userId}`);
       return { error: null };
     } catch (error) {
       return { error };

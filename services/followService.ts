@@ -1,6 +1,7 @@
 
 import { Database } from '@/types/database';
 import { safeAsync } from '@/utils/errorHandler';
+import { apiClient } from '@/utils/apiClient';
 
 type Deal = Database['public']['Tables']['deals']['Row'];
 type Store = Database['public']['Tables']['stores']['Row'];
@@ -16,13 +17,7 @@ class FollowService {
   /** Follow a user */
   followUser(targetUserId: string) {
     return safeAsync(async () => {
-      const response = await fetch('http://localhost:3000/api/follows/user', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ targetUserId }),
-        credentials: 'include'
-      });
-      if (!response.ok) throw new Error('Failed to follow user');
+      await apiClient.post('/follows/user', { targetUserId });
       return { success: true };
     }, 'FollowService.followUser');
   }
@@ -30,11 +25,7 @@ class FollowService {
   /** Unfollow a user */
   unfollowUser(targetUserId: string) {
     return safeAsync(async () => {
-      const response = await fetch(`http://localhost:3000/api/follows/user/${targetUserId}`, {
-        method: 'DELETE',
-        credentials: 'include'
-      });
-      if (!response.ok) throw new Error('Failed to unfollow user');
+      await apiClient.delete(`/follows/user/${targetUserId}`);
       return { success: true };
     }, 'FollowService.unfollowUser');
   }
@@ -42,13 +33,7 @@ class FollowService {
   /** Follow a store */
   followStore(storeId: string) {
     return safeAsync(async () => {
-      const response = await fetch('http://localhost:3000/api/follows/store', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ storeId }),
-        credentials: 'include'
-      });
-      if (!response.ok) throw new Error('Failed to follow store');
+      await apiClient.post('/follows/store', { storeId });
       return { success: true };
     }, 'FollowService.followStore');
   }
@@ -56,11 +41,7 @@ class FollowService {
   /** Unfollow a store */
   unfollowStore(storeId: string) {
     return safeAsync(async () => {
-      const response = await fetch(`http://localhost:3000/api/follows/store/${storeId}`, {
-        method: 'DELETE',
-        credentials: 'include'
-      });
-      if (!response.ok) throw new Error('Failed to unfollow store');
+      await apiClient.delete(`/follows/store/${storeId}`);
       return { success: true };
     }, 'FollowService.unfollowStore');
   }
@@ -68,11 +49,7 @@ class FollowService {
   /** Check if current user follows the given user */
   async isFollowingUser(targetUserId: string) {
     return safeAsync(async () => {
-      const response = await fetch(`http://localhost:3000/api/follows/user/${targetUserId}/check`, {
-        credentials: 'include'
-      });
-      if (!response.ok) return false;
-      const data = await response.json();
+      const data = await apiClient.get(`/follows/user/${targetUserId}/check`) as { following: boolean };
       return data.following;
     }, 'FollowService.isFollowingUser');
   }
@@ -80,11 +57,7 @@ class FollowService {
   /** Check if current user follows the given store */
   async isFollowingStore(storeId: string) {
     return safeAsync(async () => {
-      const response = await fetch(`http://localhost:3000/api/follows/store/${storeId}/check`, {
-        credentials: 'include'
-      });
-      if (!response.ok) return false;
-      const data = await response.json();
+      const data = await apiClient.get(`/follows/store/${storeId}/check`) as { following: boolean };
       return data.following;
     }, 'FollowService.isFollowingStore');
   }
@@ -92,22 +65,16 @@ class FollowService {
   /** Get simple follow counts for a user profile */
   getCounts(userId: string) {
     return safeAsync(async () => {
-      const response = await fetch(`http://localhost:3000/api/follows/counts/${userId}`, {
-        credentials: 'include'
-      });
-      if (!response.ok) return { followers: 0, following_users: 0, following_stores: 0 };
-      return await response.json();
+      const data = await apiClient.get(`/follows/counts/${userId}`) as FollowCounts;
+      return data;
     }, 'FollowService.getCounts');
   }
 
   /** Feed: deals from followed users or followed stores */
   getFollowingFeed(limit = 20, offset = 0) {
     return safeAsync(async () => {
-      const response = await fetch(`http://localhost:3000/api/follows/feed?limit=${limit}&offset=${offset}`, {
-        credentials: 'include'
-      });
-      if (!response.ok) return [];
-      return await response.json();
+      const data = await apiClient.get(`/follows/feed?limit=${limit}&offset=${offset}`) as Deal[];
+      return data;
     }, 'FollowService.getFollowingFeed');
   }
 }

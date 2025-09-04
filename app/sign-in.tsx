@@ -8,24 +8,41 @@ import {
   ActivityIndicator,
   Platform,
   Alert,
+  Image,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { router } from 'expo-router';
 import { LinearGradient } from 'expo-linear-gradient';
 import { AtSign, Lock, LogIn, Sparkles } from 'lucide-react-native';
 import { useAuth } from '@/contexts/AuthProvider';
+import { useSiteSettings } from '@/hooks/useSiteSettings';
 
 export default function SignInScreen() {
-  const { signIn } = useAuth();
+  const { signIn, user, loading: authLoading } = useAuth();
+  const { settings, logoUrl } = useSiteSettings();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  const [isDesktopWeb, setIsDesktopWeb] = useState(
-    Platform.OS === 'web' && typeof window !== 'undefined' && window.innerWidth >= 768
-  );
+  const [isDesktopWeb, setIsDesktopWeb] = useState(false);
 
+  // Redirect if user is already logged in
+  useEffect(() => {
+    if (!authLoading && user) {
+      console.log('User already logged in, redirecting to home');
+      router.replace('/(tabs)');
+    }
+  }, [authLoading, user]);
+
+  // Initialize desktop detection for web
+  useEffect(() => {
+    if (Platform.OS === 'web' && typeof window !== 'undefined') {
+      setIsDesktopWeb(window.innerWidth >= 768);
+    }
+  }, []);
+
+  // Handle window resize for web
   useEffect(() => {
     if (Platform.OS !== 'web') return;
     const handleResize = () => {
@@ -34,6 +51,18 @@ export default function SignInScreen() {
     window.addEventListener('resize', handleResize);
     return () => window.removeEventListener('resize', handleResize);
   }, []);
+
+  // If still checking auth or user is logged in, show loading
+  if (authLoading || user) {
+    return (
+      <View style={[styles.container, { justifyContent: 'center', alignItems: 'center' }]}>
+        <ActivityIndicator size="large" color="#6366f1" />
+        <Text style={styles.loadingText}>
+          {user ? 'Redirecting...' : 'Checking authentication...'}
+        </Text>
+      </View>
+    );
+  }
 
   const handleSignIn = async () => {
     if (loading) return;
@@ -60,9 +89,19 @@ export default function SignInScreen() {
         {isDesktopWeb && (
           <LinearGradient colors={['#030849', '#1e40af']} style={styles.desktopBrandingPanel}>
             <View style={styles.brandingContent}>
-              <Sparkles size={48} color="#fbbf24" />
-              <Text style={styles.desktopAppName}>SaversDream</Text>
-              <Text style={styles.desktopTagline}>Discover, Share, and Save on the Hottest Deals.</Text>
+              {logoUrl ? (
+                <Image 
+                  source={{ uri: logoUrl }} 
+                  style={styles.brandingLogo}
+                  resizeMode="contain"
+                />
+              ) : (
+                <Sparkles size={48} color={settings.headerTextColor} />
+              )}
+              <Text style={[styles.desktopAppName, { color: settings.headerTextColor }]}>
+                {settings.appName}
+              </Text>
+              <Text style={styles.desktopTagline}>{settings.tagline}</Text>
             </View>
           </LinearGradient>
         )}
@@ -71,9 +110,25 @@ export default function SignInScreen() {
           {!isDesktopWeb && <LinearGradient colors={['#030849', '#1e40af']} style={StyleSheet.absoluteFill} />}
           
           <View style={isDesktopWeb ? styles.desktopCard : styles.formContainer}>
+            {!isDesktopWeb && (
+              <View style={styles.mobileBranding}>
+                {logoUrl ? (
+                  <Image 
+                    source={{ uri: logoUrl }} 
+                    style={styles.mobileLogo}
+                    resizeMode="contain"
+                  />
+                ) : (
+                  <Sparkles size={32} color={settings.headerTextColor} />
+                )}
+                <Text style={[styles.mobileAppName, { color: settings.headerTextColor }]}>
+                  {settings.appName}
+                </Text>
+              </View>
+            )}
             <Text style={isDesktopWeb ? styles.desktopTitle : styles.title}>Welcome Back</Text>
             <Text style={isDesktopWeb ? styles.desktopSubtitle : styles.subtitle}>
-              Sign in to your SaversDream account
+              Sign in to your {settings.appName} account
             </Text>
 
             {error && <Text style={styles.errorText}>{error}</Text>}
@@ -143,6 +198,20 @@ const styles = StyleSheet.create({
   formContainer: { paddingHorizontal: 24 },
   
   // --- Mobile Styles ---
+  mobileBranding: {
+    alignItems: 'center',
+    marginBottom: 24,
+  },
+  mobileLogo: {
+    width: 48,
+    height: 48,
+    marginBottom: 8,
+  },
+  mobileAppName: {
+    fontSize: 24,
+    fontWeight: 'bold',
+    textAlign: 'center',
+  },
   title: { fontSize: 32, fontWeight: 'bold', color: '#FFFFFF', textAlign: 'center', marginBottom: 8, letterSpacing: -0.5 },
   subtitle: { fontSize: 16, color: '#e2e8f0', textAlign: 'center', marginBottom: 32, fontWeight: '500' },
   inputGroup: {
@@ -153,7 +222,6 @@ const styles = StyleSheet.create({
     marginBottom: 16,
     paddingHorizontal: 16,
   },
-  icon: { marginRight: 12 },
   input: {
     flex: 1,
     height: 50,
@@ -172,16 +240,18 @@ const styles = StyleSheet.create({
     padding: 48,
   },
   brandingContent: { alignItems: 'center' },
+  brandingLogo: {
+    width: 64,
+    height: 64,
+    marginBottom: 8,
+  },
   desktopAppName: {
     fontSize: 48,
     fontWeight: '900',
     letterSpacing: -1,
     textAlign: 'center',
     marginTop: 16,
-    backgroundImage: 'linear-gradient(90deg, #0A2540 0%, #00C2A8 100%)',
-    WebkitBackgroundClip: 'text',
-    WebkitTextFillColor: 'transparent',
-    backgroundClip: 'text',
+    color: '#fbbf24',
   },
   desktopTagline: { fontSize: 18, color: 'rgba(255,255,255,0.8)', marginTop: 8, textAlign: 'center', maxWidth: 300 },
   desktopFormPanel: {
@@ -220,6 +290,7 @@ const styles = StyleSheet.create({
 
   // --- Common Styles ---
   errorText: { color: '#ef4444', textAlign: 'center', marginBottom: 16, fontWeight: '600' },
+  loadingText: { color: '#64748b', textAlign: 'center', marginTop: 16, fontSize: 16 },
   icon: { marginRight: 12 },
   actionsRow: {
     flexDirection: 'row',

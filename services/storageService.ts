@@ -1,6 +1,7 @@
 
 import { decode } from 'base64-arraybuffer';
 import { v4 as uuidv4 } from 'uuid';
+import { apiClient } from '@/utils/apiClient';
 
 export interface UploadResult {
   url: string;

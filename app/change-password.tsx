@@ -76,31 +76,21 @@ export default function ChangePasswordScreen() {
 
     setLoading(true);
     try {
-      const response = await fetch('http://localhost:3000/api/auth/change-password', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        credentials: 'include',
-        body: JSON.stringify({
-          currentPassword,
-          newPassword
-        })
+      const { apiClient } = await import('@/utils/apiClient');
+      const data = await apiClient.post<{ error?: string; message?: string }>('/auth/change-password', {
+        currentPassword,
+        newPassword
       });
 
-      const data = await response.json();
-
-      if (!response.ok) {
-        Alert.alert('Error', data.error || 'Failed to update password');
-      } else {
-        setSuccessBanner(true);
-        setTimeout(() => {
-          setSuccessBanner(false);
-          router.back();
-        }, 2000);
-      }
-    } catch (error) {
+      setSuccessBanner(true);
+      setTimeout(() => {
+        setSuccessBanner(false);
+        router.back();
+      }, 2000);
+    } catch (error: any) {
       setSuccessBanner(false);
       console.error('Error changing password:', error);
-      Alert.alert('Error', 'An unexpected error occurred. Please try again.');
+      Alert.alert('Error', error.message || 'An unexpected error occurred. Please try again.');
     } finally {
       setLoading(false);
     }

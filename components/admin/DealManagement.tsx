@@ -4,6 +4,7 @@ import { useFocusEffect } from '@react-navigation/native';
 import { AdminDeal } from '@/hooks/useAdminData';
 import { CircleCheck as CheckCircle, Circle as XCircle, Flag, Edit2, Trash2, Square, CheckSquare } from 'lucide-react-native';
 import { router } from 'expo-router';
+import { apiClient } from '@/utils/apiClient';
 
 interface DealManagementProps {
   deals: AdminDeal[];
@@ -100,9 +101,9 @@ export const DealManagement: React.FC<DealManagementProps> = ({ deals, onDealAct
     try {
       // Fetch deals with different statuses
       const [liveResponse, draftResponse, expiredResponse] = await Promise.all([
-        fetch('http://localhost:3000/api/deals', { credentials: 'include' }),
-        fetch('http://localhost:3000/api/deals?status=draft', { credentials: 'include' }),
-        fetch('http://localhost:3000/api/deals?status=expired', { credentials: 'include' })
+        apiClient.get('/deals'),
+        apiClient.get('/deals?status=draft'),
+        apiClient.get('/deals?status=expired')
       ]);
       
       const [liveDeals, draftDeals, expiredDeals] = await Promise.all([

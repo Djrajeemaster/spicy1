@@ -1,6 +1,7 @@
 
 import { Database } from '@/types/database';
 import { safeAsync } from '@/utils/errorHandler';
+import { apiClient } from '@/utils/apiClient';
 
 // Define the CommentNode type that the UI components expect
 export type CommentWithUser = Database['public']['Tables']['comments']['Row'] & {
@@ -17,10 +18,8 @@ class CommentService {
    */
   getComments(dealId: string) {
     return safeAsync(async () => {
-      const response = await fetch(`http://localhost:3000/api/deals/${dealId}/comments`);
-      if (!response.ok) throw new Error('Failed to fetch comments');
-      const data = await response.json();
-      return this.buildCommentTree((data as CommentWithUser[]) || []);
+      const data = await apiClient.get(`/deals/${dealId}/comments`) as CommentWithUser[];
+      return this.buildCommentTree((data) || []);
     }, 'CommentService.getComments');
   }
 
@@ -29,14 +28,8 @@ class CommentService {
    */
   addComment(dealId: string, userId: string, content: string, parentId?: string | null) {
     return safeAsync(async () => {
-      const response = await fetch(`http://localhost:3000/api/deals/${dealId}/comments`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ userId, content, parentId }),
-        credentials: 'include'
-      });
-      if (!response.ok) throw new Error('Failed to add comment');
-      return await response.json();
+      const data = await apiClient.post(`/deals/${dealId}/comments`, { userId, content, parentId });
+      return data;
     }, 'CommentService.addComment');
   }
 
@@ -45,13 +38,7 @@ class CommentService {
    */
   flagComment(commentId: string, userId: string, reason?: string) {
     return safeAsync(async () => {
-      const response = await fetch(`http://localhost:3000/api/comments/${commentId}/flag`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ userId, reason }),
-        credentials: 'include'
-      });
-      if (!response.ok) throw new Error('Failed to flag comment');
+      await apiClient.post(`/comments/${commentId}/flag`, { userId, reason });
       return { success: true };
     }, 'CommentService.flagComment');
   }

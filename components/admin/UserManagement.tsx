@@ -202,19 +202,20 @@ export const UserManagement: React.FC<UserManagementProps> = ({ onAddUser }) => 
 
   const handleUserAction = async (userId: string, action: 'Ban' | 'Unban') => {
     try {
-      const elevation = await elevate(10);
+      const elevationToken = await elevate(10);
       
       if (action === 'Ban') {
         await adminUserService.banUser({
           userId,
-          elevationToken: elevation.token,
+          elevationToken,
+          reason: 'Quick ban from admin panel',
           banReason: 'Quick ban from admin panel',
         });
         Alert.alert('Success', 'User has been banned');
       } else {
         await adminUserService.unbanUser({
           userId,
-          elevationToken: elevation.token,
+          elevationToken,
           reason: 'Unbanned from admin panel',
         });
         Alert.alert('Success', 'User has been unbanned');

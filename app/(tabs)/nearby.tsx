@@ -18,11 +18,13 @@ import { Header } from '@/components/Header';
 import { DealCard } from '@/components/DealCard';
 import { router } from 'expo-router';
 import { useAuth } from '@/contexts/AuthProvider';
+import { useSiteSettings } from '@/hooks/useSiteSettings';
 import { dealService } from '@/services/dealService';
 import { locationService } from '@/services/locationService';
 
 export default function NearbyScreen() {
   const { user, profile } = useAuth();
+  const { settings } = useSiteSettings();
   const isGuest = !user;
   const { width } = useWindowDimensions();
   const isDesktop = Platform.OS === 'web' && width >= 768;
@@ -115,7 +117,7 @@ export default function NearbyScreen() {
     if (!locationEnabled) {
       Alert.alert(
         "Enable Location",
-        "Allow SaversDream to access your location to show nearby deals?",
+        `Allow ${settings?.appName || 'SaversDream'} to access your location to show nearby deals?`,
         [
           { text: "Not Now", style: "cancel" },
           { 
@@ -147,7 +149,7 @@ export default function NearbyScreen() {
   const handleVote = (dealId: any, voteType: any) => {
     if (isGuest) {
       Alert.alert(
-        "Join SaversDream",
+        `Join ${settings?.appName || 'SaversDream'}`,
         "Sign in to vote on nearby deals!",
         [
           { text: "Maybe Later", style: "cancel" },

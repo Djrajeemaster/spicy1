@@ -2,6 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { View, Text, StyleSheet, FlatList, TouchableOpacity, Alert, Image } from 'react-native';
 import { CheckCircle, XCircle, Eye, Flag, MessageSquare, Calendar, User } from 'lucide-react-native';
 import { elevate } from '../../services/adminElevation';
+import { apiClient } from '@/utils/apiClient';
 
 interface ModerationItem {
   id: string;
@@ -35,7 +36,7 @@ export default function AdminModeration() {
 
       // Load deals that need moderation (pending, reported, or flagged)
       if (filter === 'all' || filter === 'deals') {
-        const dealsRes = await fetch('http://localhost:3000/api/deals?moderation=true');
+        const dealsRes = await apiClient.get('/deals?moderation=true');
         if (!dealsRes.ok) throw new Error('Failed to fetch deals for moderation');
         const deals = await dealsRes.json();
         const dealItems: ModerationItem[] = deals?.map((deal: any) => ({
@@ -60,7 +61,7 @@ export default function AdminModeration() {
 
       // Load user reports (if available)
       if (filter === 'all' || filter === 'reports') {
-        const reportsRes = await fetch('http://localhost:3000/api/user_reports?status=pending');
+        const reportsRes = await apiClient.get('/user_reports?status=pending');
         if (reportsRes.ok) {
           const reports = await reportsRes.json();
           const reportItems: ModerationItem[] = reports.map((report: any) => ({

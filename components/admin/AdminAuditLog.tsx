@@ -2,6 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { View, Text, StyleSheet, FlatList, TouchableOpacity, TextInput, Alert } from 'react-native';
 import { Search, Activity, Shield, Eye, Trash2, User } from 'lucide-react-native';
 import { useAuth } from '../../contexts/AuthProvider';
+import { apiClient } from '@/utils/apiClient';
 
 interface AuditLog {
   id: string;
@@ -28,7 +29,7 @@ export default function AdminAuditLog() {
       let activities: AuditLog[] = [];
       // Load real audit logs from backend
       try {
-        const res = await fetch('http://localhost:3000/api/audit_logs');
+        const res = await apiClient.get('/audit_logs');
         if (res.ok) {
           const realAuditLogs = await res.json();
           realAuditLogs.forEach((log: any) => {
@@ -50,7 +51,7 @@ export default function AdminAuditLog() {
       }
       // Track deal moderation activities
       try {
-        const res = await fetch('http://localhost:3000/api/deals?status!=active');
+        const res = await apiClient.get('/deals?status!=active');
         if (res.ok) {
           const dealUpdates = await res.json();
           dealUpdates.forEach((deal: any) => {

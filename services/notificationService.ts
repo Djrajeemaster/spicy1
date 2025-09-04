@@ -1,3 +1,5 @@
+import { apiClient } from '@/utils/apiClient';
+
 
 
 export interface NotificationRow {
@@ -13,12 +15,8 @@ export interface NotificationRow {
 class NotificationService {
   async listUnread() {
     try {
-      const response = await fetch('http://localhost:3000/api/notifications/unread', {
-        credentials: 'include'
-      });
-      if (!response.ok) throw new Error('Failed to fetch notifications');
-      const data = await response.json();
-      return { data: (data || []) as NotificationRow[], error: null };
+      const data = await apiClient.get('/notifications/unread') as NotificationRow[];
+      return { data: (data || []), error: null };
     } catch (error) {
       return { data: [] as NotificationRow[], error };
     }
@@ -27,14 +25,7 @@ class NotificationService {
   async markRead(ids: string[]) {
     if (!ids.length) return { data: null, error: null };
     try {
-      const response = await fetch('http://localhost:3000/api/notifications/mark-read', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ ids }),
-        credentials: 'include'
-      });
-      if (!response.ok) throw new Error('Failed to mark notifications as read');
-      const data = await response.json();
+      const data = await apiClient.post('/notifications/mark-read', { ids });
       return { data, error: null };
     } catch (error) {
       return { data: null, error };

@@ -1,5 +1,6 @@
 
 import { Database } from '@/types/database';
+import { apiClient } from '@/utils/apiClient';
 
 // Define the type for a row in the user_activities table
 export type UserActivity = Database['public']['Tables']['user_activities']['Row'];

@@ -18,6 +18,7 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { Header } from '@/components/Header';
 import { CategoryFilter } from '@/components/CategoryFilter';
 import { DealCard } from '@/components/DealCard';
+import { useSiteSettings } from '@/hooks/useSiteSettings';
 import { router } from 'expo-router';
 import { useAuth } from '@/contexts/AuthProvider';
 import { dealService, DealWithRelations } from '@/services/dealService';
@@ -28,6 +29,7 @@ type Category = Database['public']['Tables']['categories']['Row'];
 
 export default function UpDealsScreen() {
   const { user } = useAuth();
+  const { settings } = useSiteSettings();
   const isGuest = !user;
 
   const [selectedCategory, setSelectedCategory] = useState('all');
@@ -52,14 +54,12 @@ export default function UpDealsScreen() {
       }
 
       // Load personalized deals based on saved deals and alerts
-      const savedDealsResponse = await fetch(`http://localhost:3000/api/deals/saved?userId=${user!.id}`, {
-        credentials: 'include'
-      });
+      const { apiClient } = await import('@/utils/apiClient');
       
       let personalizedDealsData: any[] = [];
       
-      if (savedDealsResponse.ok) {
-        const savedDeals = await savedDealsResponse.json();
+      try {
+        const savedDeals = await apiClient.get<any[]>(`/deals/saved`, { userId: user!.id });
         personalizedDealsData = savedDeals.map((d: any) => ({
           ...d,
           id: String(d.id),
@@ -71,6 +71,8 @@ export default function UpDealsScreen() {
           postedBy: d.created_by_user?.username || 'Unknown',
           created_at: d.created_at,
         }));
+      } catch (error) {
+        console.error('Error fetching saved deals:', error);
       }
 
       // If no saved deals, show popular deals as fallback
@@ -131,7 +133,7 @@ export default function UpDealsScreen() {
   const handleVote = (dealId: string | number, voteType: 'up' | 'down') => {
     if (isGuest) {
       Alert.alert(
-        "Join SaversDream",
+        `Join ${settings?.appName || 'SaversDream'}`,
         "Sign in to vote on recommended deals!",
         [
           { text: "Maybe Later", style: "cancel" },

@@ -1,5 +1,6 @@
 import * as Location from 'expo-location';
 import { Platform } from 'react-native';
+import { apiClient } from '@/utils/apiClient';
 
 export interface LocationCoordinates {
   latitude: number;

@@ -1,3 +1,5 @@
+import { apiClient } from '@/utils/apiClient';
+
 
 
 export interface SystemSetting {
@@ -24,15 +26,7 @@ export interface SystemSettingUpdate {
 class SettingsService {
   async getSettings(): Promise<{ data: SystemSetting[]; error: any }> {
     try {
-      const response = await fetch('http://localhost:3000/api/settings', {
-        credentials: 'include'
-      });
-      
-      if (!response.ok) {
-        throw new Error(`HTTP error! status: ${response.status}`);
-      }
-      
-      const data = await response.json();
+      const data = await apiClient.get('/settings') as SystemSetting[];
       return { data: data || [], error: null };
     } catch (error) {
       console.error('Error fetching settings:', error);
@@ -42,18 +36,7 @@ class SettingsService {
 
   async getSetting(key: string): Promise<{ data: SystemSetting | null; error: any }> {
     try {
-      const response = await fetch(`http://localhost:3000/api/settings/${encodeURIComponent(key)}`, {
-        credentials: 'include'
-      });
-      
-      if (!response.ok) {
-        if (response.status === 404) {
-          return { data: null, error: null };
-        }
-        throw new Error(`HTTP error! status: ${response.status}`);
-      }
-      
-      const data = await response.json();
+      const data = await apiClient.get(`/settings/${encodeURIComponent(key)}`) as SystemSetting;
       return { data, error: null };
     } catch (error) {
       console.error('Error fetching setting:', error);
@@ -67,18 +50,7 @@ class SettingsService {
         throw new Error('Invalid key parameter');
       }
       
-      const response = await fetch(`http://localhost:3000/api/settings/${encodeURIComponent(key)}`, {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ value, description: description ?? null }),
-        credentials: 'include'
-      });
-      
-      if (!response.ok) {
-        throw new Error(`HTTP error! status: ${response.status}`);
-      }
-      
-      const data = await response.json();
+      const data = await apiClient.put(`/settings/${encodeURIComponent(key)}`, { value, description: description ?? null }) as SystemSetting;
       return { data, error: null };
     } catch (error) {
       console.error('Error updating setting:', error);
@@ -88,18 +60,7 @@ class SettingsService {
 
   async createSetting(settingData: SystemSettingInsert): Promise<{ data: SystemSetting | null; error: any }> {
     try {
-      const response = await fetch('http://localhost:3000/api/settings', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(settingData),
-        credentials: 'include'
-      });
-      
-      if (!response.ok) {
-        throw new Error(`HTTP error! status: ${response.status}`);
-      }
-      
-      const data = await response.json();
+      const data = await apiClient.post('/settings', settingData) as SystemSetting;
       return { data, error: null };
     } catch (error) {
       console.error('Error creating setting:', error);
@@ -112,16 +73,6 @@ export const settingsService = new SettingsService();
 
 // Safer setter with duplicate fallback (use this from UI if possible)
 export async function setSetting(key: string, value: any, description?: string | null) {
-  const response = await fetch(`http://localhost:3000/api/settings/${encodeURIComponent(key)}`, {
-    method: 'PUT',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ value, description: description ?? null }),
-    credentials: 'include'
-  });
-  
-  if (!response.ok) {
-    throw new Error(`HTTP error! status: ${response.status}`);
-  }
-  
-  return await response.json();
+  const data = await apiClient.put(`/settings/${encodeURIComponent(key)}`, { value, description: description ?? null });
+  return data;
 }

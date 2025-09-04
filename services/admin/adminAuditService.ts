@@ -1,3 +1,5 @@
+import { apiClient } from '@/utils/apiClient';
+
 
 
 export interface AuditLog {
@@ -31,12 +33,8 @@ class AdminAuditService {
         ...(filters.admin_id && { admin_id: filters.admin_id })
       });
       
-      const response = await fetch(`http://localhost:3000/api/admin/audit-logs?${params}`, {
-        credentials: 'include'
-      });
-      
-      if (!response.ok) throw new Error('Failed to fetch audit logs');
-      return await response.json();
+      const response = await apiClient.get(`/admin/audit-logs?${params}`) as AuditLog[];
+      return response;
     } catch (error) {
       console.error('Error fetching audit logs:', error);
       throw error;
@@ -77,15 +75,9 @@ class AdminAuditService {
     ipAddress?: string
   ): Promise<void> {
     try {
-      const response = await fetch('http://localhost:3000/api/admin/log-action', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          adminId, action, description, targetType, targetId, metadata, ipAddress
-        }),
-        credentials: 'include'
+      await apiClient.post('/admin/log-action', {
+        adminId, action, description, targetType, targetId, metadata, ipAddress
       });
-      if (!response.ok) throw new Error('Failed to log admin action');
     } catch (error) {
       console.error('Error logging admin action:', error);
       throw error;
@@ -101,11 +93,14 @@ class AdminAuditService {
   }> {
     try {
       const params = adminId ? `?admin_id=${adminId}` : '';
-      const response = await fetch(`http://localhost:3000/api/admin/activity-stats${params}`, {
-        credentials: 'include'
-      });
-      if (!response.ok) throw new Error('Failed to fetch activity stats');
-      return await response.json();
+      const response = await apiClient.get(`/admin/activity-stats${params}`);
+      return response as {
+        total_actions: number;
+        actions_today: number;
+        actions_this_week: number;
+        most_common_action: string;
+        recent_activity: any[];
+      };
     } catch (error) {
       console.error('Error fetching admin activity stats:', error);
       return {

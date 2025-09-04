@@ -1,7 +1,10 @@
+import { apiClient } from '@/utils/apiClient';
+import { getApiUrl } from '@/utils/config';
+
 
 
 export async function listFlags() {
-  const res = await fetch('http://localhost:3000/api/admin/flags', { credentials: 'include' });
+  const res = await apiClient.get('/admin/flags') as Response;
   if (!res.ok) throw new Error('listFlags failed');
   return res.json();
 }
@@ -10,7 +13,7 @@ export async function upsertFlag(key: string, data: { enabled?: boolean; value?:
   const headers: Record<string,string> = { 'Content-Type':'application/json' };
   if (opts?.elevationToken) headers['x-admin-elevation'] = opts.elevationToken;
 
-  const res = await fetch('http://localhost:3000/api/admin/flags', { 
+  const res = await fetch(getApiUrl('/admin/flags'), { 
     method: 'POST', 
     headers, 
     body: JSON.stringify({ key, ...data }),
@@ -24,7 +27,7 @@ export async function deleteFlag(key: string, opts?: { elevationToken?: string }
   const headers: Record<string,string> = {};
   if (opts?.elevationToken) headers['x-admin-elevation'] = opts.elevationToken;
 
-  const res = await fetch(`http://localhost:3000/api/admin/flags?key=${key}`, { 
+  const res = await fetch(getApiUrl(`/admin/flags?key=${key}`), { 
     method: 'DELETE', 
     headers,
     credentials: 'include'
@@ -35,7 +38,7 @@ export async function deleteFlag(key: string, opts?: { elevationToken?: string }
 
 /** App config (system settings) */
 export async function listConfig() {
-  const res = await fetch('http://localhost:3000/api/admin/config', { credentials: 'include' });
+  const res = await apiClient.get('/admin/config') as Response;
   if (!res.ok) throw new Error('listConfig failed');
   return res.json();
 }
@@ -44,7 +47,7 @@ export async function upsertConfig(key: string, value: any, type: 'json'|'string
   const headers: Record<string,string> = { 'Content-Type':'application/json' };
   if (opts?.elevationToken) headers['x-admin-elevation'] = opts.elevationToken;
 
-  const res = await fetch('http://localhost:3000/api/admin/config', { 
+  const res = await fetch(getApiUrl('/admin/config'), { 
     method: 'POST', 
     headers, 
     body: JSON.stringify({ key, value, type }),

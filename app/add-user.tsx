@@ -23,24 +23,13 @@ export default function AddUserScreen() {
     try {
       setLoading(true);
       
-      const response = await fetch('http://localhost:3000/api/users', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          username: username.trim(),
-          email: email.trim(),
-          password,
-          role
-        })
+      const { apiClient } = await import('@/utils/apiClient');
+      const data = await apiClient.post('/users', {
+        username: username.trim(),
+        email: email.trim(),
+        password,
+        role
       });
-
-      const data = await response.json();
-
-      if (!response.ok) {
-        throw new Error(data.error || 'Failed to create user');
-      }
 
       // Clear form
       setUsername('');
