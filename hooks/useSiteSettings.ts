@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
 import { getApiUrl } from '@/utils/config';
+import { assetUrl } from '@/utils/api';
 
 interface SiteSettings {
   logoFilename: string | null;
@@ -34,8 +35,12 @@ export const useSiteSettings = () => {
       
       const data = await response.json();
       
+      // Only update cache buster if logo filename actually changed
+      const newLogoFilename = data.logoFilename || null;
+      const currentLogoFilename = settings.logoFilename;
+      
       setSettings({
-        logoFilename: data.logoFilename || null,
+        logoFilename: newLogoFilename,
         appName: data.appName || defaultSettings.appName,
         tagline: data.tagline || defaultSettings.tagline,
         headerTextColor: data.headerTextColor || defaultSettings.headerTextColor,
@@ -43,7 +48,8 @@ export const useSiteSettings = () => {
         animatedLogo: data.animatedLogo || false,
       });
       
-      if (data.logoFilename) {
+      // Only generate new cache buster if logo filename changed
+      if (newLogoFilename && newLogoFilename !== currentLogoFilename) {
         setLogoCacheBuster(Date.now());
       }
     } catch (error) {
@@ -70,8 +76,8 @@ export const useSiteSettings = () => {
 
   const getLogoUrl = () => {
     if (!settings.logoFilename) return null;
-    const baseUrl = getApiUrl('/').replace('/api', ''); // Remove /api for asset URLs
-    return `${baseUrl}/${settings.logoFilename}?v=${logoCacheBuster}`;
+    // Use the assetUrl function to properly construct the asset URL
+    return `${assetUrl(settings.logoFilename)}?v=${logoCacheBuster}`;
   };
 
   return {

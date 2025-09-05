@@ -75,10 +75,16 @@ export const getApiUrl = (path: string): string => {
 };
 
 export const getAssetUrl = (filename: string): string => {
-  const baseUrl = config.API_BASE_URL;
+  const baseUrl = config.API_BASE_URL.replace(/\/$/, ''); // Remove trailing slash
   // Remove /api from base URL for assets
-  const assetBaseUrl = baseUrl.replace('/api', '');
-  return `${assetBaseUrl}/${filename}`;
+  const assetBaseUrl = baseUrl.replace(/\/api$/, '');
+  // Remove leading slashes from filename
+  let cleanFilename = filename.replace(/^\/+/, '');
+  // Prevent double assets in path - remove assets/ prefix if it exists
+  if (cleanFilename.startsWith('assets/')) {
+    cleanFilename = cleanFilename.replace(/^assets\//, '');
+  }
+  return `${assetBaseUrl}/assets/${cleanFilename}`;
 };
 
 // Get the full domain URL for sharing and external links

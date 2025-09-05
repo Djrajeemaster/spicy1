@@ -48,3 +48,89 @@ docker-compose.override.yml
 
 # typescript
 *.tsbuildinfo
+
+# --- Android Build Files ---
+# Android build outputs
+android/app/build/
+android/build/
+android/.gradle/
+android/app/.cxx/
+android/app/src/main/assets/
+android/app/src/main/jniLibs/
+
+# Android generated files
+android/local.properties
+android/.idea/
+android/captures/
+android/keystore.properties
+
+# APK/AAB files
+*.apk
+*.aab
+*.idsig
+
+# --- Waste/Temp/Backup/Old Test Files ---
+# Documentation and markdown
+ADMIN_ENHANCEMENTS.md
+ADMIN_UX_ENHANCEMENTS.md
+AUTOMATED_TESTING_SUCCESS.md
+BOTTOM_NAVIGATION_IMPROVEMENTS.md
+COMPLETE_E2E_TESTING_PLAN.md
+COVERAGE_GUIDE.md
+DEPLOYMENT.md
+ENVIRONMENT_CONFIG.md
+IMAGE_DISPLAY_INFO.md
+NAVIGATION_OPTIMIZATIONS.md
+PATCH_NOTES.md
+PLAYWRIGHT_GENERATION_PROMPT.md
+PRODUCTION_READY.md
+SCROLL_HEADER_ANIMATION.md
+SECURITY_FIXES.md
+TEST_USERS.md
+TESTING_GUIDE.md
+VPS_MOBILE_CONFIG.md
+fix-deployment-issues.md
+
+# Test HTML and debug files
+test-auth.html
+test-auth-secure.html
+debug-api.html
+
+# Temp/backup files
+cookies.txt
+[username].tsx
+temp_make_admin.sql
+assets/site-logo-backup-*.png
+
+# Old test results and reports
+test-results.xml
+test-results.json
+test-results/
+playwright-report/
+
+# Duplicate scripts
+test-runner.js
+test-asset-url.js
+
+# Old PowerShell/Bash scripts
+update-services.ps1
+update-admin-services.ps1
+fix-empty-lines.ps1
+run-role-based-tests.bat
+run-complete-e2e.bat
+run-complete-e2e.sh
+build-apk.sh
+
+# Old database dumps
+full_dump.sql
+full_dump_localpatched.sql
+
+# Old tests folder
+tests/
+
+# Duplicate/unused service files
+services/adminCrud.ts
+services/adminElevation.ts
+services/adminUserService.ts
+services/flagsService.ts
+services/impersonationService.ts

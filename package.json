@@ -9,6 +9,10 @@
     "server:prod": "NODE_ENV=production node server.js",
     "server:secure": "NODE_ENV=production node server-secure.js",
     "build:web": "expo export --platform web",
+    "build:android": "eas build --platform android --profile production",
+    "build:android-preview": "eas build --platform android --profile preview",
+    "build:local": "expo run:android",
+    "prebuild": "expo prebuild --clean",
     "lint": "expo lint",
     "create-users": "node scripts/createLocalUsers.js",
     "add-auth": "node scripts/addAuth.js",
@@ -28,7 +32,15 @@
     "test:system": "jest tests/system.test.js",
     "test:performance": "jest tests/performance.test.js",
     "test:all": "jest tests/simple.test.js tests/api-simple.test.js tests/deals.test.js tests/admin.test.js tests/notifications.test.js tests/system.test.js tests/performance.test.js",
-    "test:working": "jest tests/simple.test.js tests/api-simple.test.js tests/performance.test.js"
+    "test:working": "jest tests/simple.test.js tests/api-simple.test.js tests/performance.test.js",
+    "e2e": "playwright test",
+    "e2e:headed": "playwright test --headed",
+    "e2e:ui": "playwright test --ui",
+    "e2e:report": "playwright show-report",
+    "e2e:install": "playwright install",
+    "e2e:codegen": "playwright codegen localhost:3000",
+    "android": "expo run:android",
+    "ios": "expo run:ios"
   },
   "dependencies": {
     "@expo/vector-icons": "^14.1.0",
@@ -85,6 +97,7 @@
   },
   "devDependencies": {
     "@babel/core": "^7.25.2",
+    "@playwright/test": "^1.55.0",
     "@testing-library/jest-native": "^5.4.3",
     "@testing-library/react-native": "^12.9.0",
     "@types/react": "~19.0.10",
