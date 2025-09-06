@@ -54,8 +54,8 @@ const DealItem: React.FC<{
         <Text style={dealStyles.dealPrice}>
           ${deal.price}{deal.original_price ? ` (was $${deal.original_price})` : ''}
         </Text>
-        <View style={[dealStyles.statusBadge, { backgroundColor: getStatusColor(deal.status) }]}>
-          <Text style={dealStyles.statusText}>{deal.status.toUpperCase()}</Text>
+        <View style={[dealStyles.statusBadge, { backgroundColor: getStatusColor(deal.status || 'unknown') }]}>
+          <Text style={dealStyles.statusText}>{(deal.status || 'UNKNOWN').toUpperCase()}</Text>
         </View>
       </View>
       <View style={dealStyles.dealActions}>
@@ -85,54 +85,59 @@ export const DealManagement: React.FC<DealManagementProps> = ({ deals, onDealAct
   const [filter, setFilter] = useState<'all' | 'pending' | 'live' | 'expired' | 'deleted' | 'flagged'>('all');
   const [selectedDeals, setSelectedDeals] = useState<string[]>([]);
   const [allDeals, setAllDeals] = useState<AdminDeal[]>([]);
+  const [allSystemDeals, setAllSystemDeals] = useState<AdminDeal[]>([]);
 
   useEffect(() => {
-    fetchAllDeals();
-  }, []);
+    // Use the deals prop for pending deals
+    setAllDeals(deals || []);
+  }, [deals]);
+
+  // Fetch all system deals when component mounts or when switching to 'all' filter
+  useEffect(() => {
+    if (filter === 'all') {
+      fetchAllSystemDeals();
+    }
+  }, [filter]);
 
   // Refresh data when screen comes into focus (after returning from edit)
   useFocusEffect(
     React.useCallback(() => {
-      fetchAllDeals();
-    }, [])
+      // The parent component (admin screen) handles refreshing data
+      // We just need to update our local state with the new deals prop
+      setAllDeals(deals || []);
+      if (filter === 'all') {
+        fetchAllSystemDeals();
+      }
+    }, [deals, filter])
   );
 
-  const fetchAllDeals = async () => {
+  const fetchAllSystemDeals = async () => {
     try {
-      // Fetch deals with different statuses
-      const [liveResponse, draftResponse, expiredResponse] = await Promise.all([
-        apiClient.get('/deals'),
-        apiClient.get('/deals?status=draft'),
-        apiClient.get('/deals?status=expired')
-      ]);
-      
-      const [liveDeals, draftDeals, expiredDeals] = await Promise.all([
-        liveResponse.ok ? liveResponse.json() : [],
-        draftResponse.ok ? draftResponse.json() : [],
-        expiredResponse.ok ? expiredResponse.json() : []
-      ]);
-      
-      // Remove duplicates by ID
-      const allDealsMap = new Map();
-      [...liveDeals, ...draftDeals, ...expiredDeals].forEach(deal => {
-        allDealsMap.set(deal.id, deal);
-      });
-      const allDeals = Array.from(allDealsMap.values());
-      console.log('Fetched deals:', allDeals.length, 'deals');
-      setAllDeals(allDeals);
+      console.log('Fetching all system deals...');
+      const dealsData = await apiClient.get<AdminDeal[]>('/deals?limit=1000'); // Get all deals with high limit
+      console.log('Fetched all system deals:', dealsData.length);
+      setAllSystemDeals(dealsData);
     } catch (error) {
-      console.error('Error fetching all deals:', error);
+      console.error('Error fetching all system deals:', error);
+      setAllSystemDeals([]);
     }
   };
 
-  const filteredDeals = filter === 'all' ? allDeals : allDeals.filter(deal => {
-    // Map 'deleted' filter to 'draft' status
-    const targetStatus = filter === 'deleted' ? 'draft' : filter;
-    return deal.status === targetStatus;
-  });
+  const filteredDeals = (() => {
+    if (filter === 'all') {
+      return allSystemDeals;
+    } else if (filter === 'pending') {
+      return allDeals; // This comes from the pendingDeals prop
+    } else {
+      // For other filters, use all system deals and filter by status
+      const targetStatus = filter === 'deleted' ? 'draft' : filter;
+      return allSystemDeals.filter(deal => deal.status === targetStatus);
+    }
+  })();
   
   console.log('Current filter:', filter);
-  console.log('All deals:', allDeals.map(d => ({ id: d.id, title: d.title, status: d.status })));
+  console.log('Pending deals:', allDeals.map(d => ({ id: d.id, title: d.title, status: d.status })));
+  console.log('All system deals:', allSystemDeals.map(d => ({ id: d.id, title: d.title, status: d.status })));
   console.log('Filtered deals:', filteredDeals.map(d => ({ id: d.id, title: d.title, status: d.status })));
 
   const handleSelectDeal = (dealId: string) => {
@@ -187,7 +192,8 @@ export const DealManagement: React.FC<DealManagementProps> = ({ deals, onDealAct
         }
         setSelectedDeals([]);
         window.alert(`${selectedDeals.length} deal(s) ${actionText}d successfully`);
-        await fetchAllDeals();
+        // Refresh data by updating local state with new deals prop
+        setAllDeals(deals || []);
       } catch (error) {
         console.error('Bulk action error:', error);
         window.alert(`Failed to ${actionText} some deals`);
@@ -253,7 +259,7 @@ export const DealManagement: React.FC<DealManagementProps> = ({ deals, onDealAct
             onDealAction={async (dealId, action) => {
               try {
                 await onDealAction(dealId, action);
-                await fetchAllDeals();
+                // Parent component will handle refreshing data
               } catch (error) {
                 console.error('Deal action error:', error);
               }

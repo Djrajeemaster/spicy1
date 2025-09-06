@@ -2748,10 +2748,40 @@ app.put('/api/categories/:id', async (req, res) => {
   try {
     const { id } = req.params;
     const { name, emoji, description, is_active } = req.body;
-    const { rows } = await pool.query(
-      'UPDATE categories SET name = $1, emoji = $2, description = $3, is_active = $4, updated_at = NOW() WHERE id = $5 RETURNING *',
-      [name, emoji, description, is_active, id]
-    );
+
+    // Build dynamic update query based on provided fields
+    const updateFields = [];
+    const updateValues = [];
+    let paramCount = 1;
+
+    if (name !== undefined) {
+      updateFields.push(`name = $${paramCount}`);
+      updateValues.push(name);
+      paramCount++;
+    }
+    if (emoji !== undefined) {
+      updateFields.push(`emoji = $${paramCount}`);
+      updateValues.push(emoji);
+      paramCount++;
+    }
+    if (description !== undefined) {
+      updateFields.push(`description = $${paramCount}`);
+      updateValues.push(description);
+      paramCount++;
+    }
+    if (is_active !== undefined) {
+      updateFields.push(`is_active = $${paramCount}`);
+      updateValues.push(is_active);
+      paramCount++;
+    }
+
+    // Always update the updated_at timestamp
+    updateFields.push(`updated_at = NOW()`);
+    updateValues.push(id);
+
+    const query = `UPDATE categories SET ${updateFields.join(', ')} WHERE id = $${paramCount} RETURNING *`;
+    const { rows } = await pool.query(query, updateValues);
+
     if (rows.length === 0) {
       return res.status(404).json({ error: 'Category not found' });
     }
@@ -2818,10 +2848,45 @@ app.put('/api/stores/:id', async (req, res) => {
   try {
     const { id } = req.params;
     const { name, slug, logo_url, website_url, description } = req.body;
-    const { rows } = await pool.query(
-      'UPDATE stores SET name = $1, slug = $2, logo_url = $3, website_url = $4, description = $5, updated_at = NOW() WHERE id = $6 RETURNING *',
-      [name, slug, logo_url, website_url, description, id]
-    );
+
+    // Build dynamic update query based on provided fields
+    const updateFields = [];
+    const updateValues = [];
+    let paramCount = 1;
+
+    if (name !== undefined) {
+      updateFields.push(`name = $${paramCount}`);
+      updateValues.push(name);
+      paramCount++;
+    }
+    if (slug !== undefined) {
+      updateFields.push(`slug = $${paramCount}`);
+      updateValues.push(slug);
+      paramCount++;
+    }
+    if (logo_url !== undefined) {
+      updateFields.push(`logo_url = $${paramCount}`);
+      updateValues.push(logo_url);
+      paramCount++;
+    }
+    if (website_url !== undefined) {
+      updateFields.push(`website_url = $${paramCount}`);
+      updateValues.push(website_url);
+      paramCount++;
+    }
+    if (description !== undefined) {
+      updateFields.push(`description = $${paramCount}`);
+      updateValues.push(description);
+      paramCount++;
+    }
+
+    // Always update the updated_at timestamp
+    updateFields.push(`updated_at = NOW()`);
+    updateValues.push(id);
+
+    const query = `UPDATE stores SET ${updateFields.join(', ')} WHERE id = $${paramCount} RETURNING *`;
+    const { rows } = await pool.query(query, updateValues);
+
     if (rows.length === 0) {
       return res.status(404).json({ error: 'Store not found' });
     }

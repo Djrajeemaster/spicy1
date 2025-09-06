@@ -46,7 +46,7 @@ const RADIUS_OPTIONS = [1, 5, 10, 25];
 const fetchDealsFromApi = async () => {
   try {
     const { apiClient } = await import('@/utils/apiClient');
-    const data = await apiClient.get('/deals');
+    const data = await apiClient.get('/deals', { status: 'live' });
     // Ensure data is always an array
     return Array.isArray(data) ? data : [];
   } catch (error) {
@@ -251,10 +251,20 @@ export default function HomeScreen() {
 
   // ----- Deals loader -----
   const loadDeals = useCallback(async () => {
+    console.log('🔄 Starting to load deals...');
     setLoading(true);
-    const data = await fetchDealsFromApi();
-    setDeals(data);
-    setLoading(false);
+    try {
+      const data = await fetchDealsFromApi();
+      console.log('📊 Deals fetched:', data?.length || 0, 'deals');
+      console.log('📋 Sample deal:', data?.[0] ? { id: data[0].id, title: data[0].title } : 'No deals');
+      setDeals(data);
+      setLoading(false);
+      console.log('✅ Deals loading completed');
+    } catch (error) {
+      console.error('❌ Error in loadDeals:', error);
+      setDeals([]);
+      setLoading(false);
+    }
   }, []);
 
   useEffect(() => {
@@ -264,6 +274,7 @@ export default function HomeScreen() {
   // Apply filters whenever search query or filter options change
   useEffect(() => {
     const filterDeals = async () => {
+      console.log('🔍 Starting to filter deals...', { dealsCount: deals.length, searchQuery, selectedCategories, selectedStores });
       let filtered = [...deals];
 
       // Apply search query filter
@@ -385,6 +396,7 @@ export default function HomeScreen() {
       });
 
       setFilteredDeals(filtered);
+      console.log('🔍 Filtered deals:', filtered.length, 'deals after filtering');
     };
 
     filterDeals();

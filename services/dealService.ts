@@ -90,7 +90,8 @@ class DealService {
 
   getPendingDeals() {
     return safeAsync(async () => {
-      const data = await apiClient.get('/deals?status=pending');
+      // Include deals that need admin attention: pending, draft, flagged, reported
+      const data = await apiClient.get('/deals?moderation=true');
       return data as DealWithRelations[];
     }, 'DealService.getPendingDeals');
   }
