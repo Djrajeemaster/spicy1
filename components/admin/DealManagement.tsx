@@ -1,35 +1,109 @@
 import React, { useState, useEffect } from 'react';
-import { View, Text, StyleSheet, FlatList, TouchableOpacity, Alert } from 'react-native';
+import { View, Text, StyleSheet, FlatList, TouchableOpacity, Modal } from 'react-native';
 import { useFocusEffect } from '@react-navigation/native';
 import { AdminDeal } from '@/hooks/useAdminData';
-import { CircleCheck as CheckCircle, Circle as XCircle, Flag, Edit2, Trash2, Square, CheckSquare } from 'lucide-react-native';
+import { CircleCheck as CheckCircle, Circle as XCircle, Flag, Edit2, Trash2, Square, CheckSquare, Trash } from 'lucide-react-native';
 import { router } from 'expo-router';
 import { apiClient } from '@/utils/apiClient';
+import { useCurrency } from '@/contexts/CurrencyProvider';
 
 interface DealManagementProps {
   deals: AdminDeal[];
-  onDealAction: (dealId: string, action: 'Approve' | 'Reject' | 'Delete') => Promise<void>;
+  onDealAction: (dealId: string, action: 'Approve' | 'Reject' | 'Delete' | 'HardDelete') => Promise<void>;
+  onRefresh?: () => void;
 }
+
+// Custom Confirmation Modal Component
+const ConfirmationModal: React.FC<{
+  visible: boolean;
+  title: string;
+  message: string;
+  onConfirm: () => void;
+  onCancel: () => void;
+  confirmText?: string;
+  cancelText?: string;
+  confirmStyle?: 'default' | 'destructive';
+}> = ({ visible, title, message, onConfirm, onCancel, confirmText = 'Confirm', cancelText = 'Cancel', confirmStyle = 'default' }) => (
+  <Modal
+    visible={visible}
+    transparent={true}
+    animationType="fade"
+    onRequestClose={onCancel}
+  >
+    <View style={dealStyles.modalOverlay}>
+      <View style={dealStyles.modalContent}>
+        <Text style={dealStyles.modalTitle}>{title}</Text>
+        <Text style={dealStyles.modalMessage}>{message}</Text>
+        <View style={dealStyles.modalButtons}>
+          <TouchableOpacity
+            style={[dealStyles.modalButton, dealStyles.cancelButton]}
+            onPress={onCancel}
+          >
+            <Text style={dealStyles.cancelButtonText}>{cancelText}</Text>
+          </TouchableOpacity>
+          <TouchableOpacity
+            style={[dealStyles.modalButton, confirmStyle === 'destructive' ? dealStyles.destructiveButton : dealStyles.confirmButton]}
+            onPress={onConfirm}
+          >
+            <Text style={confirmStyle === 'destructive' ? dealStyles.destructiveButtonText : dealStyles.confirmButtonText}>
+              {confirmText}
+            </Text>
+          </TouchableOpacity>
+        </View>
+      </View>
+    </View>
+  </Modal>
+);
 
 const DealItem: React.FC<{ 
   deal: AdminDeal; 
-  onDealAction: (dealId: string, action: 'Approve' | 'Reject' | 'Delete') => void;
+  onDealAction: (dealId: string, action: 'Approve' | 'Reject' | 'Delete' | 'HardDelete') => void;
   isSelected: boolean;
   onSelect: (dealId: string) => void;
-}> = ({ deal, onDealAction, isSelected, onSelect }) => {
+  onRefresh?: () => void;
+  formatPrice: (price: number) => string;
+}> = ({ deal, onDealAction, isSelected, onSelect, onRefresh, formatPrice }) => {
   
-  const handleAction = async (action: 'Approve' | 'Reject' | 'Delete') => {
-    const actionText = action.toLowerCase();
-    if (window.confirm(`Are you sure you want to ${actionText} "${deal.title}"?`)) {
-      console.log('Executing action:', action, 'for deal:', deal.id);
-      try {
-        await onDealAction(deal.id, action);
-        console.log('Action completed successfully');
-      } catch (error) {
-        console.error('Action failed:', error);
-        window.alert(`Failed to ${actionText} deal`);
+  const [confirmationModal, setConfirmationModal] = useState<{
+    visible: boolean;
+    title: string;
+    message: string;
+    onConfirm: () => void;
+    confirmStyle?: 'default' | 'destructive';
+  } | null>(null);
+  
+  const handleAction = async (action: 'Approve' | 'Reject' | 'Delete' | 'HardDelete') => {
+    const actionText = action === 'HardDelete' ? 'permanently delete' : action.toLowerCase();
+    const title = 'Confirm Action';
+    const message = `Are you sure you want to ${actionText} "${deal.title}"?${action === 'HardDelete' ? ' This action cannot be undone!' : ''}`;
+    
+    setConfirmationModal({
+      visible: true,
+      title,
+      message,
+      confirmStyle: action === 'HardDelete' ? 'destructive' : 'default',
+      onConfirm: async () => {
+        // Close modal immediately when user confirms
+        setConfirmationModal(null);
+        
+        console.log('Executing action:', action, 'for deal:', deal.id);
+        try {
+          await onDealAction(deal.id, action);
+          console.log('Action completed successfully');
+          // Refresh data after action
+          if (onRefresh) onRefresh();
+        } catch (error) {
+          console.error('Action failed:', error);
+          // Show error modal
+          setConfirmationModal({
+            visible: true,
+            title: 'Error',
+            message: `Failed to ${actionText} deal`,
+            onConfirm: () => setConfirmationModal(null),
+          });
+        }
       }
-    }
+    });
   };
   const getStatusColor = (status: string) => {
     switch (status) {
@@ -42,62 +116,93 @@ const DealItem: React.FC<{
   };
 
   return (
-    <View style={dealStyles.dealCard}>
-      <TouchableOpacity onPress={() => onSelect(deal.id)} style={dealStyles.checkbox}>
-        {isSelected ? <CheckSquare size={20} color="#6366f1" /> : <Square size={20} color="#64748b" />}
-      </TouchableOpacity>
-      <View style={dealStyles.dealInfo}>
-        <Text style={dealStyles.dealTitle}>{deal.title}</Text>
-        <Text style={dealStyles.dealMeta}>
-          {deal.created_by_user?.username || 'Unknown'} • {deal.category?.name || 'Unknown'} • {deal.store?.name || 'Unknown'}
-        </Text>
-        <Text style={dealStyles.dealPrice}>
-          ${deal.price}{deal.original_price ? ` (was $${deal.original_price})` : ''}
-        </Text>
-        <View style={[dealStyles.statusBadge, { backgroundColor: getStatusColor(deal.status || 'unknown') }]}>
-          <Text style={dealStyles.statusText}>{(deal.status || 'UNKNOWN').toUpperCase()}</Text>
+    <View>
+      <View style={dealStyles.dealCard}>
+        <TouchableOpacity onPress={() => onSelect(deal.id)} style={dealStyles.checkbox}>
+          {isSelected ? <CheckSquare size={20} color="#6366f1" /> : <Square size={20} color="#64748b" />}
+        </TouchableOpacity>
+        <View style={dealStyles.dealInfo}>
+          <Text style={dealStyles.dealTitle}>{deal.title}</Text>
+          <Text style={dealStyles.dealMeta}>
+            {deal.created_by_user?.username || 'Unknown'} • {deal.category?.name || 'Unknown'} • {deal.store?.name || 'Unknown'}
+          </Text>
+          <Text style={dealStyles.dealPrice}>
+            {formatPrice(deal.price)}{deal.original_price ? ` (was ${formatPrice(deal.original_price)})` : ''}
+          </Text>
+          <View style={[dealStyles.statusBadge, { backgroundColor: getStatusColor(deal.status || 'unknown') }]}>
+            <Text style={dealStyles.statusText}>{(deal.status || 'UNKNOWN').toUpperCase()}</Text>
+          </View>
+        </View>
+        <View style={dealStyles.dealActions}>
+          <TouchableOpacity 
+            onPress={() => router.push(`/edit-deal/${deal.id}`)} 
+            style={[dealStyles.actionButton, dealStyles.editButton]}
+          >
+            <Edit2 size={18} color="#3b82f6" />
+          </TouchableOpacity>
+          {deal.status === 'pending' && (
+            <TouchableOpacity onPress={() => handleAction('Approve')} style={dealStyles.actionButton}>
+              <CheckCircle size={20} color="#10b981" />
+            </TouchableOpacity>
+          )}
+          <TouchableOpacity onPress={() => handleAction('Reject')} style={dealStyles.actionButton}>
+            <XCircle size={20} color="#ef4444" />
+          </TouchableOpacity>
+          <TouchableOpacity onPress={() => handleAction('Delete')} style={dealStyles.actionButton}>
+            <Trash2 size={18} color="#dc2626" />
+          </TouchableOpacity>
+          <TouchableOpacity onPress={() => handleAction('HardDelete')} style={dealStyles.actionButton}>
+            <Trash size={18} color="#7f1d1d" />
+          </TouchableOpacity>
         </View>
       </View>
-      <View style={dealStyles.dealActions}>
-        <TouchableOpacity 
-          onPress={() => router.push(`/edit-deal/${deal.id}`)} 
-          style={[dealStyles.actionButton, dealStyles.editButton]}
-        >
-          <Edit2 size={18} color="#3b82f6" />
-        </TouchableOpacity>
-        {deal.status === 'pending' && (
-          <TouchableOpacity onPress={() => handleAction('Approve')} style={dealStyles.actionButton}>
-            <CheckCircle size={20} color="#10b981" />
-          </TouchableOpacity>
-        )}
-        <TouchableOpacity onPress={() => handleAction('Reject')} style={dealStyles.actionButton}>
-          <XCircle size={20} color="#ef4444" />
-        </TouchableOpacity>
-        <TouchableOpacity onPress={() => handleAction('Delete')} style={dealStyles.actionButton}>
-          <Trash2 size={18} color="#dc2626" />
-        </TouchableOpacity>
-      </View>
+      
+      {confirmationModal && (
+        <ConfirmationModal
+          visible={confirmationModal.visible}
+          title={confirmationModal.title}
+          message={confirmationModal.message}
+          onConfirm={confirmationModal.onConfirm}
+          onCancel={() => setConfirmationModal(null)}
+          confirmStyle={confirmationModal.confirmStyle}
+        />
+      )}
     </View>
   );
 };
 
-export const DealManagement: React.FC<DealManagementProps> = ({ deals, onDealAction }) => {
+export const DealManagement: React.FC<DealManagementProps> = ({ deals, onDealAction, onRefresh }) => {
   const [filter, setFilter] = useState<'all' | 'pending' | 'live' | 'expired' | 'deleted' | 'flagged'>('all');
   const [selectedDeals, setSelectedDeals] = useState<string[]>([]);
   const [allDeals, setAllDeals] = useState<AdminDeal[]>([]);
   const [allSystemDeals, setAllSystemDeals] = useState<AdminDeal[]>([]);
+  const [allDealsData, setAllDealsData] = useState<AdminDeal[]>([]);
+  const [sortBy, setSortBy] = useState<'newest' | 'oldest' | 'title' | 'price'>('newest');
+  const [bulkConfirmationModal, setBulkConfirmationModal] = useState<{
+    visible: boolean;
+    title: string;
+    message: string;
+    onConfirm: () => void;
+    confirmStyle?: 'default' | 'destructive';
+  } | null>(null);
+  const { formatPrice } = useCurrency();
 
   useEffect(() => {
     // Use the deals prop for pending deals
     setAllDeals(deals || []);
-  }, [deals]);
-
-  // Fetch all system deals when component mounts or when switching to 'all' filter
-  useEffect(() => {
+    
+    // If we're on the 'all' filter, refresh the system deals too
+    // This ensures newly inserted deals appear immediately
     if (filter === 'all') {
       fetchAllSystemDeals();
     }
-  }, [filter]);
+  }, [deals, filter]);
+
+  // Fetch all system deals and all deals when component mounts
+  useEffect(() => {
+    fetchAllSystemDeals();
+    fetchAllDeals();
+  }, []);
 
   // Refresh data when screen comes into focus (after returning from edit)
   useFocusEffect(
@@ -105,16 +210,15 @@ export const DealManagement: React.FC<DealManagementProps> = ({ deals, onDealAct
       // The parent component (admin screen) handles refreshing data
       // We just need to update our local state with the new deals prop
       setAllDeals(deals || []);
-      if (filter === 'all') {
-        fetchAllSystemDeals();
-      }
-    }, [deals, filter])
+      fetchAllSystemDeals(); // Always refresh moderation deals
+      fetchAllDeals(); // Also refresh all deals
+    }, [deals])
   );
 
   const fetchAllSystemDeals = async () => {
     try {
       console.log('Fetching all system deals...');
-      const dealsData = await apiClient.get<AdminDeal[]>('/deals?limit=1000'); // Get all deals with high limit
+      const dealsData = await apiClient.get<AdminDeal[]>('/deals?moderation=true&limit=1000'); // Get all deals needing moderation with high limit
       console.log('Fetched all system deals:', dealsData.length);
       setAllSystemDeals(dealsData);
     } catch (error) {
@@ -123,16 +227,54 @@ export const DealManagement: React.FC<DealManagementProps> = ({ deals, onDealAct
     }
   };
 
-  const filteredDeals = (() => {
-    if (filter === 'all') {
-      return allSystemDeals;
-    } else if (filter === 'pending') {
-      return allDeals; // This comes from the pendingDeals prop
-    } else {
-      // For other filters, use all system deals and filter by status
-      const targetStatus = filter === 'deleted' ? 'draft' : filter;
-      return allSystemDeals.filter(deal => deal.status === targetStatus);
+  const fetchAllDeals = async () => {
+    try {
+      console.log('Fetching all deals...');
+      const dealsData = await apiClient.get<AdminDeal[]>('/deals?limit=1000'); // Get all deals with high limit
+      console.log('Fetched all deals:', dealsData.length);
+      setAllDealsData(dealsData);
+    } catch (error) {
+      console.error('Error fetching all deals:', error);
+      setAllDealsData([]);
     }
+  };
+
+  const filteredDeals = (() => {
+    let deals: AdminDeal[] = [];
+    
+    // For 'all' filter, show all deals from allDealsData
+    if (filter === 'all') {
+      deals = allDealsData;
+    } 
+    // For 'pending' filter, show only pending deals from the hook
+    else if (filter === 'pending') {
+      deals = allDeals.filter(deal => deal.status === 'pending');
+    } 
+    // For 'live' filter, show live deals from allDealsData
+    else if (filter === 'live') {
+      deals = allDealsData.filter(deal => deal.status === 'live');
+    }
+    // For other filters, filter from all system deals (for moderation statuses)
+    else {
+      const targetStatus = filter === 'deleted' ? 'draft' : filter;
+      deals = allSystemDeals.filter(deal => deal.status === targetStatus);
+    }
+    
+    // Apply sorting
+    return deals.sort((a, b) => {
+      switch (sortBy) {
+        case 'newest':
+          return new Date(b.created_at || 0).getTime() - new Date(a.created_at || 0).getTime();
+        case 'oldest':
+          return new Date(a.created_at || 0).getTime() - new Date(b.created_at || 0).getTime();
+        case 'title':
+          return a.title.localeCompare(b.title);
+        case 'price':
+          return (b.price || 0) - (a.price || 0);
+        default:
+          return 0;
+      }
+    });
   })();
   
   console.log('Current filter:', filter);
@@ -156,49 +298,89 @@ export const DealManagement: React.FC<DealManagementProps> = ({ deals, onDealAct
     }
   };
 
-  const handleBulkAction = async (action: 'approve' | 'reject' | 'delete') => {
+  const handleBulkAction = async (action: 'approve' | 'reject' | 'delete' | 'harddelete') => {
     console.log('handleBulkAction called with:', action, 'selectedDeals:', selectedDeals);
     
     if (selectedDeals.length === 0) {
       console.log('No deals selected');
-      Alert.alert('No Selection', 'Please select deals to perform bulk action.');
+      setBulkConfirmationModal({
+        visible: true,
+        title: 'No Selection',
+        message: 'Please select deals to perform bulk action.',
+        onConfirm: () => setBulkConfirmationModal(null),
+      });
       return;
     }
 
-    const actionText = action === 'approve' ? 'approve' : action === 'reject' ? 'reject' : 'delete';
+    const actionText = action === 'approve' ? 'approve' : action === 'reject' ? 'reject' : action === 'harddelete' ? 'permanently delete' : 'delete';
+    const confirmMessage = action === 'harddelete' 
+      ? `Are you sure you want to ${actionText} ${selectedDeals.length} deal(s)? This action cannot be undone!`
+      : `Are you sure you want to ${actionText} ${selectedDeals.length} deal(s)?`;
+    
     console.log('Showing confirmation dialog for:', actionText);
     
-    if (window.confirm(`Are you sure you want to ${actionText} ${selectedDeals.length} deal(s)?`)) {
-      console.log('User confirmed bulk action');
-      try {
-        for (const dealId of selectedDeals) {
-          console.log('Processing deal:', dealId);
-          try {
-            if (action === 'approve') {
-              console.log('Calling onDealAction with Approve');
-              await onDealAction(dealId, 'Approve');
-            } else if (action === 'reject') {
-              console.log('Calling onDealAction with Reject');
-              await onDealAction(dealId, 'Reject');
-            } else {
-              console.log('Calling onDealAction with Delete');
-              await onDealAction(dealId, 'Delete');
+    setBulkConfirmationModal({
+      visible: true,
+      title: 'Confirm Bulk Action',
+      message: confirmMessage,
+      confirmStyle: action === 'harddelete' ? 'destructive' : 'default',
+      onConfirm: async () => {
+        // Close modal immediately when user confirms
+        setBulkConfirmationModal(null);
+        
+        console.log('User confirmed bulk action');
+        const dealCount = selectedDeals.length;
+        try {
+          for (const dealId of selectedDeals) {
+            console.log('Processing deal:', dealId);
+            try {
+              if (action === 'approve') {
+                console.log('Calling onDealAction with Approve');
+                await onDealAction(dealId, 'Approve');
+              } else if (action === 'reject') {
+                console.log('Calling onDealAction with Reject');
+                await onDealAction(dealId, 'Reject');
+              } else if (action === 'harddelete') {
+                console.log('Calling onDealAction with HardDelete');
+                await onDealAction(dealId, 'HardDelete');
+              } else {
+                console.log('Calling onDealAction with Delete');
+                await onDealAction(dealId, 'Delete');
+              }
+              console.log('Deal action completed for:', dealId);
+            } catch (error) {
+              console.error('Error processing deal:', dealId, error);
+              throw error;
             }
-            console.log('Deal action completed for:', dealId);
-          } catch (error) {
-            console.error('Error processing deal:', dealId, error);
-            throw error;
           }
+          setSelectedDeals([]);
+          // Show success message
+          setBulkConfirmationModal({
+            visible: true,
+            title: 'Success',
+            message: `${dealCount} deal(s) ${actionText}d successfully`,
+            onConfirm: () => {
+              setBulkConfirmationModal(null);
+              // Refresh data by updating local state with new deals prop
+              setAllDeals(deals || []);
+              // Also refresh all system deals to reflect changes
+              fetchAllSystemDeals();
+              // Refresh all deals data for proper filtering
+              fetchAllDeals();
+            }
+          });
+        } catch (error) {
+          console.error('Bulk action error:', error);
+          // Show error message
+          setBulkConfirmationModal({
+            visible: true,
+            title: 'Error',
+            message: `Failed to ${actionText} some deals`,
+            onConfirm: () => setBulkConfirmationModal(null),
+          });
         }
-        setSelectedDeals([]);
-        window.alert(`${selectedDeals.length} deal(s) ${actionText}d successfully`);
-        // Refresh data by updating local state with new deals prop
-        setAllDeals(deals || []);
-      } catch (error) {
-        console.error('Bulk action error:', error);
-        window.alert(`Failed to ${actionText} some deals`);
       }
-    }
+    });
   };
 
   return (
@@ -215,6 +397,27 @@ export const DealManagement: React.FC<DealManagementProps> = ({ deals, onDealAct
           >
             <Text style={[dealStyles.filterTabText, filter === status && dealStyles.activeFilterTabText]}>
               {status === 'expired' ? 'Rejected' : status === 'deleted' ? 'Deleted' : status.charAt(0).toUpperCase() + status.slice(1)}
+            </Text>
+          </TouchableOpacity>
+        ))}
+      </View>
+
+      {/* Sort Options */}
+      <View style={dealStyles.sortOptions}>
+        <Text style={dealStyles.sortLabel}>Sort by:</Text>
+        {[
+          { key: 'newest', label: 'Newest' },
+          { key: 'oldest', label: 'Oldest' },
+          { key: 'title', label: 'Title' },
+          { key: 'price', label: 'Price' }
+        ].map((option) => (
+          <TouchableOpacity
+            key={option.key}
+            onPress={() => setSortBy(option.key as any)}
+            style={[dealStyles.sortOption, sortBy === option.key && dealStyles.activeSortOption]}
+          >
+            <Text style={[dealStyles.sortOptionText, sortBy === option.key && dealStyles.activeSortOptionText]}>
+              {option.label}
             </Text>
           </TouchableOpacity>
         ))}
@@ -247,6 +450,12 @@ export const DealManagement: React.FC<DealManagementProps> = ({ deals, onDealAct
             }} style={[dealStyles.bulkButton, dealStyles.deleteButton]}>
               <Text style={dealStyles.bulkButtonText}>Delete ({selectedDeals.length})</Text>
             </TouchableOpacity>
+            <TouchableOpacity onPress={() => {
+              console.log('Hard Delete button clicked');
+              handleBulkAction('harddelete');
+            }} style={[dealStyles.bulkButton, dealStyles.hardDeleteButton]}>
+              <Text style={dealStyles.bulkButtonText}>Hard Delete ({selectedDeals.length})</Text>
+            </TouchableOpacity>
           </View>
         </View>
       )}
@@ -266,12 +475,25 @@ export const DealManagement: React.FC<DealManagementProps> = ({ deals, onDealAct
             }}
             isSelected={selectedDeals.includes(item.id)}
             onSelect={handleSelectDeal}
+            onRefresh={onRefresh}
+            formatPrice={formatPrice}
           />
         )}
         keyExtractor={(item) => item.id.toString()}
         showsVerticalScrollIndicator={false}
         contentContainerStyle={dealStyles.listContent}
       />
+      
+      {bulkConfirmationModal && (
+        <ConfirmationModal
+          visible={bulkConfirmationModal.visible}
+          title={bulkConfirmationModal.title}
+          message={bulkConfirmationModal.message}
+          onConfirm={bulkConfirmationModal.onConfirm}
+          onCancel={() => setBulkConfirmationModal(null)}
+          confirmStyle={bulkConfirmationModal.confirmStyle}
+        />
+      )}
     </View>
   );
 };
@@ -312,6 +534,38 @@ const dealStyles = StyleSheet.create({
   activeFilterTabText: {
     color: '#ffffff',
   },
+  sortOptions: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 20,
+    backgroundColor: '#f1f5f9',
+    borderRadius: 8,
+    padding: 12,
+  },
+  sortLabel: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#374151',
+    marginRight: 12,
+  },
+  sortOption: {
+    paddingVertical: 6,
+    paddingHorizontal: 12,
+    borderRadius: 6,
+    marginRight: 8,
+    backgroundColor: '#ffffff',
+  },
+  activeSortOption: {
+    backgroundColor: '#6366f1',
+  },
+  sortOptionText: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#64748b',
+  },
+  activeSortOptionText: {
+    color: '#ffffff',
+  },
   bulkActions: {
     backgroundColor: '#f8fafc',
     padding: 16,
@@ -348,6 +602,9 @@ const dealStyles = StyleSheet.create({
   },
   deleteButton: {
     backgroundColor: '#dc2626',
+  },
+  hardDeleteButton: {
+    backgroundColor: '#7f1d1d',
   },
   bulkButtonText: {
     fontSize: 12,
@@ -418,5 +675,71 @@ const dealStyles = StyleSheet.create({
     backgroundColor: '#eff6ff',
     borderWidth: 1,
     borderColor: '#bfdbfe',
+  },
+  // Modal styles
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0, 0, 0, 0.5)',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  modalContent: {
+    backgroundColor: '#FFFFFF',
+    borderRadius: 12,
+    padding: 20,
+    margin: 20,
+    width: '80%',
+    maxWidth: 400,
+  },
+  modalTitle: {
+    fontSize: 18,
+    fontWeight: 'bold',
+    marginBottom: 10,
+    textAlign: 'center',
+    color: '#1f2937',
+  },
+  modalMessage: {
+    fontSize: 16,
+    marginBottom: 20,
+    textAlign: 'center',
+    color: '#6b7280',
+    lineHeight: 22,
+  },
+  modalButtons: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+  },
+  modalButton: {
+    flex: 1,
+    paddingVertical: 12,
+    paddingHorizontal: 16,
+    borderRadius: 8,
+    marginHorizontal: 5,
+  },
+  cancelButton: {
+    backgroundColor: '#f3f4f6',
+    borderWidth: 1,
+    borderColor: '#d1d5db',
+  },
+  cancelButtonText: {
+    color: '#6b7280',
+    textAlign: 'center',
+    fontWeight: '600',
+  },
+  confirmButton: {
+    backgroundColor: '#3b82f6',
+  },
+  confirmButtonText: {
+    color: '#FFFFFF',
+    textAlign: 'center',
+    fontWeight: '600',
+  },
+  destructiveButton: {
+    backgroundColor: '#ef4444',
+  },
+  destructiveButtonText: {
+    color: '#FFFFFF',
+    textAlign: 'center',
+    fontWeight: '600',
   },
 });

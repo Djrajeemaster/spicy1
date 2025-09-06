@@ -117,6 +117,18 @@ class DealService {
       return data as DealWithRelations[];
     }, 'DealService.getRelatedDeals');
   }
+
+  checkDuplicates(data: { url?: string; title?: string; storeId?: string }) {
+    return safeAsync(async () => {
+      const params = new URLSearchParams();
+      if (data.url) params.append('url', data.url);
+      if (data.title) params.append('title', data.title);
+      if (data.storeId) params.append('storeId', data.storeId);
+      
+      const response = await apiClient.get(`/deals/check-duplicates?${params}`);
+      return response;
+    }, 'DealService.checkDuplicates');
+  }
 }
 
 export const dealService = new DealService();

@@ -1,8 +1,8 @@
 import React from 'react';
 import { View, Text, TouchableOpacity, StyleSheet, ScrollView } from 'react-native';
-import { Users, Flag, Settings, BarChart3, Tag, Megaphone, AlertTriangle, Eye, MessageSquare, Shield, Store, DollarSign, Globe } from 'lucide-react-native';
+import { Users, Flag, Settings, BarChart3, Tag, Megaphone, AlertTriangle, Eye, MessageSquare, Shield, Store, DollarSign, Globe, Search } from 'lucide-react-native';
 
-export type AdminTab = 'dashboard' | 'users' | 'deals' | 'banners' | 'categories' | 'stores' | 'affiliates' | 'moderation' | 'analytics' | 'communication' | 'audit' | 'role-requests' | 'roles' | 'settings' | 'reports';
+export type AdminTab = 'dashboard' | 'users' | 'deals' | 'banners' | 'categories' | 'stores' | 'affiliates' | 'moderation' | 'analytics' | 'communication' | 'audit' | 'role-requests' | 'roles' | 'settings' | 'reports' | 'competitor-research';
 
 interface SidebarTab {
   id: AdminTab;
@@ -22,6 +22,7 @@ const sidebarTabs: SidebarTab[] = [
   { id: 'affiliates', name: 'Affiliates', icon: DollarSign, category: 'Management' },
   { id: 'role-requests', name: 'Role Requests', icon: Shield, category: 'Management' },
   { id: 'roles', name: 'Roles', icon: Users, category: 'Management' },
+  { id: 'competitor-research', name: 'Competitor Research', icon: Search, category: 'Management', superadminOnly: true },
   { id: 'moderation', name: 'Moderation', icon: Eye, category: 'Moderation' },
   { id: 'reports', name: 'Reports', icon: AlertTriangle, category: 'Moderation' },
   { id: 'analytics', name: 'Analytics', icon: BarChart3, category: 'Analytics' },

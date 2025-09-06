@@ -43,7 +43,7 @@ class AdminDashboardService {
 
   private async getRecentActivities(): Promise<RecentActivity[]> {
     try {
-      const response = await apiClient.get('/admin/recent-activities'));
+      const response = await apiClient.get('/admin/recent-activities');
       if (!response.ok) return [];
       return await response.json();
     } catch (error) {
@@ -54,7 +54,7 @@ class AdminDashboardService {
 
   private async getSystemAlerts(): Promise<SystemAlert[]> {
     try {
-      const response = await apiClient.get('/admin/system-alerts'));
+      const response = await apiClient.get('/admin/system-alerts');
       if (!response.ok) return [];
       return await response.json();
     } catch (error) {
@@ -70,7 +70,7 @@ class AdminDashboardService {
     error_rate: number;
   }> {
     try {
-      const response = await apiClient.get('/admin/quick-stats'));
+      const response = await apiClient.get('/admin/quick-stats');
       if (!response.ok) throw new Error('Failed to fetch quick stats');
       return await response.json();
     } catch (error) {
@@ -102,7 +102,7 @@ class AdminDashboardService {
     cache: 'healthy' | 'degraded' | 'down';
   }> {
     try {
-      const response = await apiClient.get('/admin/system-health'));
+      const response = await apiClient.get('/admin/system-health');
       if (!response.ok) throw new Error('Failed to check system health');
       return await response.json();
     } catch (error) {

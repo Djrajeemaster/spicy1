@@ -36,7 +36,7 @@ import { dealService, DealWithRelations, canEditDeal } from '@/services/dealServ
 import { categoryService } from '@/services/categoryService';
 import { storeService } from '@/services/storeService';
 import { storageService } from '@/services/storageService';
-import { urlService } from '@/services/urlService';
+import { validateUrl } from '@/services/urlService';
 import { Database } from '@/types/database';
 import * as ImagePicker from 'expo-image-picker';
 
@@ -200,9 +200,9 @@ export default function EditDealScreen() {
     setUrlValid(null);
 
     try {
-      const result = await urlService.validateUrl(url);
+      const result = await validateUrl(url);
       
-      if (!result.isValid) {
+      if (!result.isReachable) {
         setUrlValid(false);
         setUrlMetadata(null);
         setExtractedImages([]);

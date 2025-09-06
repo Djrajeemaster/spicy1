@@ -1287,6 +1287,95 @@ app.post('/api/auth/create-superadmin', async (req, res) => {
   }
 });
 
+// Competitor Research endpoint (Super Admin only)
+app.post('/api/admin/competitor-research', requireSuperAdmin, async (req, res) => {
+  try {
+    const { competitors, stores } = req.body;
+    const CompetitorResearcher = require('./scripts/competitor-research');
+    const researcher = new CompetitorResearcher();
+
+    console.log('🔍 Starting competitor research...');
+    console.log('Competitors:', competitors);
+    console.log('Stores:', stores);
+    
+    const deals = await researcher.researchAllCompetitors(competitors, stores);
+
+    console.log(`📊 Found ${deals.length} deals from competitors`);
+
+    // Check for duplicates
+    console.log('🔍 Checking for duplicates...');
+    const dealsWithDuplicates = await researcher.checkForDuplicates(deals, pool);
+
+    const duplicates = dealsWithDuplicates.filter(deal => deal.isDuplicate);
+    const unique = dealsWithDuplicates.filter(deal => !deal.isDuplicate);
+
+    console.log(`✅ Unique deals: ${unique.length}, Duplicates: ${duplicates.length}`);
+
+    res.json({
+      deals: dealsWithDuplicates,
+      summary: {
+        total: dealsWithDuplicates.length,
+        unique: unique.length,
+        duplicates: duplicates.length
+      }
+    });
+  } catch (err) {
+    console.error('Competitor research error:', err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// Insert researched deals (Super Admin only)
+app.post('/api/admin/insert-researched-deals', requireSuperAdmin, async (req, res) => {
+  try {
+    const { deals, insertDuplicates = false, createdBy } = req.body;
+    const CompetitorResearcher = require('./scripts/competitor-research');
+    const researcher = new CompetitorResearcher();
+
+    console.log(`💾 Inserting ${deals.length} researched deals...`);
+
+    // Filter deals based on duplicate status
+    const dealsToInsert = insertDuplicates
+      ? deals
+      : deals.filter(deal => !deal.isDuplicate);
+
+    console.log(`📝 Will insert ${dealsToInsert.length} deals (${insertDuplicates ? 'including' : 'excluding'} duplicates)`);
+
+    const insertedDeals = await researcher.saveDealsToDatabase(dealsToInsert, pool, createdBy);
+
+    // Log the insertion for audit
+    const auditQuery = `
+      INSERT INTO audit_log (action, target_type, target_id, actor_id, actor_role, diff_json, created_at)
+      VALUES ($1, $2, $3, $4, $5, $6, NOW())
+    `;
+
+    await pool.query(auditQuery, [
+      'competitor_deals_inserted',
+      'system',
+      null,
+      req.user?.id || '00000000-0000-0000-0000-000000000000',
+      req.user?.role || 'system',
+      JSON.stringify({
+        totalDeals: deals.length,
+        insertedDeals: insertedDeals.length,
+        duplicatesSkipped: deals.length - dealsToInsert.length,
+        competitors: [...new Set(deals.map(d => d.competitor))],
+        createdBy: createdBy || 'system'
+      })
+    ]);
+
+    console.log(`✅ Successfully inserted ${insertedDeals.length} deals`);
+    res.json({
+      inserted: insertedDeals.length,
+      skipped: deals.length - dealsToInsert.length,
+      deals: insertedDeals
+    });
+  } catch (err) {
+    console.error('Insert researched deals error:', err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
 // Signup endpoint
 app.post('/api/auth/signup', async (req, res) => {
   try {
@@ -2709,6 +2798,17 @@ app.get('/api/admin/top-users', async (req, res) => {
        ORDER BY u.reputation DESC NULLS LAST 
        LIMIT $1`,
       [parseInt(limit)]
+    );
+    res.json(rows);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.get('/api/admin/users', requireSuperAdmin, async (req, res) => {
+  try {
+    const { rows } = await pool.query(
+      'SELECT id, username, role FROM users WHERE role IN (\'admin\', \'superadmin\', \'moderator\') ORDER BY role, username'
     );
     res.json(rows);
   } catch (err) {

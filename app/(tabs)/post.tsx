@@ -31,6 +31,7 @@ import { router } from 'expo-router';
 import { useAuth } from '@/contexts/AuthProvider';
 import { useDebounce } from '@/hooks/useDebounce';
 import { dealService } from '@/services/dealService';
+import { apiClient } from '@/utils/apiClient';
 import { categoryService } from '@/services/categoryService';
 import { storeService } from '@/services/storeService';
 import { storageService } from '@/services/storageService';
@@ -72,8 +73,17 @@ export default function PostDealScreen() {
   const [extractedImages, setExtractedImages] = useState<string[]>([]);
   const [urlMetadata, setUrlMetadata] = useState<any>(null);
   const [showAutoFill, setShowAutoFill] = useState(false);
-
   const [amazonImageUrl, setAmazonImageUrl] = useState('');
+
+  // Enhanced state variables
+  const [duplicates, setDuplicates] = useState<any[]>([]);
+  const [suggestions, setSuggestions] = useState({
+    title: [] as string[],
+    description: '',
+    tags: [] as string[]
+  });
+  const [discountPercentage, setDiscountPercentage] = useState('');
+  const [fullTitle, setFullTitle] = useState(''); // Store the full title
 
   // Store Modal State
   const [showStoreModal, setShowStoreModal] = useState(false);
@@ -412,11 +422,11 @@ export default function PostDealScreen() {
           if (result.images && result.images.length > 0) {
             setExtractedImages(result.images);
             console.log(`Setting ${result.images.length} Amazon images:`, result.images);
-            notify('Amazon URL Detected', 'To add Amazon product images, right-click on the product images on Amazon and copy the image URL, then paste them in the manual image picker below. Amazon image URLs work with format: m.media-amazon.com/images/I/...', 'info');
+            notify('Amazon Images Found!', `Found ${result.images.length} product image(s)! Tap them below to add to your deal.`, 'success');
           } else {
             setExtractedImages([]);
             console.log('No Amazon images found in result');
-            notify('Amazon URL Detected', 'Amazon product found! To add product images: 1) Go to the Amazon page, 2) Right-click on product images, 3) Copy image URL, 4) Use manual image picker below to add them.', 'info');
+            notify('Amazon URL Detected', 'Product found! For images: 1) Visit the Amazon page, 2) Right-click product images, 3) Copy image URL (should start with m.media-amazon.com), 4) Paste in the "Add Image URL" field below.', 'info');
           }
         } else {
           // Set extracted images if we found them from the URL
@@ -462,14 +472,20 @@ export default function PostDealScreen() {
     // Auto-fill title (only if empty or user confirms)
     if (urlMetadata.title && (!formData.title.trim() || 
         await confirm('Auto-fill title?', `Replace current title with: "${urlMetadata.title}"?`))) {
-      updatedFormData.title = urlMetadata.title;
+      setFullTitle(urlMetadata.title); // Store full title
+      updatedFormData.title = urlMetadata.title.length > 60 ? shortenTitle(urlMetadata.title, 60) : urlMetadata.title;
       fieldsUpdated.push('title');
     }
 
     // Auto-fill description (only if empty or user confirms)
     if (urlMetadata.description && (!formData.description.trim() || 
         await confirm('Auto-fill description?', `Replace current description with extracted content?`))) {
-      updatedFormData.description = urlMetadata.description;
+      let description = urlMetadata.description;
+      // If title was shortened, include full title in description
+      if (urlMetadata.title && urlMetadata.title.length > 60) {
+        description = `Full title: ${urlMetadata.title}\n\n${description}`;
+      }
+      updatedFormData.description = description;
       fieldsUpdated.push('description');
     }
 
@@ -846,6 +862,174 @@ export default function PostDealScreen() {
     }
   };
 
+  // Enhanced URL Processing Functions
+  const detectStoreFromUrl = (url: string): string | null => {
+    const storePatterns = {
+      'amazon': /amazon\./,
+      'flipkart': /flipkart\./,
+      'myntra': /myntra\./,
+      'nykaa': /nykaa\./,
+      'bigbasket': /bigbasket\./,
+      'ajio': /ajio\./,
+      'snapdeal': /snapdeal\./,
+      'paytm': /paytm\./,
+      'bookmyshow': /bookmyshow\./,
+      'swiggy': /swiggy\./,
+      'zomato': /zomato\./
+    };
+
+    for (const [store, pattern] of Object.entries(storePatterns)) {
+      if (pattern.test(url)) {
+        return store;
+      }
+    }
+    return null;
+  };
+
+  const suggestCategoryFromUrl = (url: string): string | null => {
+    const categoryKeywords = {
+      'electronics': ['phone', 'laptop', 'tv', 'headphone', 'charger', 'mobile', 'computer', 'tablet'],
+      'fashion': ['shirt', 'jeans', 'dress', 'shoes', 'watch', 'jewelry', 'sunglasses', 'bag'],
+      'beauty': ['cream', 'lipstick', 'shampoo', 'perfume', 'makeup', 'skincare', 'hair', 'cosmetics'],
+      'grocery': ['milk', 'bread', 'rice', 'oil', 'soap', 'detergent', 'snacks', 'beverages'],
+      'home': ['furniture', 'kitchen', 'bed', 'chair', 'table', 'appliance', 'decoration'],
+      'books': ['book', 'novel', 'textbook', 'magazine', 'comic'],
+      'sports': ['fitness', 'gym', 'sports', 'outdoor', 'cycling', 'running'],
+      'toys': ['toy', 'game', 'puzzle', 'educational', 'kids']
+    };
+
+    const urlLower = url.toLowerCase();
+    for (const [category, keywords] of Object.entries(categoryKeywords)) {
+      if (keywords.some(keyword => urlLower.includes(keyword))) {
+        return category;
+      }
+    }
+    return null;
+  };
+
+  const checkDuplicates = async (url: string) => {
+    try {
+      const response = await apiClient.get(`/deals/check-duplicates?url=${encodeURIComponent(url)}`) as any;
+      setDuplicates(response.duplicates || []);
+    } catch (error) {
+      console.error('Error checking duplicates:', error);
+    }
+  };
+
+  const generateDescriptionFromTitle = (title: string): string => {
+    const templates = [
+      `Get the best deal on ${title}. Limited time offer with great savings!`,
+      `Amazing discount on ${title}. Don't miss out on this incredible offer.`,
+      `${title} at an unbeatable price. Shop now and save big!`,
+      `Exclusive deal: ${title}. Premium quality at discounted rates.`,
+      `Hot deal alert! ${title} with special pricing just for you.`
+    ];
+    
+    let description = templates[Math.floor(Math.random() * templates.length)];
+    
+    // If we have a full title that's different from the short title, include it
+    if (fullTitle && fullTitle !== formData.title && fullTitle.length > formData.title.length) {
+      description = `Full title: ${fullTitle}\n\n${description}`;
+    }
+    
+    return description;
+  };
+
+  const generateTagsFromTitle = (title: string): string[] => {
+    const words = title.toLowerCase().split(' ');
+    const commonTags = ['deal', 'discount', 'offer', 'sale', 'bargain', 'special', 'limited'];
+    const relevantWords = words.filter(w => w.length > 2 && !['the', 'and', 'for', 'with', 'from', 'this', 'that'].includes(w));
+    return [...new Set([...relevantWords, ...commonTags])].slice(0, 8);
+  };
+
+  // Function to shorten title intelligently
+  const shortenTitle = (title: string, maxLength: number = 60): string => {
+    if (title.length <= maxLength) return title;
+    
+    // Try to cut at word boundaries
+    const words = title.split(' ');
+    let shortTitle = '';
+    
+    for (const word of words) {
+      if ((shortTitle + ' ' + word).length <= maxLength - 3) { // -3 for "..."
+        shortTitle += (shortTitle ? ' ' : '') + word;
+      } else {
+        break;
+      }
+    }
+    
+    return shortTitle + (shortTitle.length < title.length ? '...' : '');
+  };
+
+  // Enhanced URL change handler with auto-detection
+  const handleUrlChange = (url: string) => {
+    setFormData(prev => ({ ...prev, dealUrl: url }));
+
+    if (url.length > 10) {
+      // Auto-detect store
+      const detectedStore = detectStoreFromUrl(url);
+      if (detectedStore && stores.length > 0) {
+        const store = stores.find(s => s.name.toLowerCase().includes(detectedStore.toLowerCase()));
+        if (store && !formData.selectedStoreId) {
+          setFormData(prev => ({ ...prev, selectedStoreId: store.id }));
+          notify('Store Auto-Detected', `Automatically selected ${store.name} as the store.`, 'info');
+        }
+      }
+
+      // Auto-suggest category
+      const suggestedCategory = suggestCategoryFromUrl(url);
+      if (suggestedCategory && categories.length > 0) {
+        const category = categories.find(c => c.name.toLowerCase().includes(suggestedCategory.toLowerCase()));
+        if (category && !formData.selectedCategoryId) {
+          setFormData(prev => ({ ...prev, selectedCategoryId: category.id }));
+          notify('Category Suggested', `Suggested category: ${category.name}`, 'info');
+        }
+      }
+
+      // Check for duplicates
+      checkDuplicates(url);
+    } else {
+      setDuplicates([]);
+    }
+  };
+
+  // Enhanced title change handler with suggestions and shortening
+  const handleTitleChange = (title: string) => {
+    setFullTitle(title); // Store the full title
+    
+    // Auto-shorten if title is too long
+    const shortTitle = title.length > 60 ? shortenTitle(title, 60) : title;
+    setFormData(prev => ({ ...prev, title: shortTitle }));
+
+    if (title.length > 5) {
+      // Generate description suggestion
+      const description = generateDescriptionFromTitle(title);
+      setSuggestions(prev => ({ ...prev, description }));
+
+      // Generate tag suggestions
+      const tags = generateTagsFromTitle(title);
+      setSuggestions(prev => ({ ...prev, tags }));
+    }
+  };
+
+  // Auto-calculate discount percentage
+  const calculateDiscount = () => {
+    const price = parseFloat(formData.price);
+    const originalPrice = parseFloat(formData.originalPrice);
+
+    if (price && originalPrice && originalPrice > price) {
+      const discount = ((originalPrice - price) / originalPrice * 100).toFixed(0);
+      setDiscountPercentage(discount);
+    } else {
+      setDiscountPercentage('');
+    }
+  };
+
+  // Effect to calculate discount when prices change
+  useEffect(() => {
+    calculateDiscount();
+  }, [formData.price, formData.originalPrice]);
+
   // -------------------- STORE MODAL HANDLERS --------------------
   const handleStoreModalSubmit = async (dealData: any) => {
     try {
@@ -1020,9 +1204,16 @@ export default function PostDealScreen() {
               style={styles.input}
               placeholder="e.g., 50% Off Premium Headphones"
               value={formData.title}
-              onChangeText={(text) => setFormData((prev) => ({ ...prev, title: text }))}
+              onChangeText={handleTitleChange}
               placeholderTextColor="#94a3b8"
             />
+            {fullTitle && fullTitle !== formData.title && (
+              <View style={styles.titleInfo}>
+                <Text style={styles.titleInfoText}>
+                  📝 Full title saved in description: {fullTitle}
+                </Text>
+              </View>
+            )}
           </View>
 
           <View style={styles.inputGroup}>
@@ -1184,28 +1375,7 @@ export default function PostDealScreen() {
                 style={styles.inputWithPadding}
                 placeholder="https://store.com/deal-link"
                 value={formData.dealUrl}
-                onChangeText={(text) => {
-                  setFormData((prev) => ({ ...prev, dealUrl: text }));
-                  
-                  // Check if this is a major store URL that should use the modal
-                  if (text && isValidUrlFormat(text)) {
-                    const { useModal, store } = shouldUseStoreModal(text);
-                    if (useModal && store) {
-                      // Show store-specific modal for Amazon, Walmart, Target
-                      setStoreModalUrl(text);
-                      setShowStoreModal(true);
-                      return; // Don't proceed with normal validation
-                    }
-                  }
-                  
-                  // Reset validation state when typing
-                  if (text !== formData.dealUrl) {
-                    setUrlValid(null);
-                    setExtractedImages([]);
-                    setUrlMetadata(null);
-                    setShowAutoFill(false);
-                  }
-                }}
+                onChangeText={handleUrlChange}
                 placeholderTextColor="#94a3b8"
                 keyboardType="url"
               />
@@ -1218,12 +1388,17 @@ export default function PostDealScreen() {
                     ? '✅ URL is reachable and ready to use' 
                     : urlValid === false 
                       ? '❌ URL appears to be invalid or unreachable'
-                      : 'Link to the deal on the store\'s website - we\'ll auto-check it!'
+                      : 'Link to the deal on the store&apos;s website - we&apos;ll auto-check it!'
                 }
               </Text>
               {urlValid === true && (
                 <Text style={styles.helpTextSuccess}>
                   ✨ We'll automatically extract images and details when you enter the URL
+                </Text>
+              )}
+              {formData.dealUrl.includes('amzn.in') && (
+                <Text style={styles.helpText}>
+                  📦 Amazon short link detected! We'll try to resolve it to the full product page.
                 </Text>
               )}
             </View>
@@ -1252,6 +1427,33 @@ export default function PostDealScreen() {
               </TouchableOpacity>
             )}
           </View>
+
+          {/* Duplicate Warning */}
+          {duplicates.length > 0 && (
+            <View style={styles.duplicateWarning}>
+              <Text style={styles.duplicateWarningTitle}>⚠️ Potential Duplicates Found</Text>
+              {duplicates.slice(0, 3).map((duplicate, index) => (
+                <Text key={index} style={styles.duplicateItem}>
+                  • {duplicate.title?.substring(0, 50)}...
+                </Text>
+              ))}
+              <Text style={styles.duplicateWarningText}>
+                Please verify this isn&apos;t a duplicate before posting.
+              </Text>
+            </View>
+          )}
+
+          {/* Description Suggestions */}
+          {suggestions.description && formData.title && !formData.description && (
+            <TouchableOpacity
+              style={styles.suggestionButton}
+              onPress={() => setFormData(prev => ({ ...prev, description: suggestions.description }))}
+            >
+              <Text style={styles.suggestionText}>
+                💡 Use suggested description: {suggestions.description}
+              </Text>
+            </TouchableOpacity>
+          )}
 
           <View style={styles.inputGroup}>
             <Text style={styles.label}>Location (Optional)</Text>
@@ -1833,6 +2035,56 @@ const styles = StyleSheet.create({
   },
   extractedImageWrapper: {
     position: 'relative',
+  },
+  duplicateWarning: {
+    backgroundColor: '#fff3cd',
+    padding: 16,
+    borderRadius: 8,
+    marginTop: 12,
+    borderLeftWidth: 4,
+    borderLeftColor: '#ffc107',
+  },
+  duplicateWarningTitle: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: '#856404',
+    marginBottom: 8,
+  },
+  duplicateItem: {
+    fontSize: 14,
+    color: '#856404',
+    marginBottom: 4,
+  },
+  duplicateWarningText: {
+    fontSize: 12,
+    color: '#856404',
+    marginTop: 8,
+  },
+  suggestionButton: {
+    backgroundColor: '#e0f2fe',
+    padding: 12,
+    borderRadius: 8,
+    marginTop: 8,
+    borderLeftWidth: 4,
+    borderLeftColor: '#0284c7',
+  },
+  suggestionText: {
+    fontSize: 14,
+    color: '#0369a1',
+    fontWeight: '500',
+  },
+  titleInfo: {
+    marginTop: 8,
+    padding: 8,
+    backgroundColor: '#f0f9ff',
+    borderRadius: 6,
+    borderLeftWidth: 3,
+    borderLeftColor: '#0ea5e9',
+  },
+  titleInfoText: {
+    fontSize: 12,
+    color: '#0369a1',
+    fontWeight: '500',
   },
   bottomPadding: { height: 100 },
 });

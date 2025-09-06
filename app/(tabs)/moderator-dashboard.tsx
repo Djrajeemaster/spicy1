@@ -10,6 +10,17 @@ export default function ModeratorDashboard() {
   const { user, profile, loading: authLoading } = useAuth();
   const currentUserRole = profile?.role || 'guest';
 
+  useEffect(() => {
+    async function fetchReports() {
+      setLoading(true);
+      const { data, error } = await reportService.getPendingReports();
+      if (error) Alert.alert('Error', 'Failed to load reports');
+      setReports(Array.isArray(data) ? data : []);
+      setLoading(false);
+    }
+    fetchReports();
+  }, []);
+
   // Redirect unauthenticated users to login
   if (!authLoading && !user) {
     // @ts-ignore
@@ -26,17 +37,6 @@ export default function ModeratorDashboard() {
       </View>
     );
   }
-
-  useEffect(() => {
-    async function fetchReports() {
-      setLoading(true);
-      const { data, error } = await reportService.getPendingReports();
-      if (error) Alert.alert('Error', 'Failed to load reports');
-      setReports(data || []);
-      setLoading(false);
-    }
-    fetchReports();
-  }, []);
 
   const handleSuspendUser = async (userId: string) => {
     const { error } = await userService.updateUserStatus(userId, 'suspended', user?.id || '');

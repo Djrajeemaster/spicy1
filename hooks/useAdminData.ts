@@ -224,7 +224,7 @@ export const useAdminData = () => {
 
   // Fetch all admin data on mount
   useEffect(() => {
-    loadAdminData();
+    // loadAdminData will be called after it's defined
   }, []);
 
   const loadAdminData = useCallback(async () => {
@@ -335,6 +335,11 @@ export const useAdminData = () => {
     }
   }, []);
 
+  // Fetch all admin data on mount
+  useEffect(() => {
+    loadAdminData();
+  }, [loadAdminData]);
+
   // User management actions
   const handleUserAction = useCallback(async (userId: string, action: 'Ban' | 'Unban', adminId: string) => {
     const user = users.find(u => u.id === userId);
@@ -360,7 +365,7 @@ export const useAdminData = () => {
   }, [users]);
 
   // Deal management actions
-  const handleDealAction = useCallback(async (dealId: string, action: 'Approve' | 'Reject' | 'Delete', adminId: string) => {
+  const handleDealAction = useCallback(async (dealId: string, action: 'Approve' | 'Reject' | 'Delete' | 'HardDelete', adminId: string) => {
     // Find deal in all deals, not just pending deals
     let deal = pendingDeals.find(d => d.id === dealId);
     if (!deal) {
@@ -378,6 +383,17 @@ export const useAdminData = () => {
         updateError = (updateRes as any)?.error ?? null;
       }
       if (updateError) throw new Error(`Failed to delete deal: ${updateError.message || updateError}`);
+      setPendingDeals(prev => prev.filter(d => d.id !== dealId));
+    } else if (action === 'HardDelete') {
+      // Hard delete - permanently remove from database
+      const deleteRes = await dealService.deleteDeal(dealId);
+      let deleteError: any = null;
+      if (Array.isArray(deleteRes) && deleteRes.length === 2) {
+        deleteError = deleteRes[0];
+      } else {
+        deleteError = (deleteRes as any)?.error ?? null;
+      }
+      if (deleteError) throw new Error(`Failed to permanently delete deal: ${deleteError.message || deleteError}`);
       setPendingDeals(prev => prev.filter(d => d.id !== dealId));
     } else {
       const newStatus = action === 'Approve' ? 'live' : 'expired';

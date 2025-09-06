@@ -3,7 +3,7 @@ import { View, Text, StyleSheet, ScrollView, ActivityIndicator, TouchableOpacity
 import { useFocusEffect } from '@react-navigation/native';
 import { useLocalSearchParams } from 'expo-router';
 import { AdminHeader } from '@/components/admin/AdminHeader';
-import { AdminTab } from '@/components/admin/AdminTabNavigation';
+import { AdminTab } from '@/components/admin/AdminSidebar';
 import { AdminSidebar } from '@/components/admin/AdminSidebar';
 import { useAdminData } from '@/hooks/useAdminData';
 import { UserManagement } from '@/components/admin/UserManagement';
@@ -26,19 +26,13 @@ import { AdminAnalytics } from '@/components/admin/AdminAnalytics';
 import AdminModeration from '@/components/admin/AdminModeration';
 import AdminCommunication from '@/components/admin/AdminCommunication';
 import AdminAuditLog from '@/components/admin/AdminAuditLog';
+import CompetitorResearch from '@/components/admin/CompetitorResearch';
 
 export default function AdminScreen() {
   const [activeTab, setActiveTab] = useState<AdminTab>('dashboard');
   const { profile, user, loading } = useAuth();
   const currentUserRole = profile?.role || 'guest';
   const params = useLocalSearchParams();
-
-  // Set initial tab based on URL parameter
-  useEffect(() => {
-    if (params.tab && typeof params.tab === 'string') {
-      setActiveTab(params.tab as AdminTab);
-    }
-  }, [params.tab]);
 
   // Call useAdminData hook at the top level before any conditional returns
   const {
@@ -59,6 +53,26 @@ export default function AdminScreen() {
     updateSetting,
     refreshData,
   } = useAdminData();
+
+  // Refresh admin data when screen comes into focus - but only if data is stale
+  const lastAdminLoadRef = useRef(0);
+  const ADMIN_RELOAD_THRESHOLD = 15 * 60 * 1000; // 15 minutes for admin data
+
+  useFocusEffect(
+    useCallback(() => {
+      const now = Date.now();
+      const timeSinceLastLoad = now - lastAdminLoadRef.current;
+      
+      // Only reload if data is stale or missing and refreshData is available
+      if (refreshData && (timeSinceLastLoad > ADMIN_RELOAD_THRESHOLD || !adminStats)) {
+        console.log('🔄 Admin: Reloading data on focus');
+        refreshData();
+        lastAdminLoadRef.current = now;
+      } else {
+        console.log('📱 Admin: Skipping reload, data is fresh or refreshData not available');
+      }
+    }, [refreshData, adminStats])
+  );
 
   // Redirect unauthenticated users to login
   React.useEffect(() => {
@@ -83,26 +97,6 @@ export default function AdminScreen() {
       </View>
     );
   }
-
-  // Refresh admin data when screen comes into focus - but only if data is stale
-  const lastAdminLoadRef = useRef(0);
-  const ADMIN_RELOAD_THRESHOLD = 15 * 60 * 1000; // 15 minutes for admin data
-
-  useFocusEffect(
-    useCallback(() => {
-      const now = Date.now();
-      const timeSinceLastLoad = now - lastAdminLoadRef.current;
-      
-      // Only reload if data is stale or missing
-      if (timeSinceLastLoad > ADMIN_RELOAD_THRESHOLD || !adminStats) {
-        console.log('🔄 Admin: Reloading data on focus');
-        refreshData();
-        lastAdminLoadRef.current = now;
-      } else {
-        console.log('📱 Admin: Skipping reload, data is fresh');
-      }
-    }, [refreshData, adminStats])
-  );
 
   if (loading) {
     return (
@@ -148,16 +142,19 @@ export default function AdminScreen() {
       case 'deals':
         return <DealManagement 
           deals={pendingDeals} 
+          onRefresh={refreshData}
           onDealAction={async (dealId, action) => {
             console.log('Admin onDealAction called:', { dealId, action });
             try {
               await handleDealAction(dealId, action, profile?.id || '');
               console.log('handleDealAction completed successfully');
-              window.alert(`Deal ${action.toLowerCase()}d successfully`);
+              const actionText = action === 'HardDelete' ? 'permanently deleted' : `${action.toLowerCase()}d`;
+              Alert.alert('Success', `Deal ${actionText} successfully`);
               refreshData();
             } catch (error) {
               console.error('handleDealAction failed:', error);
-              window.alert(`Failed to ${action.toLowerCase()} deal`);
+              const actionText = action === 'HardDelete' ? 'permanently delete' : action.toLowerCase();
+              Alert.alert('Error', `Failed to ${actionText} deal`);
             }
           }} 
         />;
@@ -185,6 +182,8 @@ export default function AdminScreen() {
         return <RoleRequestsManagement />;
       case 'roles':
         return <RolesManagement />;
+      case 'competitor-research':
+        return <CompetitorResearch onRefresh={refreshData} users={users} />;
       default:
         return null;
     }

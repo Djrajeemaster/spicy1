@@ -9,6 +9,17 @@ export default function BusinessDashboard() {
   const { user, profile, loading: authLoading } = useAuth();
   const currentUserRole = profile?.role || 'guest';
 
+  useEffect(() => {
+    async function fetchDeals() {
+      setLoading(true);
+      const [err, data] = await dealService.getUserDeals(user?.id || '');
+      if (err) Alert.alert('Error', 'Failed to load deals');
+      setDeals(data || []);
+      setLoading(false);
+    }
+    fetchDeals();
+  }, [user]);
+
   // Redirect unauthenticated users to login
   if (!authLoading && !user) {
     // @ts-ignore
@@ -25,17 +36,6 @@ export default function BusinessDashboard() {
       </View>
     );
   }
-
-  useEffect(() => {
-    async function fetchDeals() {
-      setLoading(true);
-      const [err, data] = await dealService.getUserDeals(user?.id || '');
-      if (err) Alert.alert('Error', 'Failed to load deals');
-      setDeals(data || []);
-      setLoading(false);
-    }
-    fetchDeals();
-  }, [user]);
 
   return (
     <ScrollView style={styles.container}>

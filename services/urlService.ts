@@ -36,7 +36,7 @@ interface StoreConfig {
 const STORE_CONFIGS: Record<string, StoreConfig> = {
   amazon: {
     name: 'Amazon',
-    domains: ['amazon.com', 'amazon.in', 'amazon.co.uk', 'amazon.de', 'amazon.fr'],
+    domains: ['amazon.com', 'amazon.in', 'amazon.co.uk', 'amazon.de', 'amazon.fr', 'amzn.in'],
     titleSelectors: [
       '#productTitle',
       '.product-title',
@@ -116,6 +116,115 @@ const STORE_CONFIGS: Record<string, StoreConfig> = {
     ],
     descriptionSelectors: [
       '[data-test="item-details-description"]'
+    ]
+  },
+  flipkart: {
+    name: 'Flipkart',
+    domains: ['flipkart.com'],
+    titleSelectors: [
+      'span[data-title]',
+      '.B_NuCI',
+      'h1[data-title]',
+      '._35KyD6'
+    ],
+    priceSelectors: [
+      '._30jeq3',
+      '._16Jk6d',
+      'div[data-price]',
+      '._1vC4OE'
+    ],
+    imageSelectors: [
+      '._396cs4',
+      'img[data-image-index]',
+      '._2r_TV6 img',
+      'img[data-zoomimage]',
+      '._3i_BmR img'
+    ],
+    descriptionSelectors: [
+      '._1mXcCf',
+      '._1AN87F',
+      'div[data-description]'
+    ]
+  },
+  bigbasket: {
+    name: 'BigBasket',
+    domains: ['bigbasket.com'],
+    titleSelectors: [
+      'h1[data-qa="product-name"]',
+      '.GrE04',
+      'h1[data-name]',
+      '.ng-binding[data-name]'
+    ],
+    priceSelectors: [
+      '.mp-price',
+      'span[data-qa="product-price"]',
+      '.discnt-price',
+      '.ng-binding[data-price]'
+    ],
+    imageSelectors: [
+      'img[data-qa="product-image"]',
+      '.product-image img',
+      'img[data-zoom-image]',
+      '.cloudzoom img'
+    ],
+    descriptionSelectors: [
+      '.product-description',
+      '[data-qa="product-description"]',
+      '.desc-text'
+    ]
+  },
+  nykaa: {
+    name: 'Nykaa',
+    domains: ['nykaafashion.com', 'nykaa.com'],
+    titleSelectors: [
+      'h1[data-title]',
+      '.product-title',
+      '.css-1b1bxoo',
+      'h1[data-qa="product-name"]'
+    ],
+    priceSelectors: [
+      '.css-1m2rj4x',
+      '.product-price',
+      'span[data-qa="product-price"]',
+      '.css-1tz1m3j'
+    ],
+    imageSelectors: [
+      'img[data-qa="product-image"]',
+      '.product-image img',
+      '.css-1c4ww8m img',
+      'img[data-zoom-image]'
+    ],
+    descriptionSelectors: [
+      '.product-description',
+      '[data-qa="product-description"]',
+      '.css-1e0m30n'
+    ]
+  },
+  myntra: {
+    name: 'Myntra',
+    domains: ['myntra.com'],
+    titleSelectors: [
+      'h1[data-title]',
+      '.pdp-title',
+      'h1[data-qa="product-name"]',
+      '.product-product'
+    ],
+    priceSelectors: [
+      '.pdp-price',
+      'span[data-qa="product-price"]',
+      '.price',
+      'strong[data-qa="product-price"]'
+    ],
+    imageSelectors: [
+      'img[data-qa="product-image"]',
+      '.image-grid-image',
+      'img[data-zoom-image]',
+      '.product-image img'
+    ],
+    descriptionSelectors: [
+      '.pdp-product-description',
+      '[data-qa="product-description"]',
+      '.product-description'
     ]
   }
 };
@@ -964,21 +1073,75 @@ async function fetchViaProxy(url: string): Promise<string> {
 }
 
 /**
+ * Resolve Amazon short links (amzn.in) to full URLs
+ */
+async function resolveAmazonShortLink(shortUrl: string): Promise<string> {
+  try {
+    console.log('🔗 Resolving Amazon short link:', shortUrl);
+    
+    // For amzn.in links, we can try to construct the likely full URL
+    // Amazon short links typically follow patterns like amzn.in/d/XXXXXXX
+    const match = shortUrl.match(/amzn\.in\/d\/([a-zA-Z0-9]+)/);
+    if (match) {
+      const productCode = match[1];
+      // Try the most common Amazon domains
+      const possibleUrls = [
+        `https://www.amazon.in/dp/${productCode}`,
+        `https://www.amazon.com/dp/${productCode}`,
+        `https://www.amazon.co.uk/dp/${productCode}`
+      ];
+      
+      // Try each URL to see which one works
+      for (const testUrl of possibleUrls) {
+        try {
+          const response = await fetch(testUrl, { 
+            method: 'HEAD',
+            headers: {
+              'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
+            }
+          });
+          if (response.ok) {
+            console.log('✅ Resolved to:', testUrl);
+            return testUrl;
+          }
+        } catch (error) {
+          console.log('❌ URL not accessible:', testUrl);
+        }
+      }
+    }
+    
+    // If we can't resolve it, return the original URL
+    console.log('⚠️ Could not resolve short link, using original URL');
+    return shortUrl;
+  } catch (error) {
+    console.error('Error resolving Amazon short link:', error);
+    return shortUrl;
+  }
+}
+
+/**
  * Main function to extract URL data with AI-powered intelligence
  */
 export async function extractUrlData(url: string): Promise<UrlData> {
   try {
     console.log('🧠 AI-powered URL extraction starting for:', url);
     
+    let processedUrl = url;
+    
+    // Resolve Amazon short links
+    if (url.includes('amzn.in')) {
+      processedUrl = await resolveAmazonShortLink(url);
+    }
+    
     // Detect store and get configuration
-    const { store, config } = detectStore(url);
+    const { store, config } = detectStore(processedUrl);
     console.log('🏪 Detected store:', store || 'generic');
     
     let html: string;
     
     try {
       // Attempt to fetch via CORS proxy
-      html = await fetchViaProxy(url);
+      html = await fetchViaProxy(processedUrl);
     } catch (error) {
       console.log('⚠️ Proxy fetch failed, attempting smart URL-based extraction');
       
@@ -997,10 +1160,10 @@ export async function extractUrlData(url: string): Promise<UrlData> {
         }
         
         // Try to extract ASIN (Amazon product ID) for future reference
-        const asinMatch = url.match(/\/dp\/([A-Z0-9]{10})/);
+        const asinMatch = processedUrl.match(/\/dp\/([A-Z0-9]{10})/);
         const asin = asinMatch ? asinMatch[1] : null;
         
-        const category = extractCategoryIntelligently('', store, url);
+        const category = extractCategoryIntelligently('', store, processedUrl);
         
         // Return enriched data based on URL analysis
         return {
@@ -1024,7 +1187,7 @@ export async function extractUrlData(url: string): Promise<UrlData> {
       // Fallback: Generate data based on URL and store detection
       if (store) {
         const storeName = config?.name || store;
-        const category = extractCategoryIntelligently('', store, url);
+        const category = extractCategoryIntelligently('', store, processedUrl);
         return {
           title: `${storeName} Product Deal`,
           description: `Great deal from ${storeName}! Check out this amazing offer.`,
@@ -1044,7 +1207,7 @@ export async function extractUrlData(url: string): Promise<UrlData> {
       }
       
       // Generic fallback
-      const title = url.split('/').pop()?.replace(/[-_]/g, ' ') || 'Great Deal';
+      const title = processedUrl.split('/').pop()?.replace(/[-_]/g, ' ') || 'Great Deal';
       return {
         title: title.charAt(0).toUpperCase() + title.slice(1),
         description: 'Amazing deal! Limited time offer.',
@@ -1079,7 +1242,7 @@ export async function extractUrlData(url: string): Promise<UrlData> {
     console.log('🖼️ Extracted images:', images?.length || 0);
     
     const description = extractDescription(html, store, title);
-    const category = extractCategoryIntelligently(html, store, url);
+    const category = extractCategoryIntelligently(html, store, processedUrl);
     const brand = extractBrandIntelligently(html, store);
     const { rating, reviewCount } = extractRatingAndReviews(html, store);
     const availability = extractAvailability(html, store);

@@ -74,7 +74,7 @@ class AdminCommunicationService {
     by_type: Record<string, number>;
   }> {
     try {
-      const response = await apiClient.get('/admin/announcement-stats'));
+      const response = await apiClient.get('/admin/announcement-stats');
       if (!response.ok) throw new Error('Failed to fetch announcement stats');
       return await response.json();
     } catch (error) {
@@ -125,7 +125,7 @@ class AdminCommunicationService {
     created_at: string;
   }>> {
     try {
-      const response = await apiClient.get('/admin/system-notifications'));
+      const response = await apiClient.get('/admin/system-notifications');
       if (!response.ok) return [];
       return await response.json();
     } catch (error) {
