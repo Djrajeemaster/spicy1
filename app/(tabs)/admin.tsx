@@ -1,6 +1,7 @@
-import React, { useState, useCallback, useRef } from 'react';
+import React, { useState, useCallback, useRef, useEffect } from 'react';
 import { View, Text, StyleSheet, ScrollView, ActivityIndicator, TouchableOpacity, Alert } from 'react-native';
 import { useFocusEffect } from '@react-navigation/native';
+import { useLocalSearchParams } from 'expo-router';
 import { AdminHeader } from '@/components/admin/AdminHeader';
 import { AdminTab } from '@/components/admin/AdminTabNavigation';
 import { AdminSidebar } from '@/components/admin/AdminSidebar';
@@ -30,6 +31,14 @@ export default function AdminScreen() {
   const [activeTab, setActiveTab] = useState<AdminTab>('dashboard');
   const { profile, user, loading } = useAuth();
   const currentUserRole = profile?.role || 'guest';
+  const params = useLocalSearchParams();
+
+  // Set initial tab based on URL parameter
+  useEffect(() => {
+    if (params.tab && typeof params.tab === 'string') {
+      setActiveTab(params.tab as AdminTab);
+    }
+  }, [params.tab]);
 
   // Call useAdminData hook at the top level before any conditional returns
   const {

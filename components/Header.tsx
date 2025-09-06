@@ -13,7 +13,7 @@ import {
   TouchableWithoutFeedback,
   Modal,
 } from 'react-native';
-import { Bell, ChevronDown, LogIn, Search, Filter, Navigation } from 'lucide-react-native';
+import { Bell, ChevronDown, LogIn, Search, Filter, Navigation, Plus } from 'lucide-react-native';
 import { Image } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { UserBadge } from '@/components/UserBadge';
@@ -24,7 +24,7 @@ import { alertService } from '@/services/alertService';
 import { apiUrl, assetUrl } from '@/utils/api';
 
 // import canAccessAdmin from '@/lib/db'; // Removed: Node.js-only code
-import { router } from 'expo-router';
+import { useRouter } from 'expo-router';
 import { logger } from '@/utils/logger';
 
 interface HeaderProps {
@@ -54,6 +54,7 @@ export function Header({
 }: HeaderProps) {
   const { user, profile, signOut } = useAuth();
   const { theme, colors } = useTheme();
+  const router = useRouter();
 
   const [showUserMenu, setShowUserMenu] = useState(false);
   const [siteLogoFilename, setSiteLogoFilename] = useState<string>('sdicon.PNG');
@@ -317,25 +318,46 @@ export function Header({
             <TouchableOpacity onPress={() => router.push('/')} style={styles.logoContainer}>
               <Image
                 source={{ uri: assetUrl(siteLogoFilenameRaw) + (logoCacheBuster ? `?cb=${logoCacheBuster}` : '') }}
-                style={{ width: 60, height: 60, marginRight: 12, resizeMode: 'contain' }}
+                style={[
+                  { resizeMode: 'contain', marginRight: isDesktopWeb ? 12 : 8 },
+                  isDesktopWeb ? { width: 60, height: 60 } : { width: 36, height: 36 }
+                ]}
               />
-              {/* Show full text only on desktop, just icon on mobile */}
-              {isDesktopWeb && (() => {
-        if (headerGradientStart && headerGradientEnd && Platform.OS === 'web') {
-                  const gradientTextStyle: any = {
-                    // gradient text on web using CSS background-clip technique
-                    backgroundImage: `linear-gradient(90deg, ${headerGradientStart}, ${headerGradientEnd})`,
-                    WebkitBackgroundClip: 'text',
-                    color: 'transparent',
-          fontFamily: `${siteFont}, Poppins, sans-serif`,
-                    fontSize: 28,
-                    fontWeight: 'bold',
-                    textAlign: 'center'
-                  };
-                  return <Text style={gradientTextStyle}>SaversDream</Text>;
+              {/* Show full text on desktop, smaller text on mobile/tablet */}
+              {(() => {
+                const gradientTextStyle: any = {
+                  fontFamily: `${siteFont}, Poppins, sans-serif`,
+                  fontWeight: 'bold',
+                  textAlign: 'center'
+                };
+
+                if (isDesktopWeb) {
+                  // Desktop - full size text
+                  gradientTextStyle.fontSize = 28;
+                  if (headerGradientStart && headerGradientEnd && Platform.OS === 'web') {
+                    gradientTextStyle.backgroundImage = `linear-gradient(90deg, ${headerGradientStart}, ${headerGradientEnd})`;
+                    gradientTextStyle.WebkitBackgroundClip = 'text';
+                    gradientTextStyle.color = 'transparent';
+                  } else {
+                    gradientTextStyle.color = headerTextColor;
+                  }
+                } else {
+                  // Mobile/Tablet - bigger text, more visible
+                  gradientTextStyle.fontSize = 20; // Increased from 16 to 20
+                  gradientTextStyle.fontWeight = '700'; // Increased weight
+                  gradientTextStyle.maxWidth = 140; // Slightly more space
+                  gradientTextStyle.numberOfLines = 1;
+                  gradientTextStyle.letterSpacing = -0.5; // Tighter letter spacing
+                  if (headerGradientStart && headerGradientEnd && Platform.OS === 'web') {
+                    gradientTextStyle.backgroundImage = `linear-gradient(90deg, ${headerGradientStart}, ${headerGradientEnd})`;
+                    gradientTextStyle.WebkitBackgroundClip = 'text';
+                    gradientTextStyle.color = 'transparent';
+                  } else {
+                    gradientTextStyle.color = headerTextColor;
+                  }
                 }
 
-        return <Text style={{ color: headerTextColor, fontFamily: `${siteFont}, Poppins, sans-serif`, fontSize: 28,fontWeight: 'bold', textAlign: 'center' }}>SaversDream</Text>;
+                return <Text style={gradientTextStyle}>SaversDream</Text>;
               })()}
             </TouchableOpacity>
           </View>
@@ -421,14 +443,6 @@ export function Header({
               </TouchableOpacity>
             )}
 
-            {showAdminButton && (
-              <TouchableOpacity style={styles.adminButton} onPress={handleAdminAccess}>
-                <LinearGradient colors={['#ef4444', '#dc2626']} style={styles.adminButtonGradient}>
-                  <Text style={styles.adminButtonText}>Admin</Text>
-                </LinearGradient>
-              </TouchableOpacity>
-            )}
-
             {!isGuest && isDesktopWeb && (
               <TouchableOpacity
                 style={[styles.postButton, !privileges.canPost && styles.disabledButton]}
@@ -436,19 +450,54 @@ export function Header({
                 disabled={!privileges.canPost}
               >
                 <LinearGradient
-                  colors={privileges.canPost ? ['#10b981', '#059669'] : ['#94a3b8', '#64748b']}
+                  colors={privileges.canPost ? ['#10b981', '#059669'] : ['#6b7280', '#4b5563']}
                   style={styles.postButtonGradient}
                 >
-                  <Text style={styles.postButtonText}>+ Post</Text>
+                  <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+                    <Plus size={14} color="#FFFFFF" style={{ marginRight: 4 }} />
+                    <Text style={styles.postButtonText}>Post</Text>
+                  </View>
+                </LinearGradient>
+              </TouchableOpacity>
+            )}
+
+            {showAdminButton && (
+              <TouchableOpacity 
+                style={[
+                  styles.adminButton, 
+                  isDesktopWeb && styles.adminButtonDesktop
+                ]} 
+                onPress={handleAdminAccess}
+              >
+                <LinearGradient 
+                  colors={['#e11d48', '#be185d']} 
+                  style={[
+                    styles.adminButtonGradient,
+                    isDesktopWeb && styles.adminButtonGradientDesktop
+                  ]}
+                >
+                  <Text style={[
+                    styles.adminButtonText,
+                    isDesktopWeb && styles.adminButtonTextDesktop
+                  ]}>ADMIN</Text>
                 </LinearGradient>
               </TouchableOpacity>
             )}
 
 
 
-            <TouchableOpacity style={styles.alertButton} onPress={handleAlertsPress}>
-              <View style={styles.alertIconContainer}>
-                <Bell size={22} color="#FFFFFF" />
+            <TouchableOpacity 
+              style={[
+                styles.alertButton,
+                isDesktopWeb && styles.alertButtonDesktop
+              ]} 
+              onPress={handleAlertsPress}
+            >
+              <View style={[
+                styles.alertIconContainer,
+                isDesktopWeb && styles.alertIconContainerDesktop
+              ]}>
+                <Bell size={isDesktopWeb ? 24 : 22} color="#FFFFFF" />
                 {alertCount > 0 && (
                   <View style={styles.alertBadge}>
                     <Text style={styles.alertBadgeText}>{alertCount}</Text>
@@ -466,15 +515,27 @@ export function Header({
               </TouchableOpacity>
             ) : (
               <TouchableOpacity
-                style={styles.userButton}
+                style={[
+                  styles.userButton,
+                  isDesktopWeb && styles.userButtonDesktop
+                ]}
                 onPress={() => {
                   setShowUserMenu(!showUserMenu);
                 }}
               >
-                <LinearGradient colors={['#8b5cf6', '#7c3aed']} style={styles.avatar}>
-                  <Text style={styles.avatarText}>{profile?.username?.[0]?.toUpperCase() || '?'}</Text>
+                <LinearGradient 
+                  colors={['#8b5cf6', '#7c3aed']} 
+                  style={[
+                    styles.avatar,
+                    isDesktopWeb && styles.avatarDesktop
+                  ]}
+                >
+                  <Text style={[
+                    styles.avatarText,
+                    isDesktopWeb && styles.avatarTextDesktop
+                  ]}>{profile?.username?.[0]?.toUpperCase() || '?'}</Text>
                 </LinearGradient>
-                <ChevronDown size={14} color="#FFFFFF" />
+                <ChevronDown size={isDesktopWeb ? 16 : 14} color="#FFFFFF" />
               </TouchableOpacity>
             )}
           </View>
@@ -655,15 +716,22 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16, // Slightly more padding on desktop
   },
   leftSection: { 
-    flexDirection: 'row', 
+    flexDirection: 'row',
     alignItems: 'center',
-    // Mobile default - no flex constraints
+    flex: 1, 
+    maxWidth: '50%', // Reduced from 55% to give more space for buttons
   },
   leftSectionDesktop: {
-    flex: 1, // Fixed flex for logo area on desktop
-    minWidth: 200, // Ensure logo has minimum space
+    flex: 1, 
+    minWidth: 250, // Increased from 200 for desktop
+    maxWidth: 350, // Add max width for desktop
   },
-  logoContainer: { flexDirection: 'row', alignItems: 'center' },
+  logoContainer: { 
+    flexDirection: 'row', 
+    alignItems: 'center',
+    flex: 1,
+    maxWidth: 200, // Limit width on mobile to prevent interference
+  },
   logo: {
     width: 40, height: 40, borderRadius: 12, marginRight: 12,
     justifyContent: 'center', alignItems: 'center',
@@ -673,32 +741,78 @@ const styles = StyleSheet.create({
   rightSection: { 
     flexDirection: 'row', 
     alignItems: 'center',
-    justifyContent: 'center', // Center all right section contents vertically
-    gap: 6,
+    justifyContent: 'flex-end', // Align to the right
+    flex: 1, // Take remaining space
+    gap: 6, // Increased gap for better spacing
   },
   rightSectionDesktop: {
-    flex: 3, // Give more flex space to the right section for search on desktop
-    justifyContent: 'flex-end', // Align items to the right when no search
+    flex: 3, 
+    justifyContent: 'flex-end', 
+    gap: 12, // Larger gap for desktop
+    paddingLeft: 16, // Add padding for desktop
   },
 
   iconButton: { padding: 4, marginRight: 4 },
-  adminButton: { borderRadius: 12, overflow: 'hidden', marginRight: 8 },
-  adminButtonGradient: { paddingHorizontal: 18, paddingVertical: 8, borderRadius: 24, justifyContent: 'center', alignItems: 'center', minHeight: 40, marginRight: 8 },
-  adminButtonText: { color: '#FFFFFF', fontSize: 11, fontWeight: '700' },
+  adminButton: { 
+    borderRadius: 18, 
+    overflow: 'hidden', 
+    marginRight: 6,
+    elevation: 2,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.12,
+    shadowRadius: 2,
+    minWidth: 65,
+    maxWidth: 65,
+  },
+  adminButtonDesktop: { marginRight: 8, minWidth: 75, maxWidth: 75 }, // More spacing on desktop
+  adminButtonGradient: { 
+    paddingHorizontal: 10, 
+    paddingVertical: 6, 
+    borderRadius: 18, 
+    justifyContent: 'center', 
+    alignItems: 'center', 
+    minHeight: 28,
+    width: '100%',
+  },
+  adminButtonGradientDesktop: {
+    paddingHorizontal: 14,
+    paddingVertical: 7,
+    minHeight: 32,
+  },
+  adminButtonText: { color: '#FFFFFF', fontSize: 11, fontWeight: '700', letterSpacing: 0.3, textTransform: 'uppercase' },
+  adminButtonTextDesktop: { fontSize: 12, fontWeight: '700' },
 
-  postButton: { borderRadius: 24, overflow: 'hidden', marginRight: 8, minHeight: 40, justifyContent: 'center', alignItems: 'center', paddingHorizontal: 18 },
-  postButtonGradient: { paddingHorizontal: 18, paddingVertical: 8, borderRadius: 24, justifyContent: 'center', alignItems: 'center', minHeight: 40 },
-  postButtonText: { color: '#FFFFFF', fontSize: 11, fontWeight: '700' },
+  postButton: { 
+    borderRadius: 18, 
+    overflow: 'hidden', 
+    marginRight: 6, 
+    minHeight: 36, 
+    justifyContent: 'center', 
+    alignItems: 'center', 
+    paddingHorizontal: 14,
+    elevation: 2,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.12,
+    shadowRadius: 2,
+    minWidth: 95,
+    maxWidth: 95,
+  },
+  postButtonGradient: { paddingHorizontal: 14, paddingVertical: 8, borderRadius: 18, justifyContent: 'center', alignItems: 'center', minHeight: 36, width: '100%' },
+  postButtonText: { color: '#FFFFFF', fontSize: 13, fontWeight: '600', letterSpacing: 0.3 },
   disabledButton: { opacity: 0.6 },
 
-  alertButton: { marginRight: 8, width: 48, height: 48, borderRadius: 16, justifyContent: 'center', alignItems: 'center' },
-  alertIconContainer: { position: 'relative', width: 48, height: 48, justifyContent: 'center', alignItems: 'center' },
+  alertButton: { marginRight: 8, width: 44, height: 44, borderRadius: 14, justifyContent: 'center', alignItems: 'center' },
+  alertButtonDesktop: { width: 48, height: 48, marginRight: 12 },
+  alertIconContainer: { position: 'relative', width: 44, height: 44, justifyContent: 'center', alignItems: 'center' },
+  alertIconContainerDesktop: { width: 48, height: 48 },
   alertBadge: {
-    position: 'absolute', top: 0, right: 0, backgroundColor: '#ef4444',
-    borderRadius: 8, minWidth: 14, height: 14, justifyContent: 'center', alignItems: 'center',
+    position: 'absolute', top: 2, right: 2, backgroundColor: '#ef4444',
+    borderRadius: 6, minWidth: 12, height: 12, justifyContent: 'center', alignItems: 'center',
     borderWidth: 1, borderColor: '#FFFFFF',
   },
-  alertBadgeText: { fontSize: 9, fontWeight: '700', color: '#FFFFFF' },
+  alertBadgeText: { fontSize: 8, fontWeight: '700', color: '#FFFFFF' },
 
   loginButton: { borderRadius: 14, overflow: 'hidden' },
   loginGradient: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 10, paddingVertical: 4 },
@@ -706,13 +820,16 @@ const styles = StyleSheet.create({
 
 
 
-  userButton: { flexDirection: 'row', alignItems: 'center', marginLeft: 8, width: 48, height: 48, borderRadius: 16, justifyContent: 'center' },
+  userButton: { flexDirection: 'row', alignItems: 'center', marginLeft: 8, width: 44, height: 44, borderRadius: 14, justifyContent: 'center' },
+  userButtonDesktop: { width: 48, height: 48, marginLeft: 12 },
   avatar: {
-  width: 36, height: 36, borderRadius: 18, justifyContent: 'center', alignItems: 'center',
-  marginRight: 4, shadowColor: '#000', shadowOffset: { width: 0, height: 1 },
-  shadowOpacity: 0.15, shadowRadius: 2, elevation: 2,
+    width: 36, height: 36, borderRadius: 18, justifyContent: 'center', alignItems: 'center',
+    marginRight: 3, shadowColor: '#000', shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.15, shadowRadius: 2, elevation: 2,
   },
+  avatarDesktop: { width: 40, height: 40, borderRadius: 20, marginRight: 4 },
   avatarText: { color: '#FFFFFF', fontSize: 12, fontWeight: '700' },
+  avatarTextDesktop: { fontSize: 14 },
 
   userMenu: {
     backgroundColor: '#FFFFFF',

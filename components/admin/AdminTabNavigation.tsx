@@ -1,8 +1,8 @@
 import React from 'react';
 import { View, Text, StyleSheet, ScrollView, TouchableOpacity } from 'react-native';
-import { Users, Flag, Settings, BarChart3, Tag, Megaphone, AlertTriangle, Eye, MessageSquare, Shield, Store, DollarSign } from 'lucide-react-native';
+import { Users, Flag, Settings, BarChart3, Tag, Megaphone, AlertTriangle, Eye, MessageSquare, Shield, Store, DollarSign, Globe } from 'lucide-react-native';
 
-export type AdminTab = 'dashboard' | 'users' | 'deals' | 'banners' | 'categories' | 'stores' | 'affiliates' | 'moderation' | 'analytics' | 'communication' | 'audit' | 'settings' | 'reports';
+export type AdminTab = 'dashboard' | 'users' | 'deals' | 'banners' | 'categories' | 'stores' | 'affiliates' | 'moderation' | 'analytics' | 'communication' | 'audit' | 'role-requests' | 'roles' | 'settings' | 'reports';
 
 interface AdminTabNavigationProps {
   activeTab: AdminTab;
@@ -18,6 +18,8 @@ const tabs = [
   { id: 'analytics' as AdminTab, name: 'Analytics', icon: BarChart3 },
   { id: 'communication' as AdminTab, name: 'Communication', icon: MessageSquare },
   { id: 'audit' as AdminTab, name: 'Audit Log', icon: Shield },
+  { id: 'role-requests' as AdminTab, name: 'Role Requests', icon: Shield },
+  { id: 'roles' as AdminTab, name: 'Roles', icon: Users },
   { id: 'banners' as AdminTab, name: 'Banners', icon: Megaphone },
   { id: 'categories' as AdminTab, name: 'Categories', icon: Tag },
   { id: 'stores' as AdminTab, name: 'Stores', icon: Store },

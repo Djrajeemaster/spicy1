@@ -69,6 +69,49 @@ android/keystore.properties
 *.aab
 *.idsig
 
+# --- IDE and Editor Files ---
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# --- Additional Build/Cache/Temp Files ---
+# Distribution builds
+dist/
+build/
+
+# Upload directories
+tmp_uploads/
+uploads/
+
+# Cache directories
+.cache/
+.parcel-cache/
+
+# Coverage reports
+coverage/
+.nyc_output/
+
+# --- OS-specific files ---
+# Windows
+Thumbs.db
+ehthumbs.db
+Desktop.ini
+$RECYCLE.BIN/
+*.lnk
+
+# macOS
+.DS_Store
+.AppleDouble
+.LSOverride
+Icon?
+._*
+
+# Linux
+*~
+.directory
+
 # --- Waste/Temp/Backup/Old Test Files ---
 # Documentation and markdown
 ADMIN_ENHANCEMENTS.md

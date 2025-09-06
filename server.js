@@ -4,12 +4,21 @@ require('dotenv').config();
 const cors = require('cors');
 const express = require('express');
 const { Pool } = require('pg');
+const bcrypt = require('bcrypt');
 const app = express();
 const path = require('path');
 const fs = require('fs');
 const multer = require('multer');
 // store uploads temporarily then move into assets
 const upload = multer({ dest: path.join(__dirname, 'tmp_uploads') });
+
+// Configuration
+const port = process.env.PORT || 3000;
+
+// PostgreSQL connection
+const pool = new Pool({
+  connectionString: process.env.DATABASE_URL,
+});
 
 // Parse JSON bodies
 app.use(express.json());
@@ -37,6 +46,12 @@ try {
 } catch (e) {
   console.error('Failed to ensure asset directories exist', e);
 }
+
+// Add a middleware to log all incoming requests
+app.use((req, res, next) => {
+  console.log(`📡 ${new Date().toISOString()} - ${req.method} ${req.path} - Origin: ${req.get('origin')}`);
+  next();
+});
 
 // Parse cookies early so middleware that relies on req.cookies works (requireSuperAdmin)
 const cookieParser = require('cookie-parser');
@@ -89,8 +104,13 @@ function writeSettings(obj) {
 async function requireSuperAdmin(req, res, next) {
   try {
     const sessionId = req.cookies && req.cookies.session_id;
+    console.log('🔧 requireSuperAdmin: sessionId =', sessionId);
+    console.log('🔧 requireSuperAdmin: cookies =', req.cookies);
+    
     if (!sessionId) return res.status(403).json({ error: 'Not authenticated' });
     const { rows } = await pool.query('SELECT id, role FROM users WHERE id = $1', [sessionId]);
+    console.log('🔧 requireSuperAdmin: user =', rows[0]);
+    
     // accept both common variants just in case, but prefer 'superadmin'
     // Accept common privileged roles in development: 'superadmin', 'super_admin', and 'admin'
     if (!rows[0] || (rows[0].role !== 'superadmin' && rows[0].role !== 'super_admin' && rows[0].role !== 'admin')) return res.status(403).json({ error: 'Forbidden' });
@@ -301,6 +321,18 @@ app.get('/api/banners', async (req, res) => {
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
+});
+
+// Test endpoint to check authentication status
+app.get('/api/auth/status', (req, res) => {
+  const sessionId = req.cookies && req.cookies.session_id;
+  console.log('🔧 Auth status check: sessionId =', sessionId);
+  console.log('🔧 Auth status check: cookies =', req.cookies);
+  res.json({ 
+    authenticated: !!sessionId, 
+    sessionId: sessionId,
+    cookies: req.cookies 
+  });
 });
 
 // Get available logos (super_admin only)
@@ -586,7 +618,6 @@ if (process.env.NODE_ENV === 'development') {
   });
 }
 // Session endpoint
-const bcrypt = require('bcrypt');
 
 app.get('/api/auth/session', async (req, res) => {
   const sessionId = req.cookies.session_id;
@@ -645,13 +676,6 @@ app.get('/api/categories', async (req, res) => {
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
-});
-
-const port = process.env.PORT || 3000;
-
-// PostgreSQL connection
-const pool = new Pool({
-  connectionString: process.env.DATABASE_URL,
 });
 
 // Example endpoint: Get all users
@@ -3111,10 +3135,657 @@ app.post('/api/users', async (req, res) => {
   }
 });
 
-app.listen(port, () => {
-  console.log(`Server running on port ${port}`);
+// ================================
+// ENHANCED CHAT API ENDPOINTS
+// ================================
+
+// Get all channels (global + user's private channels)
+app.get('/api/chat/channels', requireAuth, async (req, res) => {
+  try {
+    const userId = req.session.userId;
+    
+    const { rows } = await pool.query(`
+      SELECT c.id,
+             c.name,
+             c.description,
+             c.type,
+             c.is_global,
+             c.created_by,
+             c.created_at,
+             c.updated_at,
+             c.is_active,
+             CASE 
+               WHEN c.type = 'private' THEN 
+                 (SELECT u.username FROM users u WHERE u.id = 
+                   (SELECT cm2.user_id FROM channel_members cm2 
+                    WHERE cm2.channel_id = c.id AND cm2.user_id != $1 LIMIT 1))
+               ELSE c.name 
+             END as display_name,
+             CASE 
+               WHEN c.type = 'private' THEN 
+                 (SELECT u.avatar_url FROM users u WHERE u.id = 
+                   (SELECT cm2.user_id FROM channel_members cm2 
+                    WHERE cm2.channel_id = c.id AND cm2.user_id != $1 LIMIT 1))
+               ELSE NULL 
+             END as avatar_url,
+             cm.role as user_role,
+             m.content as last_message,
+             COALESCE(m.created_at, c.created_at) as last_message_time,
+             sender.username as last_sender,
+             CASE WHEN c.type = 'global' THEN 0 ELSE 1 END as sort_order
+      FROM chat_channels c
+      LEFT JOIN channel_members cm ON c.id = cm.channel_id AND cm.user_id = $1
+      LEFT JOIN messages m ON c.id = m.channel_id AND m.id = (
+        SELECT id FROM messages WHERE channel_id = c.id ORDER BY created_at DESC LIMIT 1
+      )
+      LEFT JOIN users sender ON m.sender_id = sender.id
+      WHERE c.type = 'global' 
+         OR (c.type IN ('group', 'private') AND cm.user_id = $1)
+      ORDER BY 
+        sort_order,
+        last_message_time DESC NULLS LAST
+    `, [userId]);
+    
+    res.json(rows);
+  } catch (err) {
+    console.error('Error fetching channels:', err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// Get messages for a channel
+app.get('/api/chat/channels/:channelId/messages', requireAuth, async (req, res) => {
+  try {
+    const { channelId } = req.params;
+    const { limit = 50, offset = 0 } = req.query;
+    const userId = req.session.userId;
+    
+    // Check if user has access to this channel
+    const accessCheck = await pool.query(`
+      SELECT 1 FROM chat_channels c
+      LEFT JOIN channel_members cm ON c.id = cm.channel_id AND cm.user_id = $1
+      WHERE c.id = $2 AND (c.type = 'global' OR cm.user_id = $1)
+    `, [userId, channelId]);
+    
+    if (accessCheck.rows.length === 0) {
+      return res.status(403).json({ error: 'Access denied to this channel' });
+    }
+    
+    const { rows } = await pool.query(`
+      SELECT m.*, u.username, u.avatar_url, u.role,
+             COALESCE(
+               (SELECT json_agg(json_build_object(
+                 'id', mr.id,
+                 'emoji', mr.reaction,
+                 'user_id', mr.user_id,
+                 'username', ru.username
+               )) FROM message_reactions mr 
+               LEFT JOIN users ru ON mr.user_id = ru.id 
+               WHERE mr.message_id = m.id),
+               '[]'::json
+             ) as reactions
+      FROM messages m
+      LEFT JOIN users u ON m.sender_id = u.id
+      WHERE m.channel_id = $1
+      ORDER BY m.created_at DESC
+      LIMIT $2 OFFSET $3
+    `, [channelId, parseInt(limit), parseInt(offset)]);
+    
+    res.json(rows.reverse()); // Reverse to show oldest first
+  } catch (err) {
+    console.error('Error fetching messages:', err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// Send a message
+app.post('/api/chat/channels/:channelId/messages', requireAuth, async (req, res) => {
+  try {
+    const { channelId } = req.params;
+    const { content, mentioned_users = [] } = req.body;
+    const userId = req.session.userId;
+    
+    if (!content || content.trim().length === 0) {
+      return res.status(400).json({ error: 'Message content is required' });
+    }
+    
+    // Check if user has access to this channel
+    const accessCheck = await pool.query(`
+      SELECT 1 FROM chat_channels c
+      LEFT JOIN channel_members cm ON c.id = cm.channel_id AND cm.user_id = $1
+      WHERE c.id = $2 AND (c.type = 'global' OR cm.user_id = $1)
+    `, [userId, channelId]);
+    
+    if (accessCheck.rows.length === 0) {
+      return res.status(403).json({ error: 'Access denied to this channel' });
+    }
+    
+    const { rows } = await pool.query(`
+      INSERT INTO messages (channel_id, sender_id, content, mentioned_users, created_at)
+      VALUES ($1, $2, $3, $4, NOW())
+      RETURNING *
+    `, [channelId, userId, content.trim(), mentioned_users]);
+    
+    // Get sender info
+    const messageWithUser = await pool.query(`
+      SELECT m.*, u.username, u.avatar_url, u.role
+      FROM messages m
+      LEFT JOIN users u ON m.sender_id = u.id
+      WHERE m.id = $1
+    `, [rows[0].id]);
+    
+    res.status(201).json(messageWithUser.rows[0]);
+  } catch (err) {
+    console.error('Error sending message:', err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// Create or get private chat channel
+app.post('/api/chat/private', requireAuth, async (req, res) => {
+  try {
+    const { other_user_id } = req.body;
+    const userId = req.session.userId;
+    
+    if (!other_user_id || other_user_id === userId) {
+      return res.status(400).json({ error: 'Invalid user ID' });
+    }
+    
+    // Check if users are blocked
+    const blockCheck = await pool.query(`
+      SELECT 1 FROM user_blocks 
+      WHERE (blocker_id = $1 AND blocked_id = $2) 
+         OR (blocker_id = $2 AND blocked_id = $1)
+    `, [userId, other_user_id]);
+    
+    if (blockCheck.rows.length > 0) {
+      return res.status(403).json({ error: 'Cannot chat with blocked user' });
+    }
+    
+    // Check if private channel already exists
+    const existingChannel = await pool.query(`
+      SELECT c.* FROM chat_channels c
+      WHERE c.type = 'private'
+        AND c.id IN (
+          SELECT cm1.channel_id FROM channel_members cm1
+          WHERE cm1.user_id = $1
+          INTERSECT
+          SELECT cm2.channel_id FROM channel_members cm2
+          WHERE cm2.user_id = $2
+        )
+        AND (SELECT COUNT(*) FROM channel_members WHERE channel_id = c.id) = 2
+    `, [userId, other_user_id]);
+    
+    if (existingChannel.rows.length > 0) {
+      return res.json(existingChannel.rows[0]);
+    }
+    
+    // Create new private channel
+    const { rows: channelRows } = await pool.query(`
+      INSERT INTO chat_channels (name, type, created_by, created_at)
+      VALUES ('Private Chat', 'private', $1, NOW())
+      RETURNING *
+    `, [userId]);
+    
+    const channelId = channelRows[0].id;
+    
+    // Add both users as members
+    await pool.query(`
+      INSERT INTO channel_members (channel_id, user_id, role, joined_at)
+      VALUES 
+        ($1, $2, 'member', NOW()),
+        ($1, $3, 'member', NOW())
+    `, [channelId, userId, other_user_id]);
+    
+    res.status(201).json(channelRows[0]);
+  } catch (err) {
+    console.error('Error creating private chat:', err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// Send chat request (ping system)
+app.post('/api/chat/requests', requireAuth, async (req, res) => {
+  try {
+    const { recipient_id, message } = req.body;
+    const userId = req.session.userId;
+    
+    if (!recipient_id || recipient_id === userId) {
+      return res.status(400).json({ error: 'Invalid recipient ID' });
+    }
+    
+    // Check if users are blocked
+    const blockCheck = await pool.query(`
+      SELECT 1 FROM user_blocks 
+      WHERE (blocker_id = $1 AND blocked_id = $2) 
+         OR (blocker_id = $2 AND blocked_id = $1)
+    `, [userId, recipient_id]);
+    
+    if (blockCheck.rows.length > 0) {
+      return res.status(403).json({ error: 'Cannot send request to blocked user' });
+    }
+    
+    // Check for existing pending request
+    const existingRequest = await pool.query(`
+      SELECT 1 FROM chat_requests 
+      WHERE sender_id = $1 AND recipient_id = $2 AND status = 'pending'
+    `, [userId, recipient_id]);
+    
+    if (existingRequest.rows.length > 0) {
+      return res.status(400).json({ error: 'Request already sent' });
+    }
+    
+    const { rows } = await pool.query(`
+      INSERT INTO chat_requests (sender_id, recipient_id, message, status, created_at)
+      VALUES ($1, $2, $3, 'pending', NOW())
+      RETURNING *
+    `, [userId, recipient_id, message || '']);
+    
+    res.status(201).json(rows[0]);
+  } catch (err) {
+    console.error('Error sending chat request:', err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// Get chat requests (sent and received)
+app.get('/api/chat/requests', requireAuth, async (req, res) => {
+  try {
+    const userId = req.session.userId;
+    const { type = 'received' } = req.query;
+    
+    let query;
+    if (type === 'sent') {
+      query = `
+        SELECT cr.*, u.username as recipient_username, u.avatar_url as recipient_avatar
+        FROM chat_requests cr
+        LEFT JOIN users u ON cr.recipient_id = u.id
+        WHERE cr.sender_id = $1
+        ORDER BY cr.created_at DESC
+      `;
+    } else {
+      query = `
+        SELECT cr.*, u.username as sender_username, u.avatar_url as sender_avatar
+        FROM chat_requests cr
+        LEFT JOIN users u ON cr.sender_id = u.id
+        WHERE cr.recipient_id = $1
+        ORDER BY cr.created_at DESC
+      `;
+    }
+    
+    const { rows } = await pool.query(query, [userId]);
+    res.json(rows);
+  } catch (err) {
+    console.error('Error fetching chat requests:', err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// Respond to chat request
+app.put('/api/chat/requests/:requestId', requireAuth, async (req, res) => {
+  try {
+    const { requestId } = req.params;
+    const { action } = req.body; // 'accept', 'reject', 'ignore'
+    const userId = req.session.userId;
+    
+    if (!['accept', 'reject', 'ignore'].includes(action)) {
+      return res.status(400).json({ error: 'Invalid action' });
+    }
+    
+    // Verify this is the recipient of the request
+    const { rows: requestRows } = await pool.query(`
+      SELECT * FROM chat_requests WHERE id = $1 AND recipient_id = $2
+    `, [requestId, userId]);
+    
+    if (requestRows.length === 0) {
+      return res.status(404).json({ error: 'Request not found' });
+    }
+    
+    const request = requestRows[0];
+    
+    // Update request status
+    await pool.query(`
+      UPDATE chat_requests SET status = $1, responded_at = NOW()
+      WHERE id = $2
+    `, [action === 'accept' ? 'accepted' : action, requestId]);
+    
+    // If accepted, create private channel
+    if (action === 'accept') {
+      // Check if private channel already exists
+      const existingChannel = await pool.query(`
+        SELECT c.* FROM chat_channels c
+        WHERE c.type = 'private'
+          AND c.id IN (
+            SELECT cm1.channel_id FROM channel_members cm1
+            WHERE cm1.user_id = $1
+            INTERSECT
+            SELECT cm2.channel_id FROM channel_members cm2
+            WHERE cm2.user_id = $2
+          )
+          AND (SELECT COUNT(*) FROM channel_members WHERE channel_id = c.id) = 2
+      `, [userId, request.sender_id]);
+      
+      if (existingChannel.rows.length === 0) {
+        // Create new private channel
+        const { rows: channelRows } = await pool.query(`
+          INSERT INTO chat_channels (name, type, created_by, created_at)
+          VALUES ('Private Chat', 'private', $1, NOW())
+          RETURNING *
+        `, [userId]);
+        
+        const channelId = channelRows[0].id;
+        
+        // Add both users as members
+        await pool.query(`
+          INSERT INTO channel_members (channel_id, user_id, role, joined_at)
+          VALUES 
+            ($1, $2, 'member', NOW()),
+            ($1, $3, 'member', NOW())
+        `, [channelId, userId, request.sender_id]);
+      }
+    }
+    
+    res.json({ success: true, action });
+  } catch (err) {
+    console.error('Error responding to chat request:', err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// Block user
+app.post('/api/chat/block', requireAuth, async (req, res) => {
+  try {
+    const { user_id } = req.body;
+    const userId = req.session.userId;
+    
+    if (!user_id || user_id === userId) {
+      return res.status(400).json({ error: 'Invalid user ID' });
+    }
+    
+    await pool.query(`
+      INSERT INTO user_blocks (blocker_id, blocked_id, created_at)
+      VALUES ($1, $2, NOW())
+      ON CONFLICT (blocker_id, blocked_id) DO NOTHING
+    `, [userId, user_id]);
+    
+    res.json({ success: true });
+  } catch (err) {
+    console.error('Error blocking user:', err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// Unblock user
+app.delete('/api/chat/block/:userId', requireAuth, async (req, res) => {
+  try {
+    const { userId: blockedUserId } = req.params;
+    const userId = req.session.userId;
+    
+    await pool.query(`
+      DELETE FROM user_blocks 
+      WHERE blocker_id = $1 AND blocked_id = $2
+    `, [userId, blockedUserId]);
+    
+    res.json({ success: true });
+  } catch (err) {
+    console.error('Error unblocking user:', err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// Get blocked users
+app.get('/api/chat/blocked', requireAuth, async (req, res) => {
+  try {
+    const userId = req.session.userId;
+    
+    const { rows } = await pool.query(`
+      SELECT ub.*, u.username, u.avatar_url
+      FROM user_blocks ub
+      LEFT JOIN users u ON ub.blocked_id = u.id
+      WHERE ub.blocker_id = $1
+      ORDER BY ub.created_at DESC
+    `, [userId]);
+    
+    res.json(rows);
+  } catch (err) {
+    console.error('Error fetching blocked users:', err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// Get/Update chat preferences
+app.get('/api/chat/preferences', requireAuth, async (req, res) => {
+  try {
+    const userId = req.session.userId;
+    
+    let { rows } = await pool.query(`
+      SELECT * FROM user_chat_preferences WHERE user_id = $1
+    `, [userId]);
+    
+    if (rows.length === 0) {
+      // Create default preferences
+      const { rows: newRows } = await pool.query(`
+        INSERT INTO user_chat_preferences (
+          user_id, allow_private_messages, allow_group_invites, 
+          show_online_status, message_notifications, created_at
+        )
+        VALUES ($1, true, true, true, true, NOW())
+        RETURNING *
+      `, [userId]);
+      rows = newRows;
+    }
+    
+    res.json(rows[0]);
+  } catch (err) {
+    console.error('Error fetching chat preferences:', err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.put('/api/chat/preferences', requireAuth, async (req, res) => {
+  try {
+    const userId = req.session.userId;
+    const { 
+      allow_private_messages, 
+      allow_group_invites, 
+      show_online_status, 
+      message_notifications 
+    } = req.body;
+    
+    const { rows } = await pool.query(`
+      INSERT INTO user_chat_preferences (
+        user_id, allow_private_messages, allow_group_invites, 
+        show_online_status, message_notifications, created_at, updated_at
+      )
+      VALUES ($1, $2, $3, $4, $5, NOW(), NOW())
+      ON CONFLICT (user_id) DO UPDATE SET
+        allow_private_messages = EXCLUDED.allow_private_messages,
+        allow_group_invites = EXCLUDED.allow_group_invites,
+        show_online_status = EXCLUDED.show_online_status,
+        message_notifications = EXCLUDED.message_notifications,
+        updated_at = NOW()
+      RETURNING *
+    `, [userId, allow_private_messages, allow_group_invites, show_online_status, message_notifications]);
+    
+    res.json(rows[0]);
+  } catch (err) {
+    console.error('Error updating chat preferences:', err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// Add reaction to message
+app.post('/api/chat/messages/:messageId/reactions', requireAuth, async (req, res) => {
+  try {
+    const { messageId } = req.params;
+    const { emoji } = req.body;
+    const userId = req.session.userId;
+    
+    if (!emoji) {
+      return res.status(400).json({ error: 'Emoji is required' });
+    }
+    
+    await pool.query(`
+      INSERT INTO message_reactions (message_id, user_id, emoji, created_at)
+      VALUES ($1, $2, $3, NOW())
+      ON CONFLICT (message_id, user_id, emoji) DO NOTHING
+    `, [messageId, userId, emoji]);
+    
+    res.json({ success: true });
+  } catch (err) {
+    console.error('Error adding reaction:', err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// Remove reaction from message
+app.delete('/api/chat/messages/:messageId/reactions', requireAuth, async (req, res) => {
+  try {
+    const { messageId } = req.params;
+    const { emoji } = req.query;
+    const userId = req.session.userId;
+    
+    await pool.query(`
+      DELETE FROM message_reactions 
+      WHERE message_id = $1 AND user_id = $2 AND emoji = $3
+    `, [messageId, userId, emoji]);
+    
+    res.json({ success: true });
+  } catch (err) {
+    console.error('Error removing reaction:', err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// Create group chat
+app.post('/api/chat/groups', requireAuth, async (req, res) => {
+  try {
+    const { name, description, member_ids = [] } = req.body;
+    const userId = req.session.userId;
+    
+    if (!name || name.trim().length === 0) {
+      return res.status(400).json({ error: 'Group name is required' });
+    }
+    
+    // Create group channel
+    const { rows: channelRows } = await pool.query(`
+      INSERT INTO chat_channels (name, description, type, created_by, created_at)
+      VALUES ($1, $2, 'group', $3, NOW())
+      RETURNING *
+    `, [name.trim(), description || '', userId]);
+    
+    const channelId = channelRows[0].id;
+    
+    // Add creator as admin
+    await pool.query(`
+      INSERT INTO channel_members (channel_id, user_id, role, joined_at)
+      VALUES ($1, $2, 'admin', NOW())
+    `, [channelId, userId]);
+    
+    // Add other members
+    if (member_ids.length > 0) {
+      const memberValues = member_ids.map(memberId => `('${channelId}', '${memberId}', 'member', NOW())`).join(', ');
+      await pool.query(`
+        INSERT INTO channel_members (channel_id, user_id, role, joined_at)
+        VALUES ${memberValues}
+      `);
+    }
+    
+    res.status(201).json(channelRows[0]);
+  } catch (err) {
+    console.error('Error creating group chat:', err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// Join group chat
+app.post('/api/chat/groups/:channelId/join', requireAuth, async (req, res) => {
+  try {
+    const { channelId } = req.params;
+    const userId = req.session.userId;
+    
+    // Check if channel exists and is a group
+    const { rows: channelRows } = await pool.query(`
+      SELECT * FROM chat_channels WHERE id = $1 AND type = 'group'
+    `, [channelId]);
+    
+    if (channelRows.length === 0) {
+      return res.status(404).json({ error: 'Group not found' });
+    }
+    
+    // Add user as member
+    await pool.query(`
+      INSERT INTO channel_members (channel_id, user_id, role, joined_at)
+      VALUES ($1, $2, 'member', NOW())
+      ON CONFLICT (channel_id, user_id) DO NOTHING
+    `, [channelId, userId]);
+    
+    res.json({ success: true });
+  } catch (err) {
+    console.error('Error joining group chat:', err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// Leave group chat
+app.delete('/api/chat/groups/:channelId/leave', requireAuth, async (req, res) => {
+  try {
+    const { channelId } = req.params;
+    const userId = req.session.userId;
+    
+    await pool.query(`
+      DELETE FROM channel_members 
+      WHERE channel_id = $1 AND user_id = $2
+    `, [channelId, userId]);
+    
+    res.json({ success: true });
+  } catch (err) {
+    console.error('Error leaving group chat:', err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// Get channel members
+app.get('/api/chat/channels/:channelId/members', requireAuth, async (req, res) => {
+  try {
+    const { channelId } = req.params;
+    const userId = req.session.userId;
+    
+    // Check if user has access to this channel
+    const accessCheck = await pool.query(`
+      SELECT 1 FROM chat_channels c
+      LEFT JOIN channel_members cm ON c.id = cm.channel_id AND cm.user_id = $1
+      WHERE c.id = $2 AND (c.type = 'global' OR cm.user_id = $1)
+    `, [userId, channelId]);
+    
+    if (accessCheck.rows.length === 0) {
+      return res.status(403).json({ error: 'Access denied to this channel' });
+    }
+    
+    const { rows } = await pool.query(`
+      SELECT cm.*, u.username, u.avatar_url, u.status
+      FROM channel_members cm
+      LEFT JOIN users u ON cm.user_id = u.id
+      WHERE cm.channel_id = $1
+      ORDER BY cm.role DESC, u.username ASC
+    `, [channelId]);
+    
+    res.json(rows);
+  } catch (err) {
+    console.error('Error fetching channel members:', err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// Test endpoint
+app.get('/api/test-chat-debug', (req, res) => {
+  res.json({ message: 'Chat debug endpoint working', timestamp: new Date().toISOString() });
 });
 
 app.get('/health', (req, res) => {
   res.json({ status: 'healthy', timestamp: new Date().toISOString(), environment: process.env.NODE_ENV });
+});
+
+app.listen(port, '0.0.0.0', () => {
+  console.log(`Server running on port ${port}`);
 });

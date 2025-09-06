@@ -42,16 +42,25 @@ const getApiBaseUrl = (): string => {
   const environment = getEnvironment();
   const local = isLocal();
   
+  console.log('🔧 getApiBaseUrl - environment:', environment);
+  console.log('🔧 getApiBaseUrl - isLocal:', local);
+  console.log('🔧 getApiBaseUrl - window.location:', typeof window !== 'undefined' ? window.location.href : 'server-side');
+  
+  // FORCE localhost:3000 for development to fix the port issue
+  if (typeof window !== 'undefined') {
+    // Client-side - always use localhost:3000 for development
+    const hostname = window.location.hostname;
+    if (hostname === 'localhost' || hostname === '127.0.0.1') {
+      const url = 'http://localhost:3000';
+      console.log('🔧 API Base URL (FORCED for localhost):', url);
+      return url;
+    }
+  }
+  
   // Priority order: Environment variable -> Default based on environment
   if (typeof window === 'undefined') {
     // Server-side
     return process.env.API_BASE_URL || (local ? 'http://localhost:3000' : '');
-  }
-  
-  // Client-side
-  if (local) {
-    // Development: Explicit localhost with port
-    return process.env.EXPO_PUBLIC_API_BASE_URL || 'http://localhost:3000';
   }
   
   // Production/VPS: Use relative URLs (no domain)
@@ -71,7 +80,9 @@ export const getApiUrl = (path: string): string => {
   const baseUrl = config.API_BASE_URL;
   // Ensure path starts with /api if it doesn't already
   const apiPath = path.startsWith('/api') ? path : `/api${path}`;
-  return `${baseUrl}${apiPath}`;
+  const fullUrl = `${baseUrl}${apiPath}`;
+  console.log(`🔧 getApiUrl: ${path} -> ${fullUrl}`);
+  return fullUrl;
 };
 
 export const getAssetUrl = (filename: string): string => {

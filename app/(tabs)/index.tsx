@@ -23,6 +23,7 @@ import { Header } from '@/components/Header';
 import { DealCard } from '@/components/DealCard';
 import { EnhancedDealCardV2 } from '@/components/EnhancedDealCardV2';
 import DealListCard from '@/components/DealListCard';
+import ChatButton from '@/components/chat/ChatButton';
 import { UserRole } from '@/types/user';
 import { useAuth } from '@/contexts/AuthProvider';
 import { useTheme } from '@/contexts/ThemeProvider';
@@ -1564,6 +1565,15 @@ export default function HomeScreen() {
         </View>
       )}
 
+      {/* Floating Chat Button */}
+      <View style={styles.floatingChatButton}>
+        <ChatButton 
+          style={styles.chatButtonContainer}
+          size={24}
+          color="#FFFFFF"
+        />
+      </View>
+
     </SafeAreaView>
   );
 }
@@ -2108,6 +2118,28 @@ const styles = StyleSheet.create({
     zIndex: 99999,
     elevation: 99999,
     pointerEvents: 'box-none',
+  },
+  
+  // Floating chat button
+  floatingChatButton: {
+    position: 'absolute',
+    bottom: 20,
+    right: 20,
+    zIndex: 1000,
+    elevation: 1000,
+  },
+  chatButtonContainer: {
+    backgroundColor: '#059669',
+    borderRadius: 30,
+    width: 60,
+    height: 60,
+    justifyContent: 'center',
+    alignItems: 'center',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.3,
+    shadowRadius: 8,
+    elevation: 8,
   },
 });
 

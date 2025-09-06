@@ -1,8 +1,8 @@
 import React from 'react';
 import { View, Text, TouchableOpacity, StyleSheet, ScrollView } from 'react-native';
-import { Users, Flag, Settings, BarChart3, Tag, Megaphone, AlertTriangle, Eye, MessageSquare, Shield, Store, DollarSign } from 'lucide-react-native';
+import { Users, Flag, Settings, BarChart3, Tag, Megaphone, AlertTriangle, Eye, MessageSquare, Shield, Store, DollarSign, Globe } from 'lucide-react-native';
 
-export type AdminTab = 'dashboard' | 'users' | 'deals' | 'banners' | 'categories' | 'stores' | 'affiliates' | 'moderation' | 'analytics' | 'communication' | 'audit' | 'settings' | 'reports';
+export type AdminTab = 'dashboard' | 'users' | 'deals' | 'banners' | 'categories' | 'stores' | 'affiliates' | 'moderation' | 'analytics' | 'communication' | 'audit' | 'role-requests' | 'roles' | 'settings' | 'reports';
 
 interface SidebarTab {
   id: AdminTab;

@@ -55,5 +55,5 @@ declare global {
 
 // Expo Router specific declarations (if needed)
 declare module 'expo-router' {
-  export * from 'expo-router/types';
+  export * from 'expo-router/build/exports';
 }
