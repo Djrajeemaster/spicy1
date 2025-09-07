@@ -105,15 +105,28 @@ const GIF_CATEGORIES = [
   {
     name: 'Trending',
     gifs: [
-      { id: '1', url: 'https://media.giphy.com/media/l3q2K5jinAlChoCLS/200w.webp', tags: ['trending'] },
-      { id: '2', url: 'https://media.giphy.com/media/3o7abKhOpu0NwenH3O/200w.webp', tags: ['trending'] },
+      { id: '1', url: 'https://media.giphy.com/media/3o7abKhOpu0NwenH3O/giphy.gif', tags: ['trending'] },
+      { id: '2', url: 'https://media.giphy.com/media/l0MYt5jPR6QX5pnqM/giphy.gif', tags: ['trending'] },
+      { id: '3', url: 'https://media.giphy.com/media/xT9IgzoKnwFNmISR8I/giphy.gif', tags: ['trending'] },
+      { id: '4', url: 'https://media.giphy.com/media/l1J9FiGxR61OcF2mI/giphy.gif', tags: ['happy'] },
     ],
   },
   {
     name: 'Happy',
     gifs: [
-      { id: '3', url: 'https://media.giphy.com/media/l1J9FiGxR61OcF2mI/200w.webp', tags: ['happy'] },
-      { id: '4', url: 'https://media.giphy.com/media/26BRrSvJUa0crqw4E/200w.webp', tags: ['happy'] },
+      { id: '5', url: 'https://media.giphy.com/media/3o7abKhOpu0NwenH3O/giphy.gif', tags: ['happy'] },
+      { id: '6', url: 'https://media.giphy.com/media/l3q2K5jinAlChoCLS/giphy.gif', tags: ['happy'] },
+      { id: '7', url: 'https://media.giphy.com/media/26BRrSvJUa0crqw4E/giphy.gif', tags: ['happy'] },
+      { id: '8', url: 'https://media.giphy.com/media/l1J9FiGxR61OcF2mI/giphy.gif', tags: ['happy'] },
+    ],
+  },
+  {
+    name: 'Reactions',
+    gifs: [
+      { id: '9', url: 'https://media.giphy.com/media/3o7abKhOpu0NwenH3O/giphy.gif', tags: ['reaction'] },
+      { id: '10', url: 'https://media.giphy.com/media/l3q2K5jinAlChoCLS/giphy.gif', tags: ['reaction'] },
+      { id: '11', url: 'https://media.giphy.com/media/26BRrSvJUa0crqw4E/giphy.gif', tags: ['reaction'] },
+      { id: '12', url: 'https://media.giphy.com/media/l1J9FiGxR61OcF2mI/giphy.gif', tags: ['reaction'] },
     ],
   },
 ];
@@ -189,7 +202,13 @@ const ModernEmojiPicker: React.FC<ModernEmojiPickerProps> = ({ visible, type, on
       onPress={() => handleGifSelect(item)}
       activeOpacity={0.8}
     >
-      <Image source={{ uri: item.url }} style={styles.gifImage} resizeMode="cover" />
+      <Image 
+        source={{ uri: item.url }} 
+        style={styles.gifImage} 
+        resizeMode="cover"
+        onError={(e) => console.log('Picker GIF load error:', e.nativeEvent.error, 'URL:', item.url)}
+        onLoad={() => console.log('Picker GIF loaded successfully:', item.url)}
+      />
     </TouchableOpacity>
   );
 

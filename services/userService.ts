@@ -49,9 +49,9 @@ class UserService {
     }
   }
 
-  async getUserByUsername(username: string): Promise<[any, PublicUserProfile | null]> {
+  async getUserById(userId: string): Promise<[any, PublicUserProfile | null]> {
     try {
-      const userData = await apiClient.get<any>(`/users/username/${encodeURIComponent(username)}`);
+      const userData = await apiClient.get<any>(`/users/${userId}`);
       
       const publicProfile: PublicUserProfile = {
         id: userData.id,
@@ -68,7 +68,7 @@ class UserService {
       if (error instanceof Error && error.message.includes('404')) {
         return [null, null];
       }
-      console.error('Error fetching user by username:', error);
+      console.error('Error fetching user by ID:', error);
       return [error, null];
     }
   }

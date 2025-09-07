@@ -330,6 +330,140 @@ export interface Database {
           created_at?: string;
         };
       };
+      alerts: {
+        Row: {
+          id: string;
+          user_id: string;
+          title: string;
+          message: string;
+          type: string;
+          is_read: boolean;
+          created_at: string;
+          expires_at?: string;
+        };
+        Insert: {
+          id?: string;
+          user_id: string;
+          title: string;
+          message: string;
+          type?: string;
+          is_read?: boolean;
+          created_at?: string;
+          expires_at?: string;
+        };
+        Update: {
+          id?: string;
+          user_id?: string;
+          title?: string;
+          message?: string;
+          type?: string;
+          is_read?: boolean;
+          created_at?: string;
+          expires_at?: string;
+        };
+      };
+      comments: {
+        Row: {
+          id: string;
+          deal_id: string;
+          user_id: string;
+          content: string;
+          parent_id?: string;
+          status: string;
+          created_at: string;
+          updated_at: string;
+        };
+        Insert: {
+          id?: string;
+          deal_id: string;
+          user_id: string;
+          content: string;
+          parent_id?: string;
+          status?: string;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Update: {
+          id?: string;
+          deal_id?: string;
+          user_id?: string;
+          content?: string;
+          parent_id?: string;
+          status?: string;
+          created_at?: string;
+          updated_at?: string;
+        };
+      };
+      reports: {
+        Row: {
+          id: string;
+          reporter_id: string;
+          reported_user_id?: string;
+          reported_deal_id?: string;
+          reported_comment_id?: string;
+          type: string;
+          reason: string;
+          description?: string;
+          status: string;
+          created_at: string;
+          resolved_at?: string;
+          resolved_by?: string;
+        };
+        Insert: {
+          id?: string;
+          reporter_id: string;
+          reported_user_id?: string;
+          reported_deal_id?: string;
+          reported_comment_id?: string;
+          type?: string;
+          reason?: string;
+          description?: string;
+          status?: string;
+          created_at?: string;
+          resolved_at?: string;
+          resolved_by?: string;
+        };
+        Update: {
+          id?: string;
+          reporter_id?: string;
+          reported_user_id?: string;
+          reported_deal_id?: string;
+          reported_comment_id?: string;
+          type?: string;
+          reason?: string;
+          description?: string;
+          status?: string;
+          created_at?: string;
+          resolved_at?: string;
+          resolved_by?: string;
+        };
+      };
+      user_activities: {
+        Row: {
+          id: string;
+          user_id: string;
+          activity_type: string;
+          description: string;
+          metadata?: any;
+          created_at: string;
+        };
+        Insert: {
+          id?: string;
+          user_id: string;
+          activity_type?: string;
+          description?: string;
+          metadata?: any;
+          created_at?: string;
+        };
+        Update: {
+          id?: string;
+          user_id?: string;
+          activity_type?: string;
+          description?: string;
+          metadata?: any;
+          created_at?: string;
+        };
+      };
     };
   };
 }

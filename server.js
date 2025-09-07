@@ -772,6 +772,33 @@ app.get('/api/users/search', async (req, res) => {
   }
 });
 
+// Get online users in channel
+app.get('/api/chat/channels/:channelId/online-users', requireAuth, async (req, res) => {
+  try {
+    const { channelId } = req.params;
+    
+    // For now, return a mock online count since we don't have real-time tracking
+    // In a real implementation, you'd track user sessions/connections
+    const { rows } = await pool.query(`
+      SELECT COUNT(*) as total_members
+      FROM channel_members 
+      WHERE channel_id = $1
+    `, [channelId]);
+
+    const totalMembers = parseInt(rows[0].total_members);
+    // Mock online count as a percentage of total members
+    const onlineCount = Math.max(1, Math.floor(totalMembers * 0.3)); // At least 1 online user
+    
+    res.json({
+      count: onlineCount,
+      users: [] // In a real implementation, you'd return actual online users
+    });
+  } catch (err) {
+    console.error('Error getting online users:', err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
 // Update user status
 app.put('/api/users/:id/status', async (req, res) => {
   try {

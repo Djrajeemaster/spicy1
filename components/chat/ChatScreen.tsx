@@ -194,7 +194,7 @@ const ChatScreen: React.FC<ChatScreenProps> = ({ visible, onClose }) => {
       ]}>
         {!isOwnMessage && (
           <View style={styles.messageHeader}>
-            <Text style={styles.senderName}>{item.sender.username}</Text>
+            <Text style={styles.senderName}>{item.sender?.username || 'Unknown'}</Text>
             <Text style={styles.messageTimestamp}>
               {formatMessageTime(item.created_at)}
             </Text>

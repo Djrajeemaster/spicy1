@@ -23,7 +23,6 @@ import { Header } from '@/components/Header';
 import { DealCard } from '@/components/DealCard';
 import { EnhancedDealCardV2 } from '@/components/EnhancedDealCardV2';
 import DealListCard from '@/components/DealListCard';
-import ChatButton from '@/components/chat/ChatButton';
 import { UserRole } from '@/types/user';
 import { useAuth } from '@/contexts/AuthProvider';
 import { useTheme } from '@/contexts/ThemeProvider';
@@ -34,6 +33,7 @@ import { locationService } from '@/services/locationService';
 import { bannerService, type Banner } from '@/services/bannerService';
 import { router } from 'expo-router';
 import { Database } from '@/types/database';
+import ChatButton from '@/components/chat/ChatButton';
 
 
 
@@ -96,6 +96,28 @@ export default function HomeScreen() {
   const [selectedStores, setSelectedStores] = useState<string[]>(['all']);
   const { width } = useWindowDimensions();
   const isDesktop = Platform.OS === 'web' && width >= 768;
+
+  // Chat feature toggle state
+  const [isChatEnabled, setIsChatEnabled] = useState(true);
+
+  // Check chat feature setting on component mount
+  useEffect(() => {
+    const checkChatSetting = async () => {
+      try {
+        const { settingsService } = await import('@/services/settingsService');
+        const { data, error } = await settingsService.getSetting('enable_chat_feature');
+        if (!error && data) {
+          setIsChatEnabled(data.value ?? true);
+        }
+      } catch (error) {
+        console.error('Error checking chat setting:', error);
+        // Default to true if we can't fetch the setting
+        setIsChatEnabled(true);
+      }
+    };
+    
+    checkChatSetting();
+  }, []);
 
   // Applied filters (these are the ones actually used for filtering)
   const [appliedFilters, setAppliedFilters] = useState({
@@ -1577,14 +1599,10 @@ export default function HomeScreen() {
         </View>
       )}
 
-      {/* Floating Chat Button */}
-      <View style={styles.floatingChatButton}>
-        <ChatButton 
-          style={styles.chatButtonContainer}
-          size={24}
-          color="#FFFFFF"
-        />
-      </View>
+      {/* Floating Chat Button - only show if chat feature is enabled */}
+      {isChatEnabled && (
+        <ChatButton />
+      )}
 
     </SafeAreaView>
   );
@@ -2130,28 +2148,6 @@ const styles = StyleSheet.create({
     zIndex: 99999,
     elevation: 99999,
     pointerEvents: 'box-none',
-  },
-  
-  // Floating chat button
-  floatingChatButton: {
-    position: 'absolute',
-    bottom: 20,
-    right: 20,
-    zIndex: 1000,
-    elevation: 1000,
-  },
-  chatButtonContainer: {
-    backgroundColor: '#059669',
-    borderRadius: 30,
-    width: 60,
-    height: 60,
-    justifyContent: 'center',
-    alignItems: 'center',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.3,
-    shadowRadius: 8,
-    elevation: 8,
   },
 });
 

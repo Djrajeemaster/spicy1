@@ -5,6 +5,25 @@ import { apiClient } from '@/utils/apiClient';
 type Report = Database['public']['Tables']['reports']['Row'];
 type ReportInsert = Database['public']['Tables']['reports']['Insert'];
 
+export interface ReportWithDetails extends Report {
+  reporter?: {
+    username: string;
+    email: string;
+  };
+  reported_user?: {
+    username: string;
+    email: string;
+  };
+  reported_deal?: {
+    title: string;
+    store: string;
+  };
+  reported_comment?: {
+    content: string;
+    deal_id: string;
+  };
+}
+
 export const reportService = {
   // Get all pending reports
   async getPendingReports() {

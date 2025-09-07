@@ -10,16 +10,17 @@ import { sanitizeText, sanitizeUsername } from '@/utils/sanitization';
 
 interface ThreadProps {
   dealId: string;
-  nodes: CommentNode[];
+  nodes?: CommentNode[];
   onPosted: () => void;
   depth?: number;
   onGuestAction?: () => void;
+  isGuest?: boolean;
 }
 
 const isUuid = (v: string) =>
   /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(v);
 
-function CommentItem({ node, dealId, onPosted, depth = 0 }: ThreadProps & { node: CommentNode }) {
+function CommentItem({ node, dealId, onPosted, depth = 0 }: { node: CommentNode; dealId: string; onPosted: () => void; depth?: number }) {
   const { user } = useAuth();
   const { width } = useWindowDimensions();
   const isDesktop = Platform.OS === 'web' && width >= 768;
@@ -141,10 +142,10 @@ function NewCommentForm({ dealId, onPosted }: { dealId: string; onPosted: () => 
   );
 }
 
-export default function CommentThread({ dealId, nodes, onPosted, depth = 0 }: ThreadProps) {
+export default function CommentThread({ dealId, nodes = [], onPosted, depth = 0, isGuest, onGuestAction }: ThreadProps) {
   return (
     <View>
-      <NewCommentForm dealId={dealId} onPosted={onPosted} onGuestAction={arguments[0]?.onGuestAction} />
+      <NewCommentForm dealId={dealId} onPosted={onPosted} />
       {nodes.map((n: any) => (
         <CommentItem key={n.id} node={n} dealId={dealId} onPosted={onPosted} depth={depth} />
       ))}

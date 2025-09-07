@@ -3,6 +3,7 @@ import React, { createContext, useContext, useEffect, useState, ReactNode } from
 import { logger } from '@/utils/logger';
 import { apiClient } from '@/utils/apiClient';
 import { getApiUrl } from '@/utils/config';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 
 export interface AuthContextType {
   session: any | null;
@@ -50,6 +51,41 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
   const fetchSession = async () => {
     setLoading(true);
     try {
+      // First check AsyncStorage for stored session
+      const storedSession = await AsyncStorage.getItem('user_session');
+      const storedUser = await AsyncStorage.getItem('user_data');
+      
+      if (storedSession && storedUser) {
+        const sessionData = JSON.parse(storedSession);
+        const userData = JSON.parse(storedUser);
+        
+        // Verify session is still valid with server
+        const response = await fetch(getApiUrl('/auth/session'), { 
+          credentials: 'include',
+          headers: {
+            'Content-Type': 'application/json'
+          }
+        });
+        
+        if (response.ok) {
+          const serverSession = await response.json();
+          if (serverSession.authenticated && serverSession.user) {
+            const normalized = normalizeUserRole(serverSession.user);
+            setSession(serverSession.session || { user_id: normalized.id });
+            setUser(normalized);
+            setProfile(normalized);
+            console.log('Session restored from storage and verified:', normalized);
+            setLoading(false);
+            return;
+          }
+        }
+        
+        // If server validation fails, clear stored data
+        await AsyncStorage.removeItem('user_session');
+        await AsyncStorage.removeItem('user_data');
+      }
+      
+      // Fallback to server-only session check
       const response = await fetch(getApiUrl('/auth/session'), { 
         credentials: 'include',
         headers: {
@@ -66,6 +102,11 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
           setSession(sessionData.session || { user_id: normalized.id });
           setUser(normalized);
           setProfile(normalized);
+          
+          // Store session data in AsyncStorage for persistence
+          await AsyncStorage.setItem('user_session', JSON.stringify(sessionData.session || { user_id: normalized.id }));
+          await AsyncStorage.setItem('user_data', JSON.stringify(normalized));
+          
           console.log('User authenticated:', normalized);
         } else {
           console.log('No authenticated user found');
@@ -118,6 +159,11 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
         setSession(data.session || { user_id: normalized.id });
         setUser(normalized);
         setProfile(normalized);
+        
+        // Store session data in AsyncStorage for persistence
+        await AsyncStorage.setItem('user_session', JSON.stringify(data.session || { user_id: normalized.id }));
+        await AsyncStorage.setItem('user_data', JSON.stringify(normalized));
+        
         console.log('User signed in successfully:', normalized);
       } else {
         console.error('Signin response missing user data');
@@ -173,6 +219,10 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
       setSession(null);
       setUser(null);
       setProfile(null);
+      
+      // Clear AsyncStorage data
+      await AsyncStorage.removeItem('user_session');
+      await AsyncStorage.removeItem('user_data');
     }
   };
 

@@ -12,7 +12,6 @@ import { dealService, DealWithRelations } from '@/services/dealService';
 import { followService } from '@/services/followService';
 import { DealCard } from '@/components/DealCard';
 import { UserBadge } from '@/components/UserBadge';
-import ChatButton from '@/components/chat/ChatButton';
 
 export default function UserProfileScreen() {
   const { username } = useLocalSearchParams<{ username: string }>();
@@ -149,13 +148,6 @@ export default function UserProfileScreen() {
                         <Text style={styles.followText}>{isFollowing ? 'Following' : 'Follow'}</Text>
                       </LinearGradient>
                     </TouchableOpacity>
-                    
-                    <ChatButton 
-                      userId={profile.id} 
-                      style={styles.chatButton}
-                      size={20}
-                      color="#FFFFFF"
-                    />
                   </View>
                 )}
                 
@@ -259,12 +251,6 @@ const styles = StyleSheet.create({
   followButton: { borderRadius: 20, overflow: 'hidden' },
   followGradient: { flexDirection: 'row', alignItems: 'center', gap: 8, paddingVertical: 8, paddingHorizontal: 16 },
   followText: { color: '#FFFFFF', fontSize: 14, fontWeight: 'bold' },
-  chatButton: { 
-    backgroundColor: '#6366f1', 
-    borderRadius: 20, 
-    paddingVertical: 8, 
-    paddingHorizontal: 12 
-  },
 
   statsRow: { flexDirection: 'row', justifyContent: 'space-around', paddingVertical: 16, borderTopWidth: 1, borderBottomWidth: 1, borderColor: '#f1f5f9' },
   statItem: { alignItems: 'center' },

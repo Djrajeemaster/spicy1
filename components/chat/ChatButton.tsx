@@ -1,7 +1,8 @@
-import React, { useState } from 'react';
-import { TouchableOpacity, StyleSheet, Alert } from 'react-native';
+import React from 'react';
+import { TouchableOpacity, StyleSheet, Alert, View, Text } from 'react-native';
 import { MessageCircle } from 'lucide-react-native';
 import { useAuth } from '../../contexts/AuthProvider';
+import { useChat } from '../../contexts/ChatProvider';
 import StylishChatScreen from './StylishChatScreen';
 
 interface ChatButtonProps {
@@ -13,12 +14,12 @@ interface ChatButtonProps {
 
 const ChatButton: React.FC<ChatButtonProps> = ({ 
   userId, 
-  size = 24, 
-  color = '#059669', 
+  size = 28, 
+  color = '#ffffff', 
   style 
 }) => {
   const { user } = useAuth();
-  const [showChat, setShowChat] = useState(false);
+  const { openChat, closeChat, isChatOpen, unreadCount } = useChat();
 
   const handlePress = async () => {
     if (!user) {
@@ -48,41 +49,86 @@ const ChatButton: React.FC<ChatButtonProps> = ({
         }
 
         // Open chat screen directly to this conversation
-        setShowChat(true);
+        openChat();
       } catch (error) {
         console.error('Error creating private chat:', error);
         Alert.alert('Error', 'Failed to start chat. Please try again.');
       }
     } else {
       // Open general chat screen
-      setShowChat(true);
+      openChat();
     }
   };
 
   return (
     <>
       <TouchableOpacity
-        style={[styles.button, style]}
+        style={[styles.floatingButton, style]}
         onPress={handlePress}
         activeOpacity={0.7}
       >
         <MessageCircle size={size} color={color} />
+        {unreadCount > 0 && (
+          <View style={styles.badge}>
+            <Text style={styles.badgeText}>
+              {unreadCount > 99 ? '99+' : unreadCount.toString()}
+            </Text>
+          </View>
+        )}
       </TouchableOpacity>
       
       <StylishChatScreen
-        visible={showChat}
-        onClose={() => setShowChat(false)}
+        visible={isChatOpen}
+        onClose={closeChat}
       />
     </>
   );
 };
 
 const styles = StyleSheet.create({
+  floatingButton: {
+    position: 'absolute',
+    bottom: 20,
+    right: 20,
+    width: 56,
+    height: 56,
+    borderRadius: 28,
+    backgroundColor: '#059669',
+    justifyContent: 'center',
+    alignItems: 'center',
+    elevation: 8, // Android shadow
+    shadowColor: '#000', // iOS shadow
+    shadowOffset: {
+      width: 0,
+      height: 4,
+    },
+    shadowOpacity: 0.3,
+    shadowRadius: 4.65,
+    zIndex: 1000,
+  },
   button: {
     padding: 8,
     borderRadius: 8,
     justifyContent: 'center',
     alignItems: 'center',
+  },
+  badge: {
+    position: 'absolute',
+    top: -5,
+    right: -5,
+    backgroundColor: '#ef4444',
+    borderRadius: 10,
+    minWidth: 20,
+    height: 20,
+    justifyContent: 'center',
+    alignItems: 'center',
+    borderWidth: 2,
+    borderColor: '#ffffff',
+  },
+  badgeText: {
+    color: '#ffffff',
+    fontSize: 12,
+    fontWeight: 'bold',
   },
 });
 
