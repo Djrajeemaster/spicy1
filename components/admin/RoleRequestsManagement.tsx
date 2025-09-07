@@ -25,8 +25,7 @@ export const RoleRequestsManagement: React.FC = () => {
 
   const fetchRoleRequests = async () => {
     try {
-      const response = await apiClient.get('/role-requests');
-      const data = await response.json();
+      const data = await apiClient.get('/role-requests');
       setRequests(Array.isArray(data) ? data : []);
     } catch (error) {
       console.error('Error fetching role requests:', error);

@@ -796,6 +796,22 @@ export const SystemSettingsManagement: React.FC<SystemSettingsManagementProps> =
         </View>
       </View>
 
+      {/* Feature Management card for superadmin */}
+      <SettingCard title="Feature Management" icon={<Settings size={20} color="#8b5cf6" />}>
+        <ToggleSetting
+          title="Competitor Research"
+          description="Enable automatic competitor deal research and scraping functionality"
+          value={settings.enable_competitor_research ?? true}
+          onToggle={(value) => toggleAndNotify('enable_competitor_research', 'Competitor Research', value)}
+        />
+        <ToggleSetting
+          title="Chat Feature"
+          description="Enable real-time chat and messaging functionality between users"
+          value={settings.enable_chat_feature ?? true}
+          onToggle={(value) => toggleAndNotify('enable_chat_feature', 'Chat Feature', value)}
+        />
+      </SettingCard>
+
       <SettingCard title="Content Moderation" icon={<Shield size={20} color="#ef4444" />}>
         <ToggleSetting
           title="Auto-approve Verified Users"

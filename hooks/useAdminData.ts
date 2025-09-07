@@ -51,6 +51,8 @@ export interface SystemSettings {
   min_reputation_to_post?: number;
   soft_delete_retention_days?: number;
   auto_delete_expired_days?: number;
+  enable_competitor_research?: boolean;
+  enable_chat_feature?: boolean;
 }
 
 // Default system settings to ensure all properties are always defined
@@ -71,6 +73,8 @@ const defaultSystemSettings: SystemSettings = {
   min_reputation_to_post: 0,
   soft_delete_retention_days: 30,
   auto_delete_expired_days: 7,
+  enable_competitor_research: true,
+  enable_chat_feature: true,
 };
 
 export const useAdminData = () => {
