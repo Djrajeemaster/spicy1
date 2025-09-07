@@ -1,0 +1,48 @@
+{
+  "expo": {
+    "name": "SaversDream",
+    "slug": "bolt-expo-nativewind",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "icon": "./assets/icon.png",
+    "userInterfaceStyle": "light",
+    "splash": {
+      "image": "./assets/splash.png",
+      "resizeMode": "contain",
+      "backgroundColor": "#030849"
+    },
+    "android": {
+      "package": "com.djrajeemix.saversdream",
+      "versionCode": 1,
+      "adaptiveIcon": {
+        "foregroundImage": "./assets/adaptive-icon.png",
+        "backgroundColor": "#030849",
+        "monochromeImage": "./assets/adaptive-icon-monochrome.png"
+      },
+      "permissions": [
+        "INTERNET",
+        "ACCESS_NETWORK_STATE",
+        "RECEIVE_BOOT_COMPLETED",
+        "VIBRATE"
+      ]
+    },
+    "notification": {
+      "icon": "./assets/notification-icon.png",
+      "color": "#030849",
+      "vapidPublicKey": "BKd8VR-BW8C1KN7LfcK8W0Z8Y9Q2L1J3X5K0P4N2M6H7F8G9J0L1N3P5Q7R9T2V4"
+    },
+    "web": {
+      "favicon": "./assets/icon.png"
+    },
+    "plugins": [
+      "expo-notifications",
+      "expo-font",
+      "expo-web-browser"
+    ],
+    "extra": {
+      "eas": {
+        "projectId": "013d336f-c10e-4da4-a206-8770181bd615"
+      }
+    }
+  }
+}

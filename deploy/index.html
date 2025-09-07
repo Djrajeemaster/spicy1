@@ -1,0 +1,222 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>SaversDream — Launching Soon</title>
+<meta name="description" content="Be the first to try SaversDream. Request early access.">
+<link rel="preload" as="image" href="/assets/logo.png">
+<style>
+  :root{
+    --bg1:#0e122b; --bg2:#0a2342; --txt:#eaf0ff; --muted:#b7c3d9;
+    --btn1:#0f2e9e; --btn1d:#0a1f66;
+  }
+  *{box-sizing:border-box}
+  html,body{height:100%;margin:0}
+  body{
+    font-family: ui-sans-serif, -apple-system, "Segoe UI", Inter, Roboto, Arial;
+    color:var(--txt);
+    background:
+      radial-gradient(1000px 700px at 20% -10%, #1a2a6c 0%, transparent 60%),
+      radial-gradient(900px 650px at 90% 20%, #b21f1f 0%, transparent 55%),
+      radial-gradient(900px 700px at 50% 110%, #0b486b 0%, transparent 60%),
+      linear-gradient(120deg,var(--bg1),var(--bg2));
+    background-size: 120% 120%, 120% 120%, 120% 120%, auto;
+    animation: sd-bgmove 16s ease-in-out infinite;
+    overflow-x:hidden;
+  }
+  @keyframes sd-bgmove{0%{background-position:0% 0%,100% 0%,50% 100%,0 0}
+                       50%{background-position:20% 10%,80% 10%,50% 110%,0 0}
+                       100%{background-position:0% 0%,100% 0%,50% 100%,0 0}}
+
+  .wrap{min-height:100%;display:grid;place-items:center;padding:28px}
+  .hero{
+    width:min(92vw, 760px);
+    background: linear-gradient(180deg, rgba(255,255,255,.14), rgba(255,255,255,.07));
+    border:1px solid rgba(255,255,255,.18);
+    border-radius:24px; padding:40px 28px 34px;
+    box-shadow: 0 30px 80px rgba(0,0,0,.45), inset 0 1px 0 rgba(255,255,255,.08);
+    backdrop-filter: blur(16px);
+    text-align:center; position:relative; overflow:hidden;
+    animation: pop .7s ease-out both;
+  }
+  @keyframes pop{from{opacity:0; transform:translateY(12px)} to{opacity:1; transform:translateY(0)}}
+
+  .logo{width:min(180px,42vw); margin:0 auto 10px; position:relative}
+  .logo::before{
+    content:""; position:absolute; inset:-18%;
+    background: radial-gradient(50% 50% at 50% 45%, rgba(120,200,255,.45), rgba(120,200,255,0) 70%);
+    filter: blur(18px); z-index:-1; animation: sd-halo 4.8s ease-in-out infinite;
+  }
+  @keyframes sd-halo{0%,100%{transform:scale(1);opacity:.75}50%{transform:scale(1.08);opacity:1}}
+  .logo img{width:100%; display:block; filter: drop-shadow(0 16px 30px rgba(20,120,255,.35));
+            animation: sd-float 5s ease-in-out infinite;}
+  @keyframes sd-float{0%,100%{transform:translateY(0)}50%{transform:translateY(-10px)}}
+
+  h1{margin:8px 0 4px; font-size: clamp(24px, 4.6vw, 40px);}
+  .sub{color:var(--muted); margin:6px 0 18px; font-size: clamp(14px, 2.5vw, 16px)}
+  .ctaRow{display:flex; gap:12px; justify-content:center; flex-wrap:wrap}
+  .btn{
+    border:0; border-radius:14px; padding:14px 18px; font-weight:700; cursor:pointer;
+    transition: transform .08s ease, box-shadow .25s ease, background .2s ease;
+  }
+  .btn.primary{background:linear-gradient(180deg,var(--btn1),var(--btn1d)); color:#fff;
+    box-shadow: 0 10px 24px rgba(15,46,158,.42);}
+  .btn.primary:hover{transform:translateY(-2px)}
+  .btn.ghost{background:transparent; color:#eaf0ff; border:1px solid rgba(255,255,255,.22)}
+  .foot{margin-top:18px; font-size:12px; color:#cbd3e680}
+
+  .message{margin:12px 0; padding:12px 16px; border-radius:12px; font-size:14px; text-align:center}
+  .message.success{background:#10b98120; color:#10b981; border:1px solid #10b98140}
+  .message.error{background:#ef444420; color:#ef4444; border:1px solid #ef444440}
+
+  /* Modals */
+  .modal{position:fixed; inset:0; display:none; align-items:center; justify-content:center; padding:20px; z-index:40}
+  .modal.open{display:flex}
+  .scrim{position:absolute; inset:0; background:rgba(6,10,24,.55); backdrop-filter: blur(3px);}
+  .sheet{position:relative; width:min(92vw, 480px); background:rgba(15,22,46,.9);
+    border:1px solid rgba(255,255,255,.16); border-radius:18px; padding:22px 18px 18px;
+    box-shadow: 0 26px 60px rgba(0,0,0,.55);}
+  .x{position:absolute; top:10px; right:10px; background:transparent; border:0; color:#cfd8f7; font-size:20px; cursor:pointer}
+  form{display:grid; gap:12px; margin-top:8px}
+  .input{display:flex; align-items:center; background:rgba(255,255,255,.06); border:1px solid rgba(255,255,255,.16); border-radius:12px; padding:10px 12px}
+  input{flex:1; background:transparent; border:0; color:#fff; font-size:16px; outline:none}
+  .hint{font-size:13px; color:#aab6d6}
+
+  /* Stars */
+  .sd-stars{position:fixed; inset:0; pointer-events:none;}
+  .sd-stars i{position:absolute; width:2px; height:2px; background:#fff; border-radius:50%;
+              opacity:.7; animation: sd-twinkle 3.5s linear infinite;}
+  @keyframes sd-twinkle{0%,100%{opacity:.25; transform:scale(.8)}50%{opacity:1; transform:scale(1)}}
+
+  @media (max-width:480px){.hero{padding:30px 18px 24px}.btn{width:100%}}
+</style>
+<link rel="canonical" href="https://saversdream.com">
+
+<meta property="og:type" content="website">
+<meta property="og:site_name" content="SaversDream">
+<meta property="og:title" content="SaversDream — Smart Deals & Savings">
+<meta property="og:description" content="Discover the best deals and discounts near you. Save smart with SaversDream.">
+<meta property="og:url" content="https://saversdream.com">
+<meta property="og:image" content="https://saversdream.com/assets/og-banner.png">
+
+<meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:title" content="SaversDream — Smart Deals & Savings">
+<meta name="twitter:description" content="Discover the best deals and discounts near you.">
+<meta name="twitter:image" content="https://saversdream.com/assets/og-banner.png">
+
+</head>
+<body>
+<div class="sd-stars" aria-hidden="true"></div>
+<div class="wrap">
+  <section class="hero" aria-label="SaversDream">
+    <div class="logo"><img src="/assets/site-logo.png" alt="SaversDream logo" decoding="async"></div>
+    <h1>🚀 SaversDream</h1>
+    <p class="sub">Launching soon — get early access</p>
+    <div id="message" class="message" style="display:none;"></div>
+    <div class="ctaRow">
+      <button class="btn primary" id="openReq">Request Early Access</button>
+      <button class="btn ghost" id="openCode">I have an access code</button>
+    </div>
+    <div class="foot">© <span id="yr"></span> SaversDream</div>
+  </section>
+</div>
+
+<!-- Access Code Modal -->
+<div class="modal" id="codeModal">
+  <div class="scrim" data-close></div>
+  <div class="sheet">
+    <button class="x" data-close>✕</button>
+    <h3>Enter your access code</h3>
+    <form action="/grant-early" method="POST">
+      <div class="input"><input type="text" name="code" placeholder="Access code" required minlength="4"></div>
+      <button class="btn primary" type="submit">Enter</button>
+      <p class="hint">Code holders skip the wait. Cookie lasts 30 days.</p>
+    </form>
+  </div>
+</div>
+
+<!-- Request Access Modal -->
+<div class="modal" id="reqModal">
+  <div class="scrim" data-close></div>
+  <div class="sheet">
+    <button class="x" data-close>✕</button>
+    <h3>Request early access</h3>
+    <form action="/request-access" method="POST" id="reqForm">
+      <div class="input"><input type="text" name="name" placeholder="Your name" required></div>
+      <div class="input"><input type="email" name="email" placeholder="Your email" required></div>
+      <button class="btn primary" type="submit" id="reqBtn">Request Access</button>
+      <p class="hint">We’ll email you once you’re approved. No spam.</p>
+    </form>
+  </div>
+</div>
+
+<script>
+  // Year
+  document.getElementById('yr').textContent = new Date().getFullYear();
+
+  // Stars
+  (function(){
+    const c=document.querySelector('.sd-stars'); if(!c) return;
+    const n=80, W=innerWidth, H=innerHeight;
+    for(let i=0;i<n;i++){
+      const s=document.createElement('i');
+      s.style.left=(Math.random()*W)+'px';
+      s.style.top =(Math.random()*H)+'px';
+      s.style.animationDuration=(2000+Math.random()*3000)+'ms';
+      s.style.transform=`scale(${0.6+Math.random()*1.2})`;
+      c.appendChild(s);
+    }
+  })();
+
+  // Handle messages from URL parameters
+  (function(){
+    const urlParams = new URLSearchParams(window.location.search);
+    const messageEl = document.getElementById('message');
+    if (!messageEl) return;
+    
+    if (urlParams.get('success') === 'request_submitted') {
+      messageEl.textContent = 'Thank you! Your request has been submitted. We\'ll be in touch soon.';
+      messageEl.className = 'message success';
+      messageEl.style.display = 'block';
+      // Clean URL
+      window.history.replaceState({}, '', '/');
+    } else if (urlParams.get('error') === 'invalid_code') {
+      messageEl.textContent = 'Invalid access code. Please try again.';
+      messageEl.className = 'message error';
+      messageEl.style.display = 'block';
+      // Clean URL
+      window.history.replaceState({}, '', '/');
+    } else if (urlParams.get('error') === 'missing_fields') {
+      messageEl.textContent = 'Please fill in all fields.';
+      messageEl.className = 'message error';
+      messageEl.style.display = 'block';
+      // Clean URL
+      window.history.replaceState({}, '', '/');
+    } else if (urlParams.get('error') === 'already_requested') {
+      messageEl.textContent = 'You have already requested access. We\'ll be in touch soon!';
+      messageEl.className = 'message success';
+      messageEl.style.display = 'block';
+      // Clean URL
+      window.history.replaceState({}, '', '/');
+    } else if (urlParams.get('error') === 'server_error') {
+      messageEl.textContent = 'Server error. Please try again later.';
+      messageEl.className = 'message error';
+      messageEl.style.display = 'block';
+      // Clean URL
+      window.history.replaceState({}, '', '/');
+    }
+  })();
+
+  // Modals
+  const codeM=document.getElementById('codeModal'), reqM=document.getElementById('reqModal');
+  document.getElementById('openCode').onclick=()=>codeM.classList.add('open');
+  document.getElementById('openReq').onclick=()=>reqM.classList.add('open');
+  document.querySelectorAll('[data-close]').forEach(el=>el.onclick=()=>{codeM.classList.remove('open'); reqM.classList.remove('open');});
+  document.addEventListener('keydown', e=>{if(e.key==='Escape'){codeM.classList.remove('open'); reqM.classList.remove('open');}});
+  // disable button while submitting
+  const reqBtn=document.getElementById('reqBtn'), reqForm=document.getElementById('reqForm');
+  reqForm?.addEventListener('submit',()=>{reqBtn.disabled=true; reqBtn.textContent='Sending…';});
+</script>
+</body>
+</html>
