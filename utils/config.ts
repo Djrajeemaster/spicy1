@@ -39,32 +39,20 @@ const isLocal = (): boolean => {
 };
 
 const getApiBaseUrl = (): string => {
-  const environment = getEnvironment();
-  const local = isLocal();
-  
-  console.log('🔧 getApiBaseUrl - environment:', environment);
-  console.log('🔧 getApiBaseUrl - isLocal:', local);
-  console.log('🔧 getApiBaseUrl - window.location:', typeof window !== 'undefined' ? window.location.href : 'server-side');
-  
-  // FORCE localhost:3000 for development to fix the port issue
-  if (typeof window !== 'undefined') {
-    // Client-side - always use localhost:3000 for development
-    const hostname = window.location.hostname;
-    if (hostname === 'localhost' || hostname === '127.0.0.1') {
-      const url = 'http://localhost:3000';
-      console.log('🔧 API Base URL (FORCED for localhost):', url);
-      return url;
-    }
+  // Priority: explicit environment variable (set at build or server runtime)
+  if (typeof process !== 'undefined' && process.env && process.env.API_BASE_URL) {
+    return process.env.API_BASE_URL;
   }
-  
-  // Priority order: Environment variable -> Default based on environment
+
+  // Server-side: fall back to localhost in development, otherwise use relative URLs
   if (typeof window === 'undefined') {
-    // Server-side
-    return process.env.API_BASE_URL || (local ? 'http://localhost:3000' : '');
+    const env = getEnvironment();
+    return env === 'development' ? 'http://localhost:3000' : '';
   }
-  
-  // Production/VPS: Use relative URLs (no domain)
-  return '';
+
+  // Client-side: if we're on a developer machine (localhost) keep the local API
+  // Otherwise return an empty string so the app uses relative URLs in production builds
+  return isLocal() ? 'http://localhost:3000' : '';
 };
 
 // Create the configuration object

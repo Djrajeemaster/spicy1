@@ -12,31 +12,6 @@ const multer = require('multer');
 // store uploads temporarily then move into assets
 const upload = multer({ dest: path.join(__dirname, 'tmp_uploads') });
 
-// Local early-access codes storage (file-backed)
-const EARLY_CODES_PATH = path.join(__dirname, 'early-access-codes.json');
-
-function loadEarlyCodes() {
-  try {
-    if (!fs.existsSync(EARLY_CODES_PATH)) {
-      return [];
-    }
-    const raw = fs.readFileSync(EARLY_CODES_PATH, 'utf8');
-    return JSON.parse(raw);
-  } catch (err) {
-    console.error('Failed to load early access codes:', err);
-    return [];
-  }
-}
-
-function saveEarlyCodes(codes) {
-  try {
-  fs.writeFileSync(EARLY_CODES_PATH, JSON.stringify(codes, null, 2), 'utf8');
-  console.log('Saved early-access-codes.json with', codes.length, 'entries');
-  } catch (err) {
-    console.error('Failed to save early access codes:', err);
-  }
-}
-
 // Import security middleware
 const { securityHeaders } = require('./middleware/security');
 
@@ -175,6 +150,81 @@ function writeSettings(obj) {
   fs.writeFileSync(SETTINGS_PATH, JSON.stringify(obj, null, 2));
 }
 
+// Local early-access codes storage (fallback to file if DB not used)
+const EARLY_CODES_PATH = path.join(__dirname, 'early-access-codes.json');
+
+function loadEarlyCodes() {
+  if (!fs.existsSync(EARLY_CODES_PATH)) {
+    const defaults = [
+      {
+        id: 1,
+        code: 'WELCOME2025',
+        is_active: true,
+        expires_at: null,
+        max_uses: 0,
+        uses_count: 0
+      },
+      {
+        id: 2,
+        code: 'BETA1234',
+        is_active: true,
+        expires_at: null,
+        max_uses: 100,
+        uses_count: 0
+      }
+    ];
+    fs.writeFileSync(EARLY_CODES_PATH, JSON.stringify(defaults, null, 2));
+    return defaults;
+  }
+  try {
+    return JSON.parse(fs.readFileSync(EARLY_CODES_PATH));
+  } catch (err) {
+    console.error('Failed to read early-access codes, recreating defaults', err);
+    const defaults = [
+      {
+        id: 1,
+        code: 'WELCOME2025',
+        is_active: true,
+        expires_at: null,
+        max_uses: 0,
+        uses_count: 0
+      }
+    ];
+    fs.writeFileSync(EARLY_CODES_PATH, JSON.stringify(defaults, null, 2));
+    return defaults;
+  }
+}
+
+function saveEarlyCodes(codes) {
+  fs.writeFileSync(EARLY_CODES_PATH, JSON.stringify(codes, null, 2));
+}
+
+function findValidEarlyCode(code) {
+  const codes = loadEarlyCodes();
+  const now = new Date();
+  return codes.find(c => {
+    if (!c || !c.code) return false;
+    if (String(c.code).toLowerCase() !== String(code).toLowerCase()) return false;
+    if (!c.is_active) return false;
+    if (c.expires_at && new Date(c.expires_at) <= now) return false;
+    if (c.max_uses && c.max_uses > 0 && (c.uses_count || 0) >= c.max_uses) return false;
+    return true;
+  });
+}
+
+function incrementEarlyCodeUse(codeObj) {
+  try {
+    const codes = loadEarlyCodes();
+    const idx = codes.findIndex(c => c.id === codeObj.id || (c.code && codeObj.code && c.code.toLowerCase() === codeObj.code.toLowerCase()));
+    if (idx === -1) return;
+    codes[idx].uses_count = (codes[idx].uses_count || 0) + 1;
+    codes[idx].updated_at = new Date().toISOString();
+    saveEarlyCodes(codes);
+  } catch (err) {
+    console.error('Failed to increment early code use:', err);
+  }
+}
+
 // simple middleware to require super_admin based on session cookie
 async function requireSuperAdmin(req, res, next) {
   try {
@@ -235,22 +285,54 @@ async function requireAuth(req, res, next) {
 app.use(cors({
   origin: function (origin, callback) {
     // Allow requests with no origin (like mobile apps or curl requests)
-    if (!origin) return callback(null, true);
-    
-    // Production: check allowed origins from environment
-    if (process.env.NODE_ENV === 'production') {
-      const allowedOrigins = process.env.ALLOWED_ORIGINS ? process.env.ALLOWED_ORIGINS.split(',') : [];
-      if (allowedOrigins.includes(origin)) {
-        return callback(null, true);
-      }
-      return callback(new Error('Not allowed by CORS'));
-    }
-    
-    // Development: Allow localhost and local IPs
-    if (origin.includes('localhost') || origin.includes('127.0.0.1') || origin.includes('192.168.')) {
+    // Some clients send the literal string 'null' or 'undefined' as the Origin header — treat those as missing.
+    if (!origin || origin === 'null' || origin === 'undefined') {
+      if (origin === 'null' || origin === 'undefined') console.log('CORS: received literal Origin header:', origin, 'treating as no-origin');
       return callback(null, true);
     }
-    
+
+    // Normalize origin hostname
+    let originHost = origin;
+    try {
+      const u = new URL(origin);
+      originHost = u.hostname;
+    } catch (e) {
+      originHost = origin;
+    }
+
+    if (process.env.NODE_ENV === 'production') {
+      const raw = process.env.ALLOWED_ORIGINS || '';
+      const fallback = ['saversdream.com', 'www.saversdream.com'];
+      const allowed = raw.split(',').map(s => s.trim()).filter(Boolean).map(s => {
+        try { return new URL(s).hostname; } catch(e) { return s.replace(/^https?:\/\//, '').replace(/\/.*$/, ''); }
+      });
+      const allowedList = allowed.length ? allowed : fallback;
+
+      const matched = allowedList.some(a => {
+        if (!a) return false;
+        if (a.startsWith('.')) {
+          return originHost === a.slice(1) || originHost.endsWith(a.slice(1));
+        }
+        if (originHost === a) return true;
+        return originHost.endsWith('.' + a);
+      });
+
+      if (matched) return callback(null, true);
+
+      console.warn('CORS denied origin (production):', origin, 'normalized:', originHost, 'allowed:', allowedList);
+      return callback(new Error('Not allowed by CORS'));
+    }
+
+    // Development: allow localhost/local IPs
+    try {
+      if (originHost.includes('localhost') || originHost.startsWith('127.') || originHost.startsWith('192.168.') || originHost.endsWith('.local')) {
+        return callback(null, true);
+      }
+    } catch (e) {
+      // fall through
+    }
+
+    console.warn('CORS denied origin (dev):', origin);
     callback(new Error('Not allowed by CORS'));
   },
   credentials: true,
@@ -4212,6 +4294,26 @@ app.get('/api/test-chat-debug', (req, res) => {
   res.json({ message: 'Chat debug endpoint working', timestamp: new Date().toISOString() });
 });
 
+// Debug endpoint to inspect CSP/CORS and early-access codes
+app.get('/_debug/security', (req, res) => {
+  const key = req.query.key;
+  if (process.env.NODE_ENV === 'production' && process.env.DEBUG_KEY && process.env.DEBUG_KEY !== key) {
+    return res.status(403).json({ error: 'Forbidden' });
+  }
+
+  const allowedOrigins = process.env.ALLOWED_ORIGINS ? process.env.ALLOWED_ORIGINS.split(',') : ['https://www.saversdream.com', 'https://saversdream.com'];
+  const cspConnect = process.env.CSP_CONNECT_SRC ? process.env.CSP_CONNECT_SRC.split(',') : [];
+  const codes = loadEarlyCodes ? loadEarlyCodes() : [];
+
+  res.json({
+    env: process.env.NODE_ENV || 'development',
+    allowedOrigins,
+    cspConnect,
+    earlyAccessCount: codes.length,
+    earlyAccessSample: codes.slice(0, 5)
+  });
+});
+
 // Handle access code submission
 app.post('/grant-early', express.urlencoded({ extended: true }), async (req, res) => {
   try {
@@ -4221,41 +4323,15 @@ app.post('/grant-early', express.urlencoded({ extended: true }), async (req, res
       return res.redirect('/?error=invalid_code');
     }
 
-    // Check local JSON-backed codes
-    const codes = loadEarlyCodes();
-    const now = new Date();
-    const matchIdx = codes.findIndex(c => c.code === code && c.is_active);
-    if (matchIdx === -1) {
+    // Local file-based check for early access codes
+    const accessCode = findValidEarlyCode(code);
+
+    if (!accessCode) {
       return res.redirect('/?error=invalid_code');
     }
 
-    const accessCode = codes[matchIdx];
-
-    // Validate expiry
-    if (accessCode.expires_at) {
-      const exp = new Date(accessCode.expires_at);
-      if (isNaN(exp.getTime()) || exp <= now) {
-        return res.redirect('/?error=invalid_code');
-      }
-    }
-
-    // Validate max uses (0 means unlimited)
-    if (accessCode.max_uses && accessCode.max_uses > 0) {
-      accessCode.uses_count = accessCode.uses_count || 0;
-      if (accessCode.uses_count >= accessCode.max_uses) {
-        return res.redirect('/?error=invalid_code');
-      }
-    } else {
-      accessCode.uses_count = accessCode.uses_count || 0;
-    }
-
-  // Increment usage count and persist
-  console.log('Granting early access for code:', accessCode.code, 'current uses_count:', accessCode.uses_count);
-  accessCode.uses_count += 1;
-  accessCode.updated_at = now.toISOString();
-  codes[matchIdx] = accessCode;
-  saveEarlyCodes(codes);
-  console.log('After increment uses_count:', accessCode.uses_count);
+    // Increment usage count in local file
+    incrementEarlyCodeUse(accessCode);
 
     // Set cookie for 30 days
     const isProduction = process.env.NODE_ENV === 'production';
@@ -4273,7 +4349,19 @@ app.post('/grant-early', express.urlencoded({ extended: true }), async (req, res
     // Redirect to main app
     res.redirect('/');
   } catch (err) {
-    console.error('Error granting early access:', err);
+    console.error('Error granting early access:', err && err.stack ? err.stack : err);
+    // Protected debug output: if DEBUG_KEY is set, allow returning stack when provided via ?key or header
+    try {
+      const debugKey = process.env.DEBUG_KEY;
+      const providedKey = (req.query && req.query.key) || req.get && req.get('X-Debug-Key');
+      if (debugKey && providedKey && String(providedKey) === String(debugKey)) {
+        res.status(500).type('text').send((err && err.stack) ? err.stack : String(err));
+        return;
+      }
+    } catch (e) {
+      console.error('Error evaluating debug key for /grant-early:', e);
+    }
+
     res.redirect('/?error=server_error');
   }
 });

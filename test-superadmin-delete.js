@@ -5,9 +5,11 @@ async function testSuperadminBannerDelete() {
   console.log('🧪 Testing Superadmin Banner Delete...\n');
 
   try {
+    const baseUrl = process.env.API_BASE_URL || 'http://localhost:3000';
+
     // Step 1: Login as superadmin
     console.log('1. Logging in as superadmin...');
-    const loginResponse = await fetch('http://localhost:3000/api/auth/signin', {
+    const loginResponse = await fetch(`${baseUrl}/api/auth/signin`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
@@ -31,7 +33,7 @@ async function testSuperadminBannerDelete() {
 
     // Step 2: Check authentication status
     console.log('\n2. Checking authentication status...');
-    const authResponse = await fetch('http://localhost:3000/api/auth/session', {
+  const authResponse = await fetch(`${baseUrl}/api/auth/session`, {
       headers: {
         'x-session-id': sessionId
       }
@@ -46,7 +48,7 @@ async function testSuperadminBannerDelete() {
 
     // Step 3: Get banners
     console.log('\n3. Getting banners...');
-    const bannersResponse = await fetch('http://localhost:3000/api/banners', {
+  const bannersResponse = await fetch(`${baseUrl}/api/banners`, {
       headers: {
         'x-session-id': sessionId
       }
@@ -65,7 +67,7 @@ async function testSuperadminBannerDelete() {
       console.log('   No banners to test delete. Creating a test banner first...');
 
       // Create a test banner
-      const createResponse = await fetch('http://localhost:3000/api/banners', {
+  const createResponse = await fetch(`${baseUrl}/api/banners`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -87,7 +89,7 @@ async function testSuperadminBannerDelete() {
 
         // Now try to delete it
         console.log('\n4. Testing DELETE on test banner...');
-        const deleteResponse = await fetch(`http://localhost:3000/api/banners/${newBanner.id}`, {
+  const deleteResponse = await fetch(`${baseUrl}/api/banners/${newBanner.id}`, {
           method: 'DELETE',
           headers: {
             'x-session-id': sessionId
@@ -109,7 +111,7 @@ async function testSuperadminBannerDelete() {
       // Test delete on existing banner
       const testBanner = banners[0];
       console.log('\n4. Testing DELETE on existing banner:', testBanner.id);
-      const deleteResponse = await fetch(`http://localhost:3000/api/banners/${testBanner.id}`, {
+  const deleteResponse = await fetch(`${baseUrl}/api/banners/${testBanner.id}`, {
         method: 'DELETE',
         headers: {
           'x-session-id': sessionId

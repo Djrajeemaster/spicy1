@@ -60,13 +60,34 @@ const validateInput = (schema) => {
 // Security headers middleware
 const securityHeaders = helmet({
   contentSecurityPolicy: {
-    directives: {
-      defaultSrc: ["'self'"],
-      styleSrc: ["'self'", "'unsafe-inline'", "https://fonts.googleapis.com"],
-      scriptSrc: ["'self'", "'unsafe-inline'"],
-      imgSrc: ["'self'", "data:", "https:"],
-      fontSrc: ["'self'", "https://fonts.gstatic.com"],
-    },
+    directives: (() => {
+      const directives = {
+        defaultSrc: ["'self'"],
+        styleSrc: ["'self'", "'unsafe-inline'", "https://fonts.googleapis.com"],
+        scriptSrc: ["'self'", "'unsafe-inline'"],
+        imgSrc: ["'self'", "data:", "https:"],
+        fontSrc: ["'self'", "https://fonts.gstatic.com"],
+      };
+
+      // connect-src controls where fetch()/XHR/websocket can connect to.
+      // Default to 'self'. In development, allow localhost:3000 (and ws) so the dev server can call the API.
+      const connect = new Set(["'self'"]);
+      if (process.env.NODE_ENV !== 'production') {
+        connect.add('http://localhost:3000');
+        connect.add('ws://localhost:3000');
+      }
+
+      // Allow additional origins via CSP_CONNECT_SRC env var (comma-separated)
+      if (process.env.CSP_CONNECT_SRC) {
+        process.env.CSP_CONNECT_SRC.split(',').map(s => s.trim()).filter(Boolean).forEach(s => connect.add(s));
+      }
+
+      // Always permit https: scheme as a safe fallback for external APIs/assets
+      connect.add('https:');
+
+      directives.connectSrc = Array.from(connect);
+      return directives;
+    })(),
   },
   hsts: {
     maxAge: 31536000,

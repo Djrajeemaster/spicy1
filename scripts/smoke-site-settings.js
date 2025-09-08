@@ -4,9 +4,8 @@ const path = require('path');
 
 async function main() {
   // Use environment-aware URL
-  const isLocal = process.env.NODE_ENV !== 'production';
-  const baseUrl = isLocal ? 'http://localhost:3000' : '';
-  const url = `${baseUrl}/api/site/settings/dev-write`;
+  const baseUrl = process.env.API_BASE_URL !== undefined ? process.env.API_BASE_URL : (process.env.NODE_ENV !== 'production' ? 'http://localhost:3000' : '');
+  const url = `${baseUrl || ''}/api/site/settings/dev-write`;
   const payload = {
     enable_push_notifications: false,
     maintenance_mode: true,

@@ -16,6 +16,7 @@ import { AffiliateManagement } from '@/components/admin/AffiliateManagement';
 import ReportManagement from '@/components/admin/ReportManagement';
 import { useAuth } from '@/contexts/AuthProvider';
 import { router } from 'expo-router';
+import { getApiUrl } from '@/utils/config';
 
 // Import role management components
 import { RoleRequestsManagement } from '@/components/admin/RoleRequestsManagement';
@@ -87,7 +88,8 @@ export default function AdminScreen() {
   React.useEffect(() => {
     const checkAuth = async () => {
       try {
-        const response = await fetch('http://localhost:3000/api/auth/session', {
+        const url = getApiUrl('/api/auth/session');
+        const response = await fetch(url || '/api/auth/session', {
           credentials: 'include'
         });
         const data = await response.json();

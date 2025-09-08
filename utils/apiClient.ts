@@ -54,15 +54,14 @@ class ApiClient {
   private async request<T>(endpoint: string, options: RequestOptions = {}): Promise<T> {
     const { params, ...fetchOptions } = options;
     
-    // FORCE the correct API URL for development
-    let url;
-    if (typeof window !== 'undefined' && window.location.hostname === 'localhost') {
-      // Force localhost:3000 for development
+    // Build URL using getApiUrl which respects API_BASE_URL and production relative paths
+    let url = getApiUrl(endpoint);
+    // If on web and running on localhost and no API_BASE_URL was provided, allow localhost dev server
+    if (typeof window !== 'undefined' && window.location.hostname === 'localhost' && !config.API_BASE_URL) {
       const apiPath = endpoint.startsWith('/api') ? endpoint : `/api${endpoint}`;
       url = `http://localhost:3000${apiPath}`;
-      console.log('🔧 ApiClient: FORCED URL for development:', url);
+      console.log('🔧 ApiClient: DEV fallback to localhost API:', url);
     } else {
-      url = getApiUrl(endpoint);
       console.log('🔧 ApiClient: Making request to URL:', url);
     }
     
