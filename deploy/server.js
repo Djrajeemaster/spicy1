@@ -150,26 +150,78 @@ function writeSettings(obj) {
   fs.writeFileSync(SETTINGS_PATH, JSON.stringify(obj, null, 2));
 }
 
-// Local early-access codes storage (fallback to file-based static codes)
-const CODES_PATH = path.join(__dirname, 'early-access-codes.json');
-function readEarlyAccessCodes() {
-  if (!fs.existsSync(CODES_PATH)) {
-    // create an empty file so operators can edit it
-    fs.writeFileSync(CODES_PATH, JSON.stringify([], null, 2));
-    return [];
+// Local early-access codes storage (fallback to file if DB not used)
+const EARLY_CODES_PATH = path.join(__dirname, 'early-access-codes.json');
+
+function loadEarlyCodes() {
+  if (!fs.existsSync(EARLY_CODES_PATH)) {
+    const defaults = [
+      {
+        id: 1,
+        code: 'WELCOME2025',
+        is_active: true,
+        expires_at: null,
+        max_uses: 0,
+        uses_count: 0
+      },
+      {
+        id: 2,
+        code: 'BETA1234',
+        is_active: true,
+        expires_at: null,
+        max_uses: 100,
+        uses_count: 0
+      }
+    ];
+    fs.writeFileSync(EARLY_CODES_PATH, JSON.stringify(defaults, null, 2));
+    return defaults;
   }
   try {
-    return JSON.parse(fs.readFileSync(CODES_PATH));
+    return JSON.parse(fs.readFileSync(EARLY_CODES_PATH));
   } catch (err) {
-    console.error('Failed to read early access codes file:', err);
-    return [];
+    console.error('Failed to read early-access codes, recreating defaults', err);
+    const defaults = [
+      {
+        id: 1,
+        code: 'WELCOME2025',
+        is_active: true,
+        expires_at: null,
+        max_uses: 0,
+        uses_count: 0
+      }
+    ];
+    fs.writeFileSync(EARLY_CODES_PATH, JSON.stringify(defaults, null, 2));
+    return defaults;
   }
 }
-function writeEarlyAccessCodes(arr) {
+
+function saveEarlyCodes(codes) {
+  fs.writeFileSync(EARLY_CODES_PATH, JSON.stringify(codes, null, 2));
+}
+
+function findValidEarlyCode(code) {
+  const codes = loadEarlyCodes();
+  const now = new Date();
+  return codes.find(c => {
+    if (!c || !c.code) return false;
+    if (String(c.code).toLowerCase() !== String(code).toLowerCase()) return false;
+    if (!c.is_active) return false;
+    if (c.expires_at && new Date(c.expires_at) <= now) return false;
+    if (c.max_uses && c.max_uses > 0 && (c.uses_count || 0) >= c.max_uses) return false;
+    return true;
+  });
+}
+
+function incrementEarlyCodeUse(codeObj) {
   try {
-    fs.writeFileSync(CODES_PATH, JSON.stringify(arr, null, 2));
+    const codes = loadEarlyCodes();
+    const idx = codes.findIndex(c => c.id === codeObj.id || (c.code && codeObj.code && c.code.toLowerCase() === codeObj.code.toLowerCase()));
+    if (idx === -1) return;
+    codes[idx].uses_count = (codes[idx].uses_count || 0) + 1;
+    codes[idx].updated_at = new Date().toISOString();
+    saveEarlyCodes(codes);
   } catch (err) {
-    console.error('Failed to write early access codes file:', err);
+    console.error('Failed to increment early code use:', err);
   }
 }
 
@@ -239,36 +291,29 @@ app.use(cors({
       return callback(null, true);
     }
 
-    // Normalize origin hostname (strip protocol and path)
+    // Normalize origin hostname
     let originHost = origin;
     try {
       const u = new URL(origin);
-      originHost = u.hostname; // strip port for matching; keep hostname only
+      originHost = u.hostname;
     } catch (e) {
-      // if parsing fails, leave origin as-is
       originHost = origin;
     }
 
-    // Production: check allowed origins from environment
     if (process.env.NODE_ENV === 'production') {
       const raw = process.env.ALLOWED_ORIGINS || '';
-      // default fallback domains when ALLOWED_ORIGINS not configured
       const fallback = ['saversdream.com', 'www.saversdream.com'];
       const allowed = raw.split(',').map(s => s.trim()).filter(Boolean).map(s => {
-        // strip protocol and path
         try { return new URL(s).hostname; } catch(e) { return s.replace(/^https?:\/\//, '').replace(/\/.*$/, ''); }
       });
       const allowedList = allowed.length ? allowed : fallback;
 
-      // Allow exact hostname match or subdomain match
       const matched = allowedList.some(a => {
         if (!a) return false;
         if (a.startsWith('.')) {
-          // entry like .saversdream.com matches subdomains and apex
           return originHost === a.slice(1) || originHost.endsWith(a.slice(1));
         }
         if (originHost === a) return true;
-        // allow subdomain e.g. allowed 'saversdream.com' matches 'app.saversdream.com'
         return originHost.endsWith('.' + a);
       });
 
@@ -278,7 +323,7 @@ app.use(cors({
       return callback(new Error('Not allowed by CORS'));
     }
 
-    // Development: allow localhost, local IPs and common dev hosts
+    // Development: allow localhost/local IPs
     try {
       if (originHost.includes('localhost') || originHost.startsWith('127.') || originHost.startsWith('192.168.') || originHost.endsWith('.local')) {
         return callback(null, true);
@@ -4258,7 +4303,7 @@ app.get('/_debug/security', (req, res) => {
 
   const allowedOrigins = process.env.ALLOWED_ORIGINS ? process.env.ALLOWED_ORIGINS.split(',') : ['https://www.saversdream.com', 'https://saversdream.com'];
   const cspConnect = process.env.CSP_CONNECT_SRC ? process.env.CSP_CONNECT_SRC.split(',') : [];
-  const codes = readEarlyAccessCodes();
+  const codes = loadEarlyCodes ? loadEarlyCodes() : [];
 
   res.json({
     env: process.env.NODE_ENV || 'development',
@@ -4278,33 +4323,15 @@ app.post('/grant-early', express.urlencoded({ extended: true }), async (req, res
       return res.redirect('/?error=invalid_code');
     }
 
-    // Local file-based check for early access codes (no DB)
-    const codes = readEarlyAccessCodes();
-    const now = new Date();
-    const accessCode = codes.find(c => {
-      if (!c || !c.code) return false;
-      if (String(c.code).toLowerCase() !== String(code).toLowerCase()) return false;
-      if (!c.is_active) return false;
-      if (c.expires_at && new Date(c.expires_at) <= now) return false;
-      if (c.max_uses && c.max_uses > 0 && (c.uses_count || 0) >= c.max_uses) return false;
-      return true;
-    });
+    // Local file-based check for early access codes
+    const accessCode = findValidEarlyCode(code);
 
     if (!accessCode) {
       return res.redirect('/?error=invalid_code');
     }
 
-    // Increment usage count and save
-    try {
-      const idx = codes.findIndex(c => c.id === accessCode.id || (c.code && accessCode.code && c.code.toLowerCase() === accessCode.code.toLowerCase()));
-      if (idx !== -1) {
-        codes[idx].uses_count = (codes[idx].uses_count || 0) + 1;
-        codes[idx].updated_at = new Date().toISOString();
-        writeEarlyAccessCodes(codes);
-      }
-    } catch (err) {
-      console.error('Failed to increment early access code locally:', err);
-    }
+    // Increment usage count in local file
+    incrementEarlyCodeUse(accessCode);
 
     // Set cookie for 30 days
     const isProduction = process.env.NODE_ENV === 'production';
@@ -4323,6 +4350,7 @@ app.post('/grant-early', express.urlencoded({ extended: true }), async (req, res
     res.redirect('/');
   } catch (err) {
     console.error('Error granting early access:', err && err.stack ? err.stack : err);
+    // Protected debug output: if DEBUG_KEY is set, allow returning stack when provided via ?key or header
     try {
       const debugKey = process.env.DEBUG_KEY;
       const providedKey = (req.query && req.query.key) || req.get && req.get('X-Debug-Key');
