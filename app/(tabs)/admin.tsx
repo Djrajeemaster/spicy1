@@ -1,5 +1,5 @@
 import React, { useState, useCallback, useRef, useEffect } from 'react';
-import { View, Text, StyleSheet, ScrollView, ActivityIndicator, TouchableOpacity, Alert } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, ActivityIndicator, TouchableOpacity, Alert, Platform } from 'react-native';
 import { useFocusEffect } from '@react-navigation/native';
 import { useLocalSearchParams } from 'expo-router';
 import { AdminHeader } from '@/components/admin/AdminHeader';
@@ -34,6 +34,14 @@ export default function AdminScreen() {
   const currentUserRole = profile?.role || 'guest';
   const params = useLocalSearchParams();
 
+  // Set initial tab based on URL parameter
+  useEffect(() => {
+    if (params.tab && typeof params.tab === 'string') {
+      console.log('Admin: Setting initial tab from URL parameter:', params.tab);
+      setActiveTab(params.tab as AdminTab);
+    }
+  }, [params.tab]);
+
   // Call useAdminData hook at the top level before any conditional returns
   const {
     users,
@@ -49,6 +57,7 @@ export default function AdminScreen() {
     addNewCategory,
     toggleBanner,
     addNewBanner,
+    editBanner,
     deleteBanner,
     updateSetting,
     refreshData,
@@ -74,12 +83,35 @@ export default function AdminScreen() {
     }, [refreshData, adminStats])
   );
 
-  // Redirect unauthenticated users to login
+  // Check authentication status on mount and periodically
   React.useEffect(() => {
-    if (!loading && !user) {
-      router.replace('/sign-in');
-    }
-  }, [loading, user]);
+    const checkAuth = async () => {
+      try {
+        const response = await fetch('http://localhost:3000/api/auth/session', {
+          credentials: 'include'
+        });
+        const data = await response.json();
+
+        if (!data.authenticated) {
+          console.log('Admin: User not authenticated, redirecting to login');
+          router.replace('/sign-in');
+        } else {
+          console.log('Admin: User authenticated');
+        }
+      } catch (error) {
+        console.error('Admin: Error checking authentication:', error);
+        router.replace('/sign-in');
+      }
+    };
+
+    // Check immediately
+    checkAuth();
+
+    // Check every 5 minutes
+    const interval = setInterval(checkAuth, 5 * 60 * 1000);
+
+    return () => clearInterval(interval);
+  }, []);
 
   if (!loading && !user) {
     return null;
@@ -167,7 +199,42 @@ export default function AdminScreen() {
       case 'audit':
         return <AdminAuditLog />;
       case 'banners':
-        return <BannerManagement banners={banners} onToggleBanner={toggleBanner} onAddNewBanner={addNewBanner} onDeleteBanner={deleteBanner} />;
+        return <BannerManagement 
+          banners={banners} 
+          onToggleBanner={toggleBanner} 
+          onAddNewBanner={addNewBanner} 
+          onEditBanner={async (bannerId) => {
+            console.log('Admin: onEditBanner called with bannerId:', bannerId);
+            const banner = banners.find(b => b.id === bannerId);
+            console.log('Admin: Found banner:', banner);
+            if (!banner) {
+              console.log('Admin: Banner not found');
+              return;
+            }
+
+            // Navigate to edit banner screen with banner data
+            console.log('Admin: Navigating to edit-banner with params:', {
+              bannerId: banner.id,
+              title: banner.title,
+              description: banner.description,
+              imageUrl: banner.image_url || '',
+              priority: banner.priority.toString(),
+              isActive: banner.is_active.toString()
+            });
+            router.push({
+              pathname: '/edit-banner',
+              params: {
+                bannerId: banner.id,
+                title: banner.title,
+                description: banner.description,
+                imageUrl: banner.image_url || '',
+                priority: banner.priority.toString(),
+                isActive: banner.is_active.toString()
+              }
+            });
+          }}
+          onDeleteBanner={deleteBanner} 
+        />;
       case 'categories':
         return <CategoryManagement categories={categories} onToggleCategory={toggleCategory} onAddNewCategory={addNewCategory} onRefresh={refreshData} />;
       case 'stores':

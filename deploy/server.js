@@ -12,6 +12,9 @@ const multer = require('multer');
 // store uploads temporarily then move into assets
 const upload = multer({ dest: path.join(__dirname, 'tmp_uploads') });
 
+// Import security middleware
+const { securityHeaders } = require('./middleware/security');
+
 // Configuration
 const port = process.env.PORT || 3000;
 
@@ -29,10 +32,13 @@ app.use(express.json());
 if (process.env.NODE_ENV !== 'production') {
   app.use((req, res, next) => {
     // Allow scripts/styles/images from self, and allow XHR/fetch to same origin
-    const policy = "default-src 'self'; connect-src 'self' http://localhost:3000 ws://localhost:3000; img-src 'self' data: https:; style-src 'self' 'unsafe-inline'; script-src 'self' 'unsafe-inline'; font-src 'self' data:; media-src 'self' data:;";
+    const policy = "default-src 'self'; connect-src 'self' http://localhost:3000 ws://localhost:3000; img-src 'self' data: https:; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; script-src 'self' 'unsafe-inline'; font-src 'self' data: https://fonts.gstatic.com; media-src 'self' data:;";
     res.setHeader('Content-Security-Policy', policy);
     next();
   });
+} else {
+  // Apply security headers (CSP, HSTS, etc.) only in production
+  app.use(securityHeaders);
 }
 
 // Parse cookies early so middleware that relies on req.cookies works (requireSuperAdmin)
@@ -168,14 +174,31 @@ async function requireSuperAdmin(req, res, next) {
 // general middleware to require authentication
 async function requireAuth(req, res, next) {
   try {
-    const sessionId = req.cookies && req.cookies.session_id;
-    if (!sessionId) return res.status(401).json({ error: 'Not authenticated' });
+    // Check for session ID in cookies (web) or headers (React Native)
+    let sessionId = req.cookies && req.cookies.session_id;
+    
+    // If no cookie session, check for x-session-id header (React Native)
+    if (!sessionId) {
+      sessionId = req.headers['x-session-id'];
+      console.log('🔧 requireAuth: Using x-session-id header for React Native:', sessionId);
+    } else {
+      console.log('🔧 requireAuth: Using cookie session_id for web:', sessionId);
+    }
+    
+    if (!sessionId) {
+      console.log('🔧 requireAuth: No session ID found in cookies or headers');
+      return res.status(401).json({ error: 'Not authenticated' });
+    }
     
     const { rows } = await pool.query('SELECT id, role FROM users WHERE id = $1', [sessionId]);
-    if (!rows[0]) return res.status(401).json({ error: 'Invalid session' });
+    if (!rows[0]) {
+      console.log('🔧 requireAuth: Invalid session ID:', sessionId);
+      return res.status(401).json({ error: 'Invalid session' });
+    }
     
     // Attach user info to request
     req.session = { id: sessionId, userId: sessionId, role: rows[0].role };
+    console.log('🔧 requireAuth: Authentication successful for user:', rows[0].id, 'role:', rows[0].role);
     next();
   } catch (err) {
     console.error('requireAuth error', err);
@@ -358,7 +381,7 @@ app.get('/api/verification-requests', async (req, res) => {
 });
 
 // Get all banners
-app.get('/api/banners', async (req, res) => {
+app.get('/api/banners', requireAuth, async (req, res) => {
   try {
     const { rows } = await pool.query('SELECT * FROM banners ORDER BY priority ASC');
     res.json(rows);
@@ -664,9 +687,19 @@ if (process.env.NODE_ENV === 'development') {
 // Session endpoint
 
 app.get('/api/auth/session', async (req, res) => {
-  const sessionId = req.cookies.session_id;
+  // Check for session ID in cookies (web) or headers (React Native)
+  let sessionId = req.cookies.session_id;
+  
+  // If no cookie session, check for x-session-id header (React Native)
+  if (!sessionId) {
+    sessionId = req.headers['x-session-id'];
+    console.log('🔧 Session check: Using x-session-id header for React Native:', sessionId);
+  } else {
+    console.log('🔧 Session check: Using cookie session_id for web:', sessionId);
+  }
   
   if (!sessionId) {
+    console.log('🔧 Session check: No session ID found');
     return res.json({ user: null, authenticated: false });
   }
   
@@ -678,10 +711,12 @@ app.get('/api/auth/session', async (req, res) => {
     );
     
     if (rows.length === 0) {
+      console.log('🔧 Session check: User not found for session ID:', sessionId);
       return res.json({ user: null, authenticated: false });
     }
     
     const user = rows[0];
+    console.log('🔧 Session check: User authenticated:', user.username, 'role:', user.role);
     res.json({
       user: user,
       authenticated: true,
@@ -1646,13 +1681,16 @@ app.post('/api/auth/signin', async (req, res) => {
     }
     
     // Set session cookie with proper domain and path
-    res.cookie('session_id', user.id, { 
-      httpOnly: true, 
-      secure: false, // Set to false for HTTP
+    const isProduction = process.env.NODE_ENV === 'production';
+    const domain = isProduction ? '.saversdream.com' : undefined; // undefined = current domain
+
+    res.cookie('session_id', user.id, {
+      httpOnly: true,
+      secure: isProduction, // Use HTTPS in production
       maxAge: 24 * 60 * 60 * 1000, // 24 hours
       sameSite: 'lax',
       path: '/',
-      domain: 'localhost'  // Allow cookie to be sent to any localhost port
+      domain: domain // Allow cookie to work on subdomains in production
     });
     
     // Return user data (without password) and include session info
@@ -1674,11 +1712,15 @@ app.post('/api/auth/signin', async (req, res) => {
 app.post('/api/auth/signout', async (req, res) => {
   try {
     // Clear the session cookie
+    const isProduction = process.env.NODE_ENV === 'production';
+    const domain = isProduction ? '.saversdream.com' : undefined;
+
     res.clearCookie('session_id', {
       httpOnly: true,
-      secure: false,
+      secure: isProduction,
       sameSite: 'lax',
-      path: '/'
+      path: '/',
+      domain: domain
     });
     
     res.json({ message: 'Signed out successfully' });
@@ -3208,7 +3250,7 @@ app.delete('/api/stores/:id', async (req, res) => {
 });
 
 // Banner endpoints
-app.post('/api/banners', async (req, res) => {
+app.post('/api/banners', requireAuth, async (req, res) => {
   try {
     const { title, description, image_url, is_active, priority } = req.body;
     const { rows } = await pool.query(
@@ -3221,7 +3263,7 @@ app.post('/api/banners', async (req, res) => {
   }
 });
 
-app.put('/api/banners/:id', async (req, res) => {
+app.put('/api/banners/:id', requireAuth, async (req, res) => {
   try {
     const { id } = req.params;
     const updates = req.body;
@@ -3258,7 +3300,7 @@ app.put('/api/banners/:id', async (req, res) => {
   }
 });
 
-app.delete('/api/banners/:id', async (req, res) => {
+app.delete('/api/banners/:id', requireAuth, async (req, res) => {
   try {
     const { id } = req.params;
     const { rows } = await pool.query('DELETE FROM banners WHERE id = $1 RETURNING id', [id]);
@@ -4149,40 +4191,45 @@ app.get('/api/test-chat-debug', (req, res) => {
 app.post('/grant-early', express.urlencoded({ extended: true }), async (req, res) => {
   try {
     const { code } = req.body;
-    
+
     if (!code || code.length < 4) {
       return res.redirect('/?error=invalid_code');
     }
-    
+
     // Check if code exists and is valid
     const { rows } = await pool.query(`
-      SELECT * FROM early_access_codes 
-      WHERE code = $1 AND is_active = true 
+      SELECT * FROM early_access_codes
+      WHERE code = $1 AND is_active = true
       AND (expires_at IS NULL OR expires_at > NOW())
       AND (max_uses = 0 OR uses_count < max_uses)
     `, [code]);
-    
+
     if (rows.length === 0) {
       return res.redirect('/?error=invalid_code');
     }
-    
+
     const accessCode = rows[0];
-    
+
     // Increment usage count
     await pool.query(`
-      UPDATE early_access_codes 
-      SET uses_count = uses_count + 1, updated_at = NOW() 
+      UPDATE early_access_codes
+      SET uses_count = uses_count + 1, updated_at = NOW()
       WHERE id = $1
     `, [accessCode.id]);
-    
+
     // Set cookie for 30 days
+    const isProduction = process.env.NODE_ENV === 'production';
+    const domain = isProduction ? '.saversdream.com' : undefined;
+
     res.cookie('sd_early', '1', {
       maxAge: 30 * 24 * 60 * 60 * 1000, // 30 days
       httpOnly: true,
-      secure: process.env.NODE_ENV === 'production',
-      sameSite: 'lax'
+      secure: isProduction,
+      sameSite: 'lax',
+      path: '/',
+      domain: domain
     });
-    
+
     // Redirect to main app
     res.redirect('/');
   } catch (err) {

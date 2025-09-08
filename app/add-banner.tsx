@@ -32,7 +32,13 @@ export default function AddBannerScreen() {
       if (error) throw error;
 
       Alert.alert('Success', 'Banner created successfully');
-      setTimeout(() => router.replace('/(tabs)/admin'), 1000);
+      setTimeout(() => {
+        // Navigate to admin screen with banners tab active
+        router.replace({
+          pathname: '/(tabs)/admin',
+          params: { tab: 'banners' }
+        });
+      }, 1000);
     } catch (error: any) {
       Alert.alert('Error', error.message || 'Failed to create banner');
     } finally {

@@ -129,12 +129,9 @@ class EnhancedChatService {
   // Get all user's channels
   async getChannels(): Promise<ChatChannel[]> {
     console.log('🔧 Calling getChannels endpoint');
-    console.log('🔧 API Base URL from config:', config.API_BASE_URL);
-    console.log('🔧 Full URL will be:', getApiUrl('/chat/channels'));
-    
     try {
       const response = await apiClient.get('/chat/channels') as any;
-      console.log('🔧 Response received:', response);
+      console.log('🔧 Response received');
       
       // Ensure we always return an array
       if (response && Array.isArray(response.data)) {

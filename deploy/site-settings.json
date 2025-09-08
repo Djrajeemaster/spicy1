@@ -11,7 +11,7 @@
   "enable_location_services": true,
   "enable_push_notifications": false,
   "enable_social_sharing": true,
-  "maintenance_mode": false,
+  "maintenance_mode": true,
   "enable_analytics": true,
   "enable_error_reporting": true,
   "enable_performance_monitoring": true,

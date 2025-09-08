@@ -73,6 +73,30 @@ class UserService {
     }
   }
 
+  async getUserByUsername(username: string): Promise<[any, PublicUserProfile | null]> {
+    try {
+      const userData = await apiClient.get<any>(`/users/username/${username}`);
+
+      const publicProfile: PublicUserProfile = {
+        id: userData.id,
+        username: userData.username,
+        role: userData.role || 'user',
+        reputation: userData.reputation || 0,
+        avatar_url: userData.avatar_url,
+        join_date: userData.created_at,
+        status: userData.status || 'active'
+      };
+
+      return [null, publicProfile];
+    } catch (error) {
+      if (error instanceof Error && error.message.includes('404')) {
+        return [null, null];
+      }
+      console.error('Error fetching user by username:', error);
+      return [error, null];
+    }
+  }
+
   // ... any other existing methods
 }
 

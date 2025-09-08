@@ -7,6 +7,7 @@ import { bannerService, Banner } from '@/services/bannerService';
 import { categoryService } from '@/services/categoryService';
 import { settingsService, SystemSetting } from '@/services/settingsService';
 import { Database } from '@/types/database';
+import { router } from 'expo-router';
 
 type UserProfile = Database['public']['Tables']['users']['Row'];
 type Category = Database['public']['Tables']['categories']['Row'];
@@ -520,69 +521,42 @@ export const useAdminData = () => {
   const deleteBanner = useCallback(async (bannerId: string) => {
     try {
       const { error } = await bannerService.deleteBanner(bannerId);
-
       if (error) {
-        showError(`Failed to delete banner: ${error.message}`);
+        showError(`Failed to delete banner: ${error.message || 'Unknown error'}`);
       } else {
         setBanners(prev => prev.filter(b => b.id !== bannerId));
         showSuccess('Banner deleted successfully');
       }
     } catch (e) {
-      console.error('deleteBanner error', e);
       showError('Failed to delete banner');
     }
   }, []);
 
-  const addNewBanner = useCallback(async () => {
-    let title: string | null = null;
-    
-    if (Platform.OS === 'web') {
-      title = window.prompt('Enter banner title:');
-    } else {
-      // For native platforms, use Alert.prompt
-      Alert.prompt(
-        'Add New Banner',
-        'Enter banner title:',
-        [
-          { text: 'Cancel', style: 'cancel' },
-          { 
-            text: 'Add Banner', 
-            onPress: async (inputTitle) => {
-              if (!inputTitle?.trim()) return;
-              await createBanner(inputTitle.trim());
-            }
-          }
-        ],
-        'plain-text',
-        '',
-        'default'
-      );
-      return; // Exit early for native platforms as the callback handles the creation
-    }
-    
-    // Handle web platform result
-    if (title?.trim()) {
-      await createBanner(title.trim());
-    }
-    
-    async function createBanner(bannerTitle: string) {
-      const { data, error } = await bannerService.createBanner({
-        title: bannerTitle,
-        description: 'New promotional banner',
-        is_active: true,
-        priority: banners.length + 1,
-      });
+  const editBanner = useCallback(async (bannerId: string, updates: Partial<Banner>) => {
+    try {
+      const { data, error } = await bannerService.updateBanner(bannerId, updates);
 
       if (error) {
-        showError(`Failed to create banner: ${error.message}`);
+        showError(`Failed to update banner: ${error.message}`);
       } else if (data) {
-        setBanners(prev => [...prev, data]);
-        showSuccess('Banner added successfully');
+        setBanners(prev => prev.map(b => b.id === bannerId ? { ...b, ...updates } : b));
+        showSuccess('Banner updated successfully');
       }
+    } catch (e) {
+      console.error('editBanner error', e);
+      showError('Failed to update banner');
     }
-  }, [banners]);
+  }, []);
 
-  // Settings management
+  const addNewBanner = useCallback(async () => {
+    console.log('useAdminData: addNewBanner called - navigating to add-banner screen');
+    try {
+      router.push('/add-banner');
+    } catch (error) {
+      console.error('useAdminData: Failed to navigate to add-banner screen:', error);
+      showError('Failed to open add banner form');
+    }
+  }, []);  // Settings management
   const updateSetting = useCallback(async <K extends keyof SystemSettings>(
     key: K, 
     value: SystemSettings[K],
@@ -620,6 +594,7 @@ export const useAdminData = () => {
     addNewCategory,
     toggleBanner,
     addNewBanner,
+    editBanner,
     deleteBanner,
     updateSetting,
     

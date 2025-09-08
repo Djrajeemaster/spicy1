@@ -23,30 +23,30 @@ interface ChatProviderProps {
 }
 
 export function ChatProvider({ children }: ChatProviderProps) {
-  const { user } = useAuth();
+  const { user, loading } = useAuth();
   const [conversations, setConversations] = useState<Conversation[]>([]);
   const [unreadCount, setUnreadCount] = useState(0);
   const [activeConversation, setActiveConversation] = useState<Conversation | null>(null);
   const [isChatOpen, setIsChatOpen] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
 
-  // Auto-refresh unread count every 30 seconds when user is logged in
+  // Auto-refresh unread count every 30 seconds when user is logged in and chat is not open
   useEffect(() => {
-    if (!user) return;
-    
+    if (!user || loading || isChatOpen) return;
+
     refreshUnreadCount();
     refreshConversations();
-    
+
     const interval = setInterval(() => {
       refreshUnreadCount();
       refreshConversations();
     }, 30000);
-    
+
     return () => clearInterval(interval);
-  }, [user]);
+  }, [user, loading, isChatOpen]);
 
   const refreshConversations = async () => {
-    if (!user) return;
+    if (!user || loading) return;
     
     try {
       const data = await chatService.getConversations();
@@ -57,7 +57,7 @@ export function ChatProvider({ children }: ChatProviderProps) {
   };
 
   const refreshUnreadCount = async () => {
-    if (!user) return;
+    if (!user || loading) return;
     
     try {
       const count = await chatService.getUnreadCount();
@@ -87,7 +87,7 @@ export function ChatProvider({ children }: ChatProviderProps) {
   };
 
   const startDirectConversation = async (userId: string, username: string) => {
-    if (!user) return;
+    if (!user || loading) return;
     
     try {
       setIsLoading(true);

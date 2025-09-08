@@ -3,7 +3,17 @@ import React, { createContext, useContext, useEffect, useState, ReactNode } from
 import { logger } from '@/utils/logger';
 import { apiClient } from '@/utils/apiClient';
 import { getApiUrl } from '@/utils/config';
-import AsyncStorage from '@react-native-async-storage/async-storage';
+import { Platform } from 'react-native';
+
+// Conditionally import AsyncStorage for React Native
+let AsyncStorage: any = null;
+if (Platform.OS !== 'web') {
+  try {
+    AsyncStorage = require('@react-native-async-storage/async-storage').default;
+  } catch (e) {
+    console.warn('AsyncStorage not available in AuthProvider:', e);
+  }
+}
 
 export interface AuthContextType {
   session: any | null;
@@ -47,13 +57,46 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     return copy;
   };
 
-  // Top-level fetchSession for reuse
+  // Check session validity periodically
+  useEffect(() => {
+    const checkSession = async () => {
+      try {
+        const response = await fetch(getApiUrl('/auth/session'), {
+          credentials: 'include'
+        });
+        const data = await response.json();
+
+        if (!data.authenticated && user) {
+          console.log('Session expired, clearing local state');
+          setSession(null);
+          setUser(null);
+          setProfile(null);
+          // Clear AsyncStorage data (only for React Native)
+          if (AsyncStorage) {
+            await AsyncStorage.removeItem('user_session');
+            await AsyncStorage.removeItem('user_data');
+          }
+        }
+      } catch (error) {
+        console.error('Error checking session:', error);
+      }
+    };
+
+    // Check session every 2 minutes
+    const interval = setInterval(checkSession, 2 * 60 * 1000);
+    return () => clearInterval(interval);
+  }, [user]);
   const fetchSession = async () => {
     setLoading(true);
     try {
-      // First check AsyncStorage for stored session
-      const storedSession = await AsyncStorage.getItem('user_session');
-      const storedUser = await AsyncStorage.getItem('user_data');
+      // First check AsyncStorage for stored session (only for React Native)
+      let storedSession = null;
+      let storedUser = null;
+      
+      if (AsyncStorage) {
+        storedSession = await AsyncStorage.getItem('user_session');
+        storedUser = await AsyncStorage.getItem('user_data');
+      }
       
       if (storedSession && storedUser) {
         const sessionData = JSON.parse(storedSession);
@@ -80,9 +123,11 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
           }
         }
         
-        // If server validation fails, clear stored data
-        await AsyncStorage.removeItem('user_session');
-        await AsyncStorage.removeItem('user_data');
+        // If server validation fails, clear stored data (only for React Native)
+        if (AsyncStorage) {
+          await AsyncStorage.removeItem('user_session');
+          await AsyncStorage.removeItem('user_data');
+        }
       }
       
       // Fallback to server-only session check
@@ -103,9 +148,11 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
           setUser(normalized);
           setProfile(normalized);
           
-          // Store session data in AsyncStorage for persistence
-          await AsyncStorage.setItem('user_session', JSON.stringify(sessionData.session || { user_id: normalized.id }));
-          await AsyncStorage.setItem('user_data', JSON.stringify(normalized));
+          // Store session data in AsyncStorage for persistence (only for React Native)
+          if (AsyncStorage) {
+            await AsyncStorage.setItem('user_session', JSON.stringify(sessionData.session || { user_id: normalized.id }));
+            await AsyncStorage.setItem('user_data', JSON.stringify(normalized));
+          }
           
           console.log('User authenticated:', normalized);
         } else {
@@ -160,9 +207,11 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
         setUser(normalized);
         setProfile(normalized);
         
-        // Store session data in AsyncStorage for persistence
-        await AsyncStorage.setItem('user_session', JSON.stringify(data.session || { user_id: normalized.id }));
-        await AsyncStorage.setItem('user_data', JSON.stringify(normalized));
+        // Store session data in AsyncStorage for persistence (only for React Native)
+        if (AsyncStorage) {
+          await AsyncStorage.setItem('user_session', JSON.stringify(data.session || { user_id: normalized.id }));
+          await AsyncStorage.setItem('user_data', JSON.stringify(normalized));
+        }
         
         console.log('User signed in successfully:', normalized);
       } else {
@@ -220,9 +269,11 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
       setUser(null);
       setProfile(null);
       
-      // Clear AsyncStorage data
-      await AsyncStorage.removeItem('user_session');
-      await AsyncStorage.removeItem('user_data');
+      // Clear AsyncStorage data (only for React Native)
+      if (AsyncStorage) {
+        await AsyncStorage.removeItem('user_session');
+        await AsyncStorage.removeItem('user_data');
+      }
     }
   };
 

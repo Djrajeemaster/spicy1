@@ -66,7 +66,6 @@ class BannerService {
             await apiClient.delete(`/banners/${id}`);
             return { error: null };
           } catch (error) {
-            console.error('Error deleting banner:', error);
             return { error };
           }
         }

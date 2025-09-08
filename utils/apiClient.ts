@@ -1,5 +1,16 @@
 // utils/apiClient.ts
 import { getApiUrl, config } from './config';
+import { Platform } from 'react-native';
+
+// Conditionally import AsyncStorage for React Native
+let AsyncStorage: any = null;
+if (Platform.OS !== 'web') {
+  try {
+    AsyncStorage = require('@react-native-async-storage/async-storage').default;
+  } catch (e) {
+    console.warn('AsyncStorage not available:', e);
+  }
+}
 
 interface RequestOptions extends RequestInit {
   params?: Record<string, string | number | boolean>;
@@ -10,6 +21,34 @@ class ApiClient {
 
   constructor() {
     this.baseUrl = config.API_BASE_URL;
+  }
+
+  private async getSessionId(): Promise<string | null> {
+    try {
+      // For React Native, get session from AsyncStorage
+      if (Platform.OS !== 'web') {
+        console.log('🔧 ApiClient: Detected React Native platform, getting session from AsyncStorage');
+        if (!AsyncStorage) {
+          console.warn('🔧 ApiClient: AsyncStorage not available');
+          return null;
+        }
+        const sessionData = await AsyncStorage.getItem('user_session');
+        console.log('🔧 ApiClient: Retrieved session data from AsyncStorage:', sessionData ? 'Present' : 'Null');
+        if (sessionData) {
+          const session = JSON.parse(sessionData);
+          const sessionId = session.user_id || session.id;
+          console.log('🔧 ApiClient: Extracted session ID:', sessionId);
+          return sessionId;
+        }
+        console.log('🔧 ApiClient: No session data found in AsyncStorage');
+        return null;
+      }
+      console.log('🔧 ApiClient: Web platform detected, using cookies');
+      return null;
+    } catch (error) {
+      console.error('🔧 ApiClient: Error getting session ID:', error);
+      return null;
+    }
   }
 
   private async request<T>(endpoint: string, options: RequestOptions = {}): Promise<T> {
@@ -36,17 +75,31 @@ class ApiClient {
       url += `?${searchParams.toString()}`;
     }
 
+    // Get session ID for React Native
+    const sessionId = await this.getSessionId();
+    
     const defaultOptions: RequestInit = {
-      credentials: 'include',
       headers: {
         'Content-Type': 'application/json',
+        ...(sessionId && Platform.OS !== 'web' ? { 'x-session-id': sessionId } : {}),
         ...fetchOptions.headers,
       },
     };
 
+    console.log('🔧 ApiClient: Final headers:', JSON.stringify(defaultOptions.headers, null, 2));
+    console.log('🔧 ApiClient: Platform:', Platform.OS);
+    console.log('🔧 ApiClient: Session ID available:', !!sessionId);
+
+    // For web, use credentials: 'include', for React Native, rely on session header
+    if (Platform.OS === 'web') {
+      defaultOptions.credentials = 'include';
+    }
+
     const finalOptions = { ...defaultOptions, ...fetchOptions };
 
     try {
+      console.log('🔧 ApiClient: Making request to:', url, 'with method:', finalOptions.method || 'GET');
+      console.log('🔧 ApiClient: Session ID header:', sessionId && Platform.OS !== 'web' ? 'Present' : 'Not used');
       const response = await fetch(url, finalOptions);
       console.log('🔧 ApiClient: Response status:', response.status);
       console.log('🔧 ApiClient: Response URL:', response.url);
@@ -67,7 +120,7 @@ class ApiClient {
       }
 
       const responseText = await response.text();
-      console.log('🔧 ApiClient: Success response body (first 500 chars):', responseText.substring(0, 500));
+      console.log('🔧 ApiClient: Success response received');
       console.log('🔧 ApiClient: Response content type:', response.headers.get('content-type'));
       
       // Check if response is HTML instead of JSON
@@ -113,6 +166,7 @@ class ApiClient {
 
   // DELETE request
   async delete<T>(endpoint: string): Promise<T> {
+    console.log('apiClient: DELETE request to endpoint:', endpoint);
     return this.request<T>(endpoint, { method: 'DELETE' });
   }
 
