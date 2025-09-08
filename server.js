@@ -12,6 +12,31 @@ const multer = require('multer');
 // store uploads temporarily then move into assets
 const upload = multer({ dest: path.join(__dirname, 'tmp_uploads') });
 
+// Local early-access codes storage (file-backed)
+const EARLY_CODES_PATH = path.join(__dirname, 'early-access-codes.json');
+
+function loadEarlyCodes() {
+  try {
+    if (!fs.existsSync(EARLY_CODES_PATH)) {
+      return [];
+    }
+    const raw = fs.readFileSync(EARLY_CODES_PATH, 'utf8');
+    return JSON.parse(raw);
+  } catch (err) {
+    console.error('Failed to load early access codes:', err);
+    return [];
+  }
+}
+
+function saveEarlyCodes(codes) {
+  try {
+  fs.writeFileSync(EARLY_CODES_PATH, JSON.stringify(codes, null, 2), 'utf8');
+  console.log('Saved early-access-codes.json with', codes.length, 'entries');
+  } catch (err) {
+    console.error('Failed to save early access codes:', err);
+  }
+}
+
 // Import security middleware
 const { securityHeaders } = require('./middleware/security');
 
@@ -4196,26 +4221,41 @@ app.post('/grant-early', express.urlencoded({ extended: true }), async (req, res
       return res.redirect('/?error=invalid_code');
     }
 
-    // Check if code exists and is valid
-    const { rows } = await pool.query(`
-      SELECT * FROM early_access_codes
-      WHERE code = $1 AND is_active = true
-      AND (expires_at IS NULL OR expires_at > NOW())
-      AND (max_uses = 0 OR uses_count < max_uses)
-    `, [code]);
-
-    if (rows.length === 0) {
+    // Check local JSON-backed codes
+    const codes = loadEarlyCodes();
+    const now = new Date();
+    const matchIdx = codes.findIndex(c => c.code === code && c.is_active);
+    if (matchIdx === -1) {
       return res.redirect('/?error=invalid_code');
     }
 
-    const accessCode = rows[0];
+    const accessCode = codes[matchIdx];
 
-    // Increment usage count
-    await pool.query(`
-      UPDATE early_access_codes
-      SET uses_count = uses_count + 1, updated_at = NOW()
-      WHERE id = $1
-    `, [accessCode.id]);
+    // Validate expiry
+    if (accessCode.expires_at) {
+      const exp = new Date(accessCode.expires_at);
+      if (isNaN(exp.getTime()) || exp <= now) {
+        return res.redirect('/?error=invalid_code');
+      }
+    }
+
+    // Validate max uses (0 means unlimited)
+    if (accessCode.max_uses && accessCode.max_uses > 0) {
+      accessCode.uses_count = accessCode.uses_count || 0;
+      if (accessCode.uses_count >= accessCode.max_uses) {
+        return res.redirect('/?error=invalid_code');
+      }
+    } else {
+      accessCode.uses_count = accessCode.uses_count || 0;
+    }
+
+  // Increment usage count and persist
+  console.log('Granting early access for code:', accessCode.code, 'current uses_count:', accessCode.uses_count);
+  accessCode.uses_count += 1;
+  accessCode.updated_at = now.toISOString();
+  codes[matchIdx] = accessCode;
+  saveEarlyCodes(codes);
+  console.log('After increment uses_count:', accessCode.uses_count);
 
     // Set cookie for 30 days
     const isProduction = process.env.NODE_ENV === 'production';
