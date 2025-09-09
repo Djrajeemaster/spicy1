@@ -340,6 +340,36 @@ app.use(cors({
   allowedHeaders: ['Content-Type', 'Authorization', 'Cookie', 'x-admin-elevation']
 }));
 
+// Simple server-side fetch proxy to avoid CORS issues for client-side URL validation
+app.get('/api/fetch-proxy', async (req, res) => {
+  try {
+    const target = req.query.url;
+    if (!target || typeof target !== 'string') return res.status(400).json({ error: 'Missing url query parameter' });
+
+    // Basic safety: only allow http(s) URLs
+    if (!/^https?:\/\//i.test(target)) return res.status(400).json({ error: 'Invalid URL' });
+
+    // Simple server-side fetch with timeout
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 10000);
+
+    const fetch = require('node-fetch');
+    const response = await fetch(target, { method: 'GET', signal: controller.signal, headers: { 'User-Agent': 'SaversDreamBot/1.0 (+https://example.com)' } });
+    clearTimeout(timeout);
+
+    const contentType = response.headers.get('content-type') || 'text/html';
+    const text = await response.text();
+
+    // Return raw HTML
+    res.set('Content-Type', contentType);
+    return res.status(200).send(text);
+  } catch (err) {
+    console.error('Proxy fetch error:', err && err.message ? err.message : err);
+    if (err && err.name === 'AbortError') return res.status(504).json({ error: 'Timeout fetching target' });
+    return res.status(500).json({ error: 'Failed to fetch target URL' });
+  }
+});
+
 // Role request endpoints
 
 // Get available roles (excluding admin/superadmin)

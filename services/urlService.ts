@@ -1,4 +1,5 @@
 import { apiClient } from '@/utils/apiClient';
+import { getApiUrl } from '@/utils/config';
 
 /**
  * AI-Powered URL Data Extraction Service
@@ -1003,6 +1004,15 @@ function isGenericTitle(title: string): boolean {
  */
 async function fetchViaProxy(url: string): Promise<string> {
   const proxyMethods = [
+    // Local server proxy (preferred when available)
+    {
+      name: 'local_server',
+      getUrl: (url: string) => {
+        // Use relative API path - apiClient.get will resolve to the server base URL
+        return `/api/fetch-proxy?url=${encodeURIComponent(url)}`;
+      },
+      local: true
+    },
     // Method 1: allorigins.win
     {
       name: 'allorigins',
@@ -1028,24 +1038,41 @@ async function fetchViaProxy(url: string): Promise<string> {
     }
   ];
   
-  const headers = {
-    'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36',
-    'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8',
-    'Accept-Language': 'en-US,en;q=0.5',
-    'Accept-Encoding': 'gzip, deflate',
-    'Connection': 'keep-alive',
-    'Upgrade-Insecure-Requests': '1'
-  };
+  // Limit headers to the minimum necessary. Some public CORS proxies reject requests
+  // that include non-standard or forbidden headers (e.g. Upgrade-Insecure-Requests).
+  // For web (browser) runtime we must avoid setting forbidden headers like 'User-Agent'
+  // or 'Upgrade-Insecure-Requests'. For native runtime, include a broader header set.
+  const isWeb = typeof window !== 'undefined' && typeof navigator !== 'undefined';
+  const headers: Record<string, string> = isWeb
+    ? {
+        'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
+        'Accept-Language': 'en-US,en;q=0.9'
+      }
+    : {
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36',
+        'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8',
+        'Accept-Language': 'en-US,en;q=0.5',
+        'Connection': 'keep-alive'
+      };
   
   for (const method of proxyMethods) {
     try {
       console.log(`Attempting to fetch via ${method.name}...`);
-      
+
       const proxyUrl = method.getUrl(url);
-      const response = await fetch(proxyUrl, {
-        method: 'GET',
-        headers
-      });
+
+      // If this is the local server proxy use apiClient to hit our server (avoids CORS)
+      let response;
+      if ((method as any).local) {
+        // apiClient.request will build absolute URL; use direct fetch to keep raw HTML response handling
+        const absolute = typeof window !== 'undefined' && window.location.hostname === 'localhost'
+          ? `http://localhost:3000${proxyUrl}`
+          : getApiUrl(proxyUrl);
+
+        response = await fetch(absolute, { method: 'GET' });
+      } else {
+        response = await fetch(proxyUrl, { method: 'GET', headers });
+      }
       
       if (response.ok) {
         const html = await response.text();

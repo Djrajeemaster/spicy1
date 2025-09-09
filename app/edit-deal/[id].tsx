@@ -47,6 +47,10 @@ export default function EditDealScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const { user, profile } = useAuth();
 
+  // Local state for moderation status (admin only)
+  const [status, setStatus] = useState<string | null>(null);
+  const [showStatusOptions, setShowStatusOptions] = useState(false);
+
   const [deal, setDeal] = useState<DealWithRelations | null>(null);
   const [initialLoading, setInitialLoading] = useState(true);
 
@@ -103,7 +107,7 @@ export default function EditDealScreen() {
         setDataLoading(false);
         Alert.alert('Error', 'Loading timeout. Please try again.', [
           { text: 'Retry', onPress: () => loadData() },
-          { text: 'Go Back', onPress: () => router.back() }
+          { text: 'Go Back', onPress: handleBackPress }
         ]);
       }
     }, 10000); // 10 second timeout
@@ -137,7 +141,7 @@ export default function EditDealScreen() {
       
       if (dealError || !dealData) {
         Alert.alert('Error', 'Deal not found', [
-          { text: 'OK', onPress: () => router.back() }
+          { text: 'OK', onPress: handleBackPress }
         ]);
         return;
       }
@@ -145,12 +149,14 @@ export default function EditDealScreen() {
       // Check if user can edit this deal (owner, admin, or super admin)
       if (!canEditDeal(dealData, user.id, profile?.role)) {
         Alert.alert('Access Denied', 'You can only edit your own deals', [
-          { text: 'OK', onPress: () => router.back() }
+          { text: 'OK', onPress: handleBackPress }
         ]);
         return;
       }
 
       setDeal(dealData);
+  // initialize moderation status
+  setStatus(dealData.status || 'pending');
 
       // Load categories and stores
       const categoriesResult = await categoryService.getCategories();
@@ -185,7 +191,7 @@ export default function EditDealScreen() {
       console.error('Error loading data:', error);
       Alert.alert('Error', 'Failed to load deal data', [
         { text: 'Retry', onPress: () => loadData() },
-        { text: 'Go Back', onPress: () => router.back() }
+        { text: 'Go Back', onPress: handleBackPress }
       ]);
     } finally {
       setInitialLoading(false);
@@ -322,7 +328,7 @@ export default function EditDealScreen() {
     try {
       setLoading(true);
 
-      const updateData = {
+  const updateData: any = {
         title: formData.title.trim(),
         description: formData.description.trim(),
         price: Number(formData.price),
@@ -340,6 +346,11 @@ export default function EditDealScreen() {
           ? Math.round((1 - Number(formData.price) / Number(formData.originalPrice)) * 100)
           : null
       };
+
+      // If user is admin/superadmin include status change if provided
+      if ((profile?.role === 'admin' || profile?.role === 'superadmin' || profile?.role === 'super_admin') && status) {
+        updateData.status = status;
+      }
 
       // Use admin update if user is admin/super_admin and not the creator
   const isAdminEdit = (profile?.role === 'admin' || profile?.role === 'superadmin' || profile?.role === 'super_admin') && deal.created_by !== user.id;
@@ -434,6 +445,20 @@ export default function EditDealScreen() {
     }
   };
 
+  const handleBackPress = () => {
+    try {
+      if (router.canGoBack && router.canGoBack()) {
+        router.back();
+      } else {
+        // fallback to deal details or home
+        if (deal && deal.id) router.replace(`/deal-details?id=${deal.id}`);
+        else router.replace('/(tabs)/');
+      }
+    } catch (err) {
+      router.replace('/(tabs)/');
+    }
+  };
+
   const removeImage = (index: number) => {
     setSelectedImages(prev => prev.filter((_, i) => i !== index));
   };
@@ -463,7 +488,7 @@ export default function EditDealScreen() {
           <Text style={styles.loadingText}>Invalid deal ID</Text>
           <TouchableOpacity 
             style={styles.backButton} 
-            onPress={() => router.back()}
+            onPress={handleBackPress}
           >
             <Text>Go Back</Text>
           </TouchableOpacity>
@@ -492,7 +517,7 @@ export default function EditDealScreen() {
     <SafeAreaView style={styles.container}>
       {/* Header */}
       <View style={styles.header}>
-        <TouchableOpacity onPress={() => router.back()} style={styles.backButton}>
+  <TouchableOpacity onPress={handleBackPress} style={styles.backButton}>
           <ArrowLeft size={24} color="#374151" />
         </TouchableOpacity>
         <Text style={styles.headerTitle}>Edit Deal</Text>
@@ -513,6 +538,46 @@ export default function EditDealScreen() {
 
       <ScrollView style={styles.content} showsVerticalScrollIndicator={false}>
         {/* Basic Information */}
+          {/* Poster Info & Status (Admin only) */}
+          <View style={styles.section}>
+            <View style={styles.sectionHeader}>
+              <Shield size={20} color="#6366f1" />
+              <Text style={styles.sectionTitle}>Poster</Text>
+            </View>
+
+            {deal?.created_by_user ? (
+              <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+                <Image
+                  source={{ uri: deal.created_by_user.avatar_url || '' }}
+                  style={styles.posterAvatar}
+                />
+                <View style={{ marginLeft: 12 }}>
+                  <Text style={{ fontWeight: '600', color: '#1e293b' }}>{String(deal.created_by_user.username || '')}</Text>
+                  <Text style={{ color: '#64748b', fontSize: 12 }}>{`${Number(deal.created_by_user.reputation || 0)} reputation`}</Text>
+                </View>
+              </View>
+            ) : (
+              <Text style={styles.helpText}>Original poster information not available.</Text>
+            )}
+
+            {/* Status selector - visible only to admin/superadmin */}
+            {(profile?.role === 'admin' || profile?.role === 'superadmin' || profile?.role === 'super_admin') && (
+              <View style={{ marginTop: 12 }}>
+                <Text style={{ marginBottom: 6, color: '#475569', fontWeight: '600' }}>Moderation Status</Text>
+                <View style={styles.statusRow}>
+                  <TouchableOpacity style={styles.statusButton} onPress={() => setStatus('pending')}>
+                    <Text style={[styles.statusText, status === 'pending' && styles.statusTextActive]}>Pending</Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity style={styles.statusButton} onPress={() => setStatus('live')}>
+                    <Text style={[styles.statusText, status === 'live' && styles.statusTextActive]}>Approved</Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity style={styles.statusButton} onPress={() => setStatus('rejected')}>
+                    <Text style={[styles.statusText, status === 'rejected' && styles.statusTextActive]}>Rejected</Text>
+                  </TouchableOpacity>
+                </View>
+              </View>
+            )}
+          </View>
         <View style={styles.section}>
           <View style={styles.sectionHeader}>
             <Shield size={20} color="#6366f1" />
@@ -1134,6 +1199,16 @@ const styles = StyleSheet.create({
     color: '#64748b',
     fontStyle: 'italic',
   },
+  posterAvatar: {
+    width: 48,
+    height: 48,
+    borderRadius: 24,
+    backgroundColor: '#e2e8f0',
+  },
+  statusRow: { flexDirection: 'row', alignItems: 'center' },
+  statusButton: { paddingVertical: 8, paddingHorizontal: 12, borderRadius: 8, marginRight: 8, backgroundColor: '#f8fafc', borderWidth: 1, borderColor: '#e2e8f0' },
+  statusText: { color: '#475569', fontWeight: '600' },
+  statusTextActive: { color: '#10b981' },
   
   bottomPadding: { height: 80 },
 });
