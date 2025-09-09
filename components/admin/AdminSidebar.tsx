@@ -50,14 +50,14 @@ export const AdminSidebar: React.FC<AdminSidebarProps> = ({ activeTab, onTabChan
             {sidebarTabs.filter(tab => tab.category === category && (!tab.superadminOnly || userRole === 'superadmin')).map(tab => (
               <TouchableOpacity
                 key={tab.id}
-                style={[styles.tabButton, activeTab === tab.id && styles.tabButtonActive]}
+                style={[styles.tabButton, activeTab === tab.id ? styles.tabButtonActive : null]}
                 onPress={() => onTabChange(tab.id)}
                 accessibilityRole="button"
                 accessibilityState={{ selected: activeTab === tab.id }}
                 accessibilityLabel={`${tab.name} tab`}
               >
                 <tab.icon size={18} color={activeTab === tab.id ? '#6366f1' : '#64748b'} />
-                <Text style={[styles.tabText, activeTab === tab.id && styles.tabTextActive]}>{tab.name}</Text>
+                <Text style={[styles.tabText, activeTab === tab.id ? styles.tabTextActive : null]}>{tab.name}</Text>
               </TouchableOpacity>
             ))}
           </View>

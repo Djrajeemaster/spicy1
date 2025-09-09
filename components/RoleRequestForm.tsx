@@ -85,13 +85,13 @@ export default function RoleRequestForm({ visible, onClose }: RoleRequestFormPro
                 key={role}
                 style={[
                   styles.roleOption,
-                  selectedRole === role && styles.roleOptionSelected
+                  selectedRole === role ? styles.roleOptionSelected : null
                 ]}
                 onPress={() => setSelectedRole(role)}
               >
                 <Text style={[
                   styles.roleOptionText,
-                  selectedRole === role && styles.roleOptionTextSelected
+                  selectedRole === role ? styles.roleOptionTextSelected : null
                 ]}>
                   {role.charAt(0).toUpperCase() + role.slice(1)}
                 </Text>
@@ -111,7 +111,7 @@ export default function RoleRequestForm({ visible, onClose }: RoleRequestFormPro
           />
 
           <TouchableOpacity
-            style={[styles.submitButton, loading && styles.submitButtonDisabled]}
+            style={[styles.submitButton, loading ? styles.submitButtonDisabled : null]}
             onPress={handleSubmit}
             disabled={loading}
           >

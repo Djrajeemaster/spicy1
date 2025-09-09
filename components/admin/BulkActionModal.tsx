@@ -260,7 +260,7 @@ export default function BulkActionModal({
               <TouchableOpacity
                 style={[
                   styles.executeBtn,
-                  !reason.trim() && styles.executeBtnDisabled
+                  !reason.trim() ? styles.executeBtnDisabled : null
                 ]}
                 onPress={handleBulkAction}
                 disabled={loading || !reason.trim()}

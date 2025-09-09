@@ -337,13 +337,13 @@ export default function UserDetailModal({ visible, onClose, userId, onUserUpdate
                   key={role}
                   style={[
                     styles.roleOption,
-                    newRole === role && styles.roleOptionSelected,
+                    newRole === role ? styles.roleOptionSelected : null,
                   ]}
                   onPress={() => setNewRole(role)}
                 >
                   <Text style={[
                     styles.roleOptionText,
-                    newRole === role && styles.roleOptionTextSelected,
+                    newRole === role ? styles.roleOptionTextSelected : null,
                   ]}>
                     {role === 'verified' ? 'Verified User' : 
                      role === 'superadmin' ? 'Super Admin' : 
@@ -516,7 +516,7 @@ export default function UserDetailModal({ visible, onClose, userId, onUserUpdate
                   <Text style={styles.username}>{userStats.user.username}</Text>
                   <Text style={styles.email}>{userStats.user.email}</Text>
                   <View style={styles.statusRow}>
-                    <Text style={[styles.status, userStats.stats?.is_banned && styles.statusBanned]}>
+                    <Text style={[styles.status, userStats.stats?.is_banned ? styles.statusBanned : null]}>
                       {userStats.stats?.is_banned ? 'BANNED' : userStats.stats?.is_suspended ? 'SUSPENDED' : 'ACTIVE'}
                     </Text>
                     <Text style={styles.role}>{userStats.user.role}</Text>

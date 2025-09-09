@@ -182,7 +182,7 @@ export default function CompetitorResearch({ onRefresh, users: adminUsers }: { o
                 key={user.id}
                 style={[
                   styles.userOption,
-                  selectedUser === user.id && styles.userOptionSelected
+                  selectedUser === user.id ? styles.userOptionSelected : null
                 ]}
                 onPress={() => {
                   setSelectedUser(user.id);
@@ -191,7 +191,7 @@ export default function CompetitorResearch({ onRefresh, users: adminUsers }: { o
               >
                 <Text style={[
                   styles.userOptionText,
-                  selectedUser === user.id && styles.userOptionTextSelected
+                  selectedUser === user.id ? styles.userOptionTextSelected : null
                 ]}>
                   {user.username} ({user.role})
                 </Text>
@@ -264,10 +264,10 @@ export default function CompetitorResearch({ onRefresh, users: adminUsers }: { o
             <View style={styles.duplicateOption}>
               <Text style={styles.duplicateOptionText}>Include duplicates in insertion:</Text>
               <TouchableOpacity
-                style={[styles.toggleButton, includeDuplicates && styles.toggleButtonActive]}
+                style={[styles.toggleButton, includeDuplicates ? styles.toggleButtonActive : null]}
                 onPress={() => setIncludeDuplicates(!includeDuplicates)}
               >
-                <Text style={[styles.toggleText, includeDuplicates && styles.toggleTextActive]}>
+                <Text style={[styles.toggleText, includeDuplicates ? styles.toggleTextActive : null]}>
                   {includeDuplicates ? 'Yes' : 'No'}
                 </Text>
               </TouchableOpacity>
@@ -280,7 +280,7 @@ export default function CompetitorResearch({ onRefresh, users: adminUsers }: { o
                 key={deal.id}
                 style={[
                   styles.dealCard,
-                  selectedDeals.has(deal.id!) && styles.dealCardSelected
+                  selectedDeals.has(deal.id!) ? styles.dealCardSelected : null
                 ]}
                 onPress={() => toggleDealSelection(deal.id!)}
               >

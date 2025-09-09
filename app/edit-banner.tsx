@@ -218,7 +218,7 @@ export default function EditBannerScreen() {
                 console.log('isActive set to false');
               }}
             >
-              <Text style={[styles.statusText, !isActive && styles.statusTextActive]}>Inactive</Text>
+              <Text style={[styles.statusText, !isActive ? styles.statusTextActive : null]}>Inactive</Text>
             </TouchableOpacity>
             <TouchableOpacity
               style={[styles.statusButton, isActive && styles.statusButtonActive]}
@@ -228,7 +228,7 @@ export default function EditBannerScreen() {
                 console.log('isActive set to true');
               }}
             >
-              <Text style={[styles.statusText, isActive && styles.statusTextActive]}>Active</Text>
+              <Text style={[styles.statusText, isActive ? styles.statusTextActive : null]}>Active</Text>
             </TouchableOpacity>
           </View>
         </View>
@@ -236,7 +236,7 @@ export default function EditBannerScreen() {
         {/* Debug button to test form state */}
         <View style={styles.inputGroup}>
           <TouchableOpacity
-            style={[styles.updateButton, loading && styles.updateButtonDisabled]}
+            style={[styles.updateButton, loading ? styles.updateButtonDisabled : null]}
             onPress={() => {
               console.log('=== DEBUG FORM STATE ===');
               console.log('Title:', title);
@@ -254,7 +254,7 @@ export default function EditBannerScreen() {
         </View>
 
         <TouchableOpacity
-          style={[styles.updateButton, loading && styles.updateButtonDisabled]}
+          style={[styles.updateButton, loading ? styles.updateButtonDisabled : null]}
           onPress={() => {
             console.log('Update button pressed');
             handleUpdateBanner();

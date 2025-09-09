@@ -301,11 +301,11 @@ export const UserManagement: React.FC<UserManagementProps> = ({ onAddUser }) => 
         {/* Bulk Mode Controls */}
         <View style={styles.bulkControls}>
           <TouchableOpacity 
-            style={[styles.bulkBtn, bulkMode && styles.bulkBtnActive]} 
+            style={[styles.bulkBtn, bulkMode ? styles.bulkBtnActive : null]} 
             onPress={toggleBulkMode}
           >
             <Users size={16} color={bulkMode ? "#fff" : "#4f46e5"} />
-            <Text style={[styles.bulkBtnTxt, bulkMode && styles.bulkBtnTxtActive]}>
+            <Text style={[styles.bulkBtnTxt, bulkMode ? styles.bulkBtnTxtActive : null]}>
               {bulkMode ? 'Exit Bulk' : 'Bulk Mode'}
             </Text>
           </TouchableOpacity>
@@ -338,10 +338,10 @@ export const UserManagement: React.FC<UserManagementProps> = ({ onAddUser }) => 
           {['', ...ROLES].map(role => (
             <TouchableOpacity 
               key={role || 'all'} 
-              style={[styles.roleChip, role === roleFilter && styles.roleChipActive]} 
+              style={[styles.roleChip, role === roleFilter ? styles.roleChipActive : null]} 
               onPress={() => setRoleFilter(role)}
             >
-              <Text style={[styles.roleChipText, role === roleFilter && styles.roleChipTextActive]}>
+              <Text style={[styles.roleChipText, role === roleFilter ? styles.roleChipTextActive : null]}>
                 {role || 'all'}
               </Text>
             </TouchableOpacity>

@@ -391,20 +391,20 @@ export const AffiliateManagement: React.FC<AffiliateManagementProps> = ({ onRefr
       <View style={styles.header}>
         <View style={styles.tabContainer}>
           <TouchableOpacity
-            style={[styles.tab, activeTab === 'list' && styles.activeTab]}
+            style={[styles.tab, activeTab === 'list' ? styles.activeTab : null]}
             onPress={() => setActiveTab('list')}
           >
             <Globe size={20} color={activeTab === 'list' ? '#6366f1' : '#64748b'} />
-            <Text style={[styles.tabText, activeTab === 'list' && styles.activeTabText]}>
+            <Text style={[styles.tabText, activeTab === 'list' ? styles.activeTabText : null]}>
               Affiliate Settings
             </Text>
           </TouchableOpacity>
           <TouchableOpacity
-            style={[styles.tab, activeTab === 'stats' && styles.activeTab]}
+            style={[styles.tab, activeTab === 'stats' ? styles.activeTab : null]}
             onPress={() => setActiveTab('stats')}
           >
             <BarChart3 size={20} color={activeTab === 'stats' ? '#6366f1' : '#64748b'} />
-            <Text style={[styles.tabText, activeTab === 'stats' && styles.activeTabText]}>
+            <Text style={[styles.tabText, activeTab === 'stats' ? styles.activeTabText : null]}>
               Statistics
             </Text>
           </TouchableOpacity>
@@ -475,13 +475,13 @@ export const AffiliateManagement: React.FC<AffiliateManagementProps> = ({ onRefr
                       key={store}
                       style={[
                         styles.storeChip,
-                        formData.store_name === store && styles.storeChipSelected
+                        formData.store_name === store ? styles.storeChipSelected : null
                       ]}
                       onPress={() => setFormData(prev => ({ ...prev, store_name: store }))}
                     >
                       <Text style={[
                         styles.storeChipText,
-                        formData.store_name === store && styles.storeChipTextSelected
+                        formData.store_name === store ? styles.storeChipTextSelected : null
                       ]}>
                         {store}
                       </Text>
@@ -505,14 +505,14 @@ export const AffiliateManagement: React.FC<AffiliateManagementProps> = ({ onRefr
                       key={country.code}
                       style={[
                         styles.countryChip,
-                        formData.country_code === country.code && styles.countryChipSelected
+                        formData.country_code === country.code ? styles.countryChipSelected : null
                       ]}
                       onPress={() => setFormData(prev => ({ ...prev, country_code: country.code }))}
                     >
                       <Text style={styles.countryFlag}>{country.flag}</Text>
                       <Text style={[
                         styles.countryChipText,
-                        formData.country_code === country.code && styles.countryChipTextSelected
+                        formData.country_code === country.code ? styles.countryChipTextSelected : null
                       ]}>
                         {country.code}
                       </Text>

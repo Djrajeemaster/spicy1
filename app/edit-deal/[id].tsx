@@ -566,13 +566,13 @@ export default function EditDealScreen() {
                 <Text style={{ marginBottom: 6, color: '#475569', fontWeight: '600' }}>Moderation Status</Text>
                 <View style={styles.statusRow}>
                   <TouchableOpacity style={styles.statusButton} onPress={() => setStatus('pending')}>
-                    <Text style={[styles.statusText, status === 'pending' && styles.statusTextActive]}>Pending</Text>
+                    <Text style={[styles.statusText, status === 'pending' ? styles.statusTextActive : null]}>Pending</Text>
                   </TouchableOpacity>
                   <TouchableOpacity style={styles.statusButton} onPress={() => setStatus('live')}>
-                    <Text style={[styles.statusText, status === 'live' && styles.statusTextActive]}>Approved</Text>
+                    <Text style={[styles.statusText, status === 'live' ? styles.statusTextActive : null]}>Approved</Text>
                   </TouchableOpacity>
                   <TouchableOpacity style={styles.statusButton} onPress={() => setStatus('rejected')}>
-                    <Text style={[styles.statusText, status === 'rejected' && styles.statusTextActive]}>Rejected</Text>
+                    <Text style={[styles.statusText, status === 'rejected' ? styles.statusTextActive : null]}>Rejected</Text>
                   </TouchableOpacity>
                 </View>
               </View>
@@ -734,8 +734,8 @@ export default function EditDealScreen() {
                     >
                       <Text style={
                         formData.selectedCategoryId === category.id 
-                          ? styles.categoryEmojiInactive 
-                          : styles.categoryEmojiInactive
+                          ? styles.categoryButtonTextActive 
+                          : styles.categoryButtonText
                       }>
                         {category.emoji}
                       </Text>
@@ -913,7 +913,7 @@ export default function EditDealScreen() {
                     />
                     <View style={[
                       styles.extractedImageOverlay,
-                      selectedImages.includes(imageUrl) && styles.extractedImageOverlaySelected
+                      selectedImages.includes(imageUrl) ? styles.extractedImageOverlaySelected : null
                     ]}>
                       {selectedImages.includes(imageUrl) ? (
                         <CheckSquare size={24} color="#22c55e" />

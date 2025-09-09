@@ -76,7 +76,7 @@ export const DealDuplicateChecker: React.FC<DealDuplicateCheckerProps> = ({
       <View style={styles.header}>
         <Text style={styles.title}>Duplicate Check</Text>
         <TouchableOpacity 
-          style={[styles.checkButton, isChecking && styles.checkingButton]}
+          style={[styles.checkButton, isChecking ? styles.checkingButton : null]}
           onPress={checkForDuplicates}
           disabled={isChecking}
         >

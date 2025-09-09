@@ -42,14 +42,14 @@ export const AdminTabNavigation: React.FC<AdminTabNavigationProps> = ({
             return (
               <TouchableOpacity
                 key={tab.id}
-                style={[styles.tab, activeTab === tab.id && styles.tabActive]}
+                style={[styles.tab, activeTab === tab.id ? styles.tabActive : null]}
                 onPress={() => onTabChange(tab.id)}
                 accessibilityRole="tab"
                 accessibilityState={{ selected: activeTab === tab.id }}
                 accessibilityLabel={`${tab.name} tab`}
               >
                 <tab.icon size={18} color={activeTab === tab.id ? '#FFFFFF' : '#64748b'} />
-                <Text style={[styles.tabText, activeTab === tab.id && styles.tabTextActive]}>
+                <Text style={[styles.tabText, activeTab === tab.id ? styles.tabTextActive : null]}>
                   {tab.name}
                 </Text>
               </TouchableOpacity>

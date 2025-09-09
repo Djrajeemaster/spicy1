@@ -313,8 +313,8 @@ export function Header({
         end={{ x: 1, y: 1 }}
         style={styles.gradient}
       >
-        <View style={[styles.mainRow, isDesktopWeb && showFullSearch && styles.mainRowDesktop]}>
-          <View style={[styles.leftSection, isDesktopWeb && styles.leftSectionDesktop]}>
+        <View style={[styles.mainRow, (isDesktopWeb && showFullSearch) ? styles.mainRowDesktop : null]}>
+          <View style={[styles.leftSection, isDesktopWeb ? styles.leftSectionDesktop : null]}>
             <TouchableOpacity onPress={() => router.push('/')} style={styles.logoContainer}>
               <Image
                 source={{ uri: assetUrl(siteLogoFilenameRaw) + (logoCacheBuster ? `?cb=${logoCacheBuster}` : '') }}
@@ -362,7 +362,7 @@ export function Header({
             </TouchableOpacity>
           </View>
 
-          <View style={[styles.rightSection, isDesktopWeb && styles.rightSectionDesktop]}>
+          <View style={[styles.rightSection, isDesktopWeb ? styles.rightSectionDesktop : null]}>
             {/* Desktop Web Search Bar with animation */}
             {isDesktopWeb && showFullSearch && (
               <Animated.View style={[
@@ -445,7 +445,7 @@ export function Header({
 
             {!isGuest && isDesktopWeb && (
               <TouchableOpacity
-                style={[styles.postButton, !privileges.canPost && styles.disabledButton]}
+                style={[styles.postButton, !privileges.canPost ? styles.disabledButton : null]}
                 onPress={handlePostPress}
                 disabled={!privileges.canPost}
               >
@@ -465,7 +465,7 @@ export function Header({
               <TouchableOpacity 
                 style={[
                   styles.adminButton, 
-                  isDesktopWeb && styles.adminButtonDesktop
+                  isDesktopWeb ? styles.adminButtonDesktop : null
                 ]} 
                 onPress={handleAdminAccess}
               >
@@ -473,12 +473,12 @@ export function Header({
                   colors={['#e11d48', '#be185d']} 
                   style={[
                     styles.adminButtonGradient,
-                    isDesktopWeb && styles.adminButtonGradientDesktop
+                    isDesktopWeb ? styles.adminButtonGradientDesktop : null
                   ]}
                 >
                   <Text style={[
                     styles.adminButtonText,
-                    isDesktopWeb && styles.adminButtonTextDesktop
+                    isDesktopWeb ? styles.adminButtonTextDesktop : null
                   ]}>ADMIN</Text>
                 </LinearGradient>
               </TouchableOpacity>
@@ -489,13 +489,13 @@ export function Header({
             <TouchableOpacity 
               style={[
                 styles.alertButton,
-                isDesktopWeb && styles.alertButtonDesktop
+                isDesktopWeb ? styles.alertButtonDesktop : null
               ]} 
               onPress={handleAlertsPress}
             >
               <View style={[
                 styles.alertIconContainer,
-                isDesktopWeb && styles.alertIconContainerDesktop
+                isDesktopWeb ? styles.alertIconContainerDesktop : null
               ]}>
                 <Bell size={isDesktopWeb ? 24 : 22} color="#FFFFFF" />
                 {alertCount > 0 && (
@@ -517,7 +517,7 @@ export function Header({
               <TouchableOpacity
                 style={[
                   styles.userButton,
-                  isDesktopWeb && styles.userButtonDesktop
+                  isDesktopWeb ? styles.userButtonDesktop : null
                 ]}
                 onPress={() => {
                   setShowUserMenu(!showUserMenu);
@@ -527,12 +527,12 @@ export function Header({
                   colors={['#8b5cf6', '#7c3aed']} 
                   style={[
                     styles.avatar,
-                    isDesktopWeb && styles.avatarDesktop
+                    isDesktopWeb ? styles.avatarDesktop : null
                   ]}
                 >
                   <Text style={[
                     styles.avatarText,
-                    isDesktopWeb && styles.avatarTextDesktop
+                    isDesktopWeb ? styles.avatarTextDesktop : null
                   ]}>{profile?.username?.[0]?.toUpperCase() || '?'}</Text>
                 </LinearGradient>
                 <ChevronDown size={isDesktopWeb ? 16 : 14} color="#FFFFFF" />

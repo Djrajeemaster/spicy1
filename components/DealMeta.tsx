@@ -59,7 +59,7 @@ export const DealMeta: React.FC<Props> = ({
 
         {!hideFollow && (
           <TouchableOpacity onPress={handleFollow} activeOpacity={0.85} style={styles.followBtn}>
-            <Text style={[styles.followTxt, isFollowing && styles.followTxtOn]}>
+            <Text style={[styles.followTxt, isFollowing ? styles.followTxtOn : null]}>
               {isFollowing ? 'Following' : 'Follow'}
             </Text>
           </TouchableOpacity>
