@@ -63,10 +63,15 @@ const securityHeaders = helmet({
     directives: (() => {
       const directives = {
         defaultSrc: ["'self'"],
+        // allow inline styles, self, and Google Fonts stylesheets
         styleSrc: ["'self'", "'unsafe-inline'", "https://fonts.googleapis.com"],
+        // specifically allow style elements and link[rel=stylesheet] from Google Fonts and https
+        styleSrcElem: ["'self'", "https://fonts.googleapis.com", 'https:'],
         scriptSrc: ["'self'", "'unsafe-inline'"],
         imgSrc: ["'self'", "data:", "https:"],
-        fontSrc: ["'self'", "https://fonts.gstatic.com"],
+        // allow fonts from Google Fonts and any https provider
+        fontSrc: ["'self'", "https://fonts.gstatic.com", 'https:'],
+        fontSrcElem: ["'self'", "https://fonts.gstatic.com", 'https:']
       };
 
       // connect-src controls where fetch()/XHR/websocket can connect to.

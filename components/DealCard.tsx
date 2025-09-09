@@ -102,7 +102,6 @@ export function DealCard({ deal, onVote, isGuest, userId, userRole }: DealCardPr
             </TouchableOpacity>
             {canEdit && !isGuest && (
               <TouchableOpacity style={styles.editButton} onPress={handleEdit}>
-                <Edit3 size={16} color="#6366f1" />
                 <Text style={styles.editText}>
                   Edit
                 </Text>

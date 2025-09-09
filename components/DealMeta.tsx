@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, Image } from 'react-native';
 import { Star } from 'lucide-react-native';
 import { router } from 'expo-router';
 
@@ -45,9 +45,13 @@ export const DealMeta: React.FC<Props> = ({
           onPress={() => router.push(`/u/${author.id}`)}
           activeOpacity={0.8}
         >
-          <View style={styles.avatar}>
-            <Text style={styles.avatarTxt}>{(name[0] || 'U').toUpperCase()}</Text>
-          </View>
+          {author && (author as any).avatar_url ? (
+            <Image source={{ uri: (author as any).avatar_url }} style={styles.avatarImage} />
+          ) : (
+            <View style={styles.avatar}>
+              <Text style={styles.avatarTxt}>{(name[0] || 'U').toUpperCase()}</Text>
+            </View>
+          )}
           <Text numberOfLines={1} style={styles.username}>
             {name}
           </Text>
@@ -107,6 +111,14 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     borderWidth: 1,
     borderColor: '#e5e7eb',
+  },
+  avatarImage: {
+    width: 20,
+    height: 20,
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: '#e5e7eb',
+    backgroundColor: '#eef2ff',
   },
   avatarTxt: {
     fontSize: 10,

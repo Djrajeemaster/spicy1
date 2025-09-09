@@ -313,7 +313,6 @@ export function EnhancedDealCardV2({ deal, isGuest, onVote, userRole, userId }: 
               handleEdit();
             }}
           >
-            <Edit3 size={16} color="#6366f1" />
             <Text style={styles.editButtonText}>Edit</Text>
           </TouchableOpacity>
         )}

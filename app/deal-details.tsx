@@ -17,6 +17,7 @@ import GuestPromptModal from '@/components/GuestPromptModal';
 import CommentThread from '@/components/CommentThread';
 import DealDetailsSkeleton from '@/components/DealDetailsSkeleton';
 import { DealCard } from '@/components/DealCard';
+import { canEditAnyDeal } from '@/utils/adminUtils';
 import { commentService, CommentNode } from '@/services/commentService';
 import { getShareUrl } from '@/utils/config';
 
@@ -183,6 +184,9 @@ export default function DealDetailsScreen() {
 
   // Check if user owns this deal
   const isOwnDeal = user && deal && deal.created_by === user.id;
+  // Determine if current user can edit (owner OR admin/superadmin)
+  const userRoleForCheck = (user && ((user as any).user_metadata?.role || (user as any).role)) || undefined;
+  const canEdit = Boolean(user) && (isOwnDeal || canEditAnyDeal(userRoleForCheck));
 
   // Enhanced status badges
   const getStatusBadges = () => {
@@ -344,10 +348,9 @@ export default function DealDetailsScreen() {
           <Text style={[styles.quickActionText, isSaved && { color: '#f59e0b' }]}>Save</Text>
         </TouchableOpacity>
         
-        {isOwnDeal && (
+        {canEdit && (
           <TouchableOpacity style={styles.quickActionButton} onPress={handleEdit}>
-            <Edit3 size={16} color="#3b82f6" />
-            <Text style={[styles.quickActionText, { color: '#3b82f6' }]}>Edit</Text>
+            <Text style={[styles.quickActionText, { color: '#3b82f6', fontWeight: '700' }]}>Edit Deal</Text>
           </TouchableOpacity>
         )}
         

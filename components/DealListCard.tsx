@@ -73,6 +73,10 @@ export default function DealListCard({ deal, isGuest, onVote, userRole, userId }
     router.push(`/edit-deal/${deal.id}`);
   };
 
+  const handleCardPress = () => {
+    router.push(`/deal-details?id=${deal.id}`);
+  };
+
   const isOwnDeal = deal.created_by === userId;
   const canEdit = !isGuest && (isOwnDeal || canEditAnyDeal(userRole));
 
@@ -82,7 +86,7 @@ export default function DealListCard({ deal, isGuest, onVote, userRole, userId }
         colors={['#ffffff', '#fafbfc']}
         style={styles.gradient}
       >
-        <TouchableOpacity style={styles.content} activeOpacity={0.98}>
+  <TouchableOpacity style={styles.content} activeOpacity={0.98} onPress={handleCardPress}>
           {/* Image Section */}
           <View style={styles.imageSection}>
             {deal.images && deal.images.length > 0 ? (
@@ -179,7 +183,7 @@ export default function DealListCard({ deal, isGuest, onVote, userRole, userId }
               <View style={styles.voteControls}>
                 <TouchableOpacity
                   style={[styles.voteButton, userVote === 'up' && styles.voteButtonUp]}
-                  onPress={() => handleVote('up')}
+                  onPress={(e: any) => { e.stopPropagation(); handleVote('up'); }}
                   disabled={isGuest}
                 >
                   <ChevronUp 
@@ -187,14 +191,13 @@ export default function DealListCard({ deal, isGuest, onVote, userRole, userId }
                     color={userVote === 'up' ? '#ffffff' : '#64748b'} 
                   />
                 </TouchableOpacity>
-                
                 <Text style={[styles.voteCount, netVotes > 0 && styles.positiveVotes]}>
                   {netVotes > 0 ? `+${netVotes}` : netVotes}
                 </Text>
-                
+
                 <TouchableOpacity
                   style={[styles.voteButton, userVote === 'down' && styles.voteButtonDown]}
-                  onPress={() => handleVote('down')}
+                  onPress={(e: any) => { e.stopPropagation(); handleVote('down'); }}
                   disabled={isGuest}
                 >
                   <ChevronDown 
@@ -207,17 +210,17 @@ export default function DealListCard({ deal, isGuest, onVote, userRole, userId }
               {/* Action buttons */}
               <View style={styles.actionButtons}>
                 {canEdit && (
-                  <TouchableOpacity style={styles.actionButton} onPress={handleEdit}>
-                    <Edit3 size={18} color="#6366f1" />
+                  <TouchableOpacity style={styles.actionButton} onPress={(e: any) => { e.stopPropagation(); handleEdit(); }}>
+                    <Text style={{ fontSize: 12, color: '#6366f1', fontWeight: '700' }}>Edit</Text>
                   </TouchableOpacity>
                 )}
-                <TouchableOpacity style={styles.actionButton}>
+                <TouchableOpacity style={styles.actionButton} onPress={(e: any) => e.stopPropagation()}>
                   <Heart size={18} color="#64748b" />
                 </TouchableOpacity>
-                <TouchableOpacity style={styles.actionButton}>
+                <TouchableOpacity style={styles.actionButton} onPress={(e: any) => e.stopPropagation()}>
                   <Bookmark size={18} color="#64748b" />
                 </TouchableOpacity>
-                <TouchableOpacity style={styles.actionButton}>
+                <TouchableOpacity style={styles.actionButton} onPress={(e: any) => e.stopPropagation()}>
                   <Share2 size={18} color="#64748b" />
                 </TouchableOpacity>
               </View>
