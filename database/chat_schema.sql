@@ -145,3 +145,23 @@ BEGIN
     RETURN conversation_id;
 END;
 $$ LANGUAGE plpgsql;
+
+-- Chat bans table for moderation
+CREATE TABLE IF NOT EXISTS chat_bans (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    user_id UUID REFERENCES users(id) ON DELETE CASCADE,
+    channel_id UUID REFERENCES conversations(id) ON DELETE CASCADE, -- NULL for global bans
+    banned_by UUID REFERENCES users(id) ON DELETE SET NULL,
+    reason TEXT NOT NULL,
+    created_at TIMESTAMP DEFAULT NOW(),
+    expires_at TIMESTAMP, -- NULL for permanent bans
+    unbanned_at TIMESTAMP,
+    unbanned_by UUID REFERENCES users(id) ON DELETE SET NULL,
+    is_active BOOLEAN DEFAULT true
+);
+
+-- Indexes for chat bans
+CREATE INDEX IF NOT EXISTS idx_chat_bans_user_id ON chat_bans(user_id);
+CREATE INDEX IF NOT EXISTS idx_chat_bans_channel_id ON chat_bans(channel_id);
+CREATE INDEX IF NOT EXISTS idx_chat_bans_banned_by ON chat_bans(banned_by);
+CREATE INDEX IF NOT EXISTS idx_chat_bans_is_active ON chat_bans(is_active);

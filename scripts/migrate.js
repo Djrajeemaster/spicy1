@@ -36,10 +36,27 @@ async function runMigrations() {
       CREATE INDEX IF NOT EXISTS idx_deals_created_at ON deals(created_at);
     `);
     
-    // Clean up expired refresh tokens
-    await pool.query('DELETE FROM refresh_tokens WHERE expires_at < NOW()');
+    // Create chat_bans table for moderation
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS chat_bans (
+        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        user_id UUID REFERENCES users(id) ON DELETE CASCADE,
+        channel_id UUID REFERENCES chat_channels(id) ON DELETE CASCADE,
+        banned_by UUID REFERENCES users(id) ON DELETE SET NULL,
+        reason TEXT,
+        created_at TIMESTAMP DEFAULT NOW(),
+        expires_at TIMESTAMP,
+        is_active BOOLEAN DEFAULT true
+      )
+    `);
     
-    console.log('Migrations completed successfully');
+    // Create indexes for chat_bans
+    await pool.query(`
+      CREATE INDEX IF NOT EXISTS idx_chat_bans_user_id ON chat_bans(user_id);
+      CREATE INDEX IF NOT EXISTS idx_chat_bans_channel_id ON chat_bans(channel_id);
+      CREATE INDEX IF NOT EXISTS idx_chat_bans_banned_by ON chat_bans(banned_by);
+      CREATE INDEX IF NOT EXISTS idx_chat_bans_is_active ON chat_bans(is_active);
+    `);
     
   } catch (err) {
     console.error('Migration failed:', err);

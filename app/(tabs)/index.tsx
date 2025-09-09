@@ -33,7 +33,6 @@ import { locationService } from '@/services/locationService';
 import { bannerService, type Banner } from '@/services/bannerService';
 import { router } from 'expo-router';
 import { Database } from '@/types/database';
-import ChatButton from '@/components/chat/ChatButton';
 
 
 
@@ -96,28 +95,6 @@ export default function HomeScreen() {
   const [selectedStores, setSelectedStores] = useState<string[]>(['all']);
   const { width } = useWindowDimensions();
   const isDesktop = Platform.OS === 'web' && width >= 768;
-
-  // Chat feature toggle state
-  const [isChatEnabled, setIsChatEnabled] = useState(true);
-
-  // Check chat feature setting on component mount
-  useEffect(() => {
-    const checkChatSetting = async () => {
-      try {
-        const { settingsService } = await import('@/services/settingsService');
-        const { data, error } = await settingsService.getSetting('enable_chat_feature');
-        if (!error && data) {
-          setIsChatEnabled(data.value ?? true);
-        }
-      } catch (error) {
-        console.error('Error checking chat setting:', error);
-        // Default to true if we can't fetch the setting
-        setIsChatEnabled(true);
-      }
-    };
-    
-    checkChatSetting();
-  }, []);
 
   // Applied filters (these are the ones actually used for filtering)
   const [appliedFilters, setAppliedFilters] = useState({
@@ -259,12 +236,10 @@ export default function HomeScreen() {
   }, []);
 
   useEffect(() => {
-    console.log('🚀 Index page mounted, starting filter data load...');
     loadFilterData();
     
     // Reduced timeout to 5 seconds instead of 10
     const timeout = setTimeout(() => {
-      console.warn('⚠️ Filter loading timeout (5s) - forcefully clearing loading state');
       setDataLoading(false);
     }, 5000);
     
@@ -1597,11 +1572,6 @@ export default function HomeScreen() {
             </ScrollView>
           </View>
         </View>
-      )}
-
-      {/* Floating Chat Button - only show if chat feature is enabled */}
-      {isChatEnabled && (
-        <ChatButton />
       )}
 
     </SafeAreaView>

@@ -321,3 +321,21 @@ CREATE TRIGGER trigger_add_user_to_global_chat
     AFTER INSERT ON users
     FOR EACH ROW
     EXECUTE FUNCTION add_user_to_global_chat();
+
+-- Chat ban system for moderation
+CREATE TABLE IF NOT EXISTS chat_bans (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    user_id UUID REFERENCES users(id) ON DELETE CASCADE,
+    channel_id UUID REFERENCES chat_channels(id) ON DELETE CASCADE, -- NULL for global ban
+    banned_by UUID REFERENCES users(id) ON DELETE SET NULL,
+    reason TEXT,
+    created_at TIMESTAMP DEFAULT NOW(),
+    expires_at TIMESTAMP, -- NULL for permanent ban
+    is_active BOOLEAN DEFAULT true
+);
+
+-- Indexes for chat_bans
+CREATE INDEX IF NOT EXISTS idx_chat_bans_user_id ON chat_bans(user_id);
+CREATE INDEX IF NOT EXISTS idx_chat_bans_channel_id ON chat_bans(channel_id);
+CREATE INDEX IF NOT EXISTS idx_chat_bans_banned_by ON chat_bans(banned_by);
+CREATE INDEX IF NOT EXISTS idx_chat_bans_is_active ON chat_bans(is_active);

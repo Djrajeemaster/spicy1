@@ -4,7 +4,6 @@ import 'react-native-url-polyfill/auto';
 import { AuthProvider } from '@/contexts/AuthProvider';
 import { CurrencyProvider } from '@/contexts/CurrencyProvider';
 import { ThemeProvider } from '@/contexts/ThemeProvider';
-import { ChatProvider } from '@/contexts/ChatProvider';
 import { usePushNotifications } from '@/hooks/usePushNotifications';
 import { useFrameworkReady } from '@/hooks/useFrameworkReady';
 import * as Notifications from 'expo-notifications';
@@ -58,18 +57,16 @@ export default function RootLayout() {
   return (
     <ThemeProvider>
       <AuthProvider>
-        <ChatProvider>
-          <CurrencyProvider>
-            <PushInit />
-            <FrameworkInit />
-            <Stack screenOptions={{ headerShown: false }}>
-              <Stack.Screen name="(tabs)" />
-              <Stack.Screen name="users/[username]" />
-              <Stack.Screen name="deal-details" />
-            </Stack>
-            <StatusBar style="auto" />
-          </CurrencyProvider>
-        </ChatProvider>
+        <CurrencyProvider>
+          <PushInit />
+          <FrameworkInit />
+          <Stack screenOptions={{ headerShown: false }}>
+            <Stack.Screen name="(tabs)" />
+            <Stack.Screen name="users/[username]" />
+            <Stack.Screen name="deal-details" />
+          </Stack>
+          <StatusBar style="auto" />
+        </CurrencyProvider>
       </AuthProvider>
     </ThemeProvider>
   );
