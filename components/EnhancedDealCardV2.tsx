@@ -207,19 +207,19 @@ export function EnhancedDealCardV2({ deal, isGuest, onVote, userRole, userId }: 
             <View style={styles.mobileStats}>
               <Heart size={12} color="#ef4444" />
               <Text style={styles.mobileStatText}>{deal.votes_up || 0}</Text>
-              {deal.city && (
+              {typeof deal.city === 'string' && deal.city.length > 0 ? (
                 <>
                   <MapPin size={12} color="#64748b" style={{ marginLeft: 8 }} />
                   <Text style={styles.mobileLocationText}>{deal.city}</Text>
                 </>
-              )}
+              ) : null}
             </View>
             <Text style={styles.mobileTimeAgo}>{formatTimeAgo(deal.created_at)}</Text>
           </View>
 
           {getStatusPill() && (
             <View style={styles.mobileStatusContainer}>
-              {getStatusPill()}
+              {React.isValidElement(getStatusPill()) ? getStatusPill() : <Text>{getStatusPill()}</Text>}
             </View>
           )}
         </View>
@@ -271,12 +271,12 @@ export function EnhancedDealCardV2({ deal, isGuest, onVote, userRole, userId }: 
           <View style={styles.locationContainer}>
             <MapPin size={10} color="#6366f1" />
             <Text style={[styles.location, { color: colors.textSecondary }]}>
-              {deal.city || 'Online'}
+              {typeof deal.city === 'string' && deal.city.length > 0 ? deal.city : 'Online'}
             </Text>
           </View>
           <View style={styles.timeContainer}>
             <Text style={[styles.timeAgo, { color: colors.textSecondary }]}>
-              {formatTimeAgo(deal.created_at)}
+              {typeof formatTimeAgo(deal.created_at) === 'string' ? formatTimeAgo(deal.created_at) : ''}
             </Text>
           </View>
         </View>
@@ -286,11 +286,11 @@ export function EnhancedDealCardV2({ deal, isGuest, onVote, userRole, userId }: 
           <View style={styles.leftStats}>
             <View style={styles.stat}>
               <Eye size={10} color="#6366f1" />
-              <Text style={styles.statText}>{deal.view_count || 0}</Text>
+              <Text style={styles.statText}>{typeof deal.view_count === 'number' ? deal.view_count : 0}</Text>
             </View>
             <View style={styles.stat}>
               <Heart size={10} color="#ef4444" />
-              <Text style={styles.statText}>{deal.votes_up || 0}</Text>
+              <Text style={styles.statText}>{typeof deal.votes_up === 'number' ? deal.votes_up : 0}</Text>
             </View>
           </View>
           
