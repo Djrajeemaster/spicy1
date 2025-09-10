@@ -195,9 +195,9 @@ export default function PostDealScreen() {
     const loadFormData = async () => {
       setDataLoading(true);
       try {
-        // Set a timeout for the entire loading operation
+        // Set a timeout for the entire loading operation (increased to 60s)
         const timeoutPromise = new Promise((_, reject) => 
-          setTimeout(() => reject(new Error('Loading timeout')), 15000)
+          setTimeout(() => reject(new Error('Loading timeout')), 60000)
         );
 
         const loadPromise = Promise.all([
@@ -391,9 +391,9 @@ export default function PostDealScreen() {
     try {
       console.log('Calling urlService.validateUrl for:', url);
       
-      // Add timeout for URL validation to prevent hanging
+      // Add timeout for URL validation to prevent hanging (increased to 60s)
       const validationTimeoutPromise = new Promise((_, reject) => 
-        setTimeout(() => reject(new Error('URL validation timeout')), 15000)
+        setTimeout(() => reject(new Error('URL validation timeout')), 60000)
       );
 
       const validationPromise = validateUrl(url);
@@ -481,10 +481,7 @@ export default function PostDealScreen() {
     if (urlMetadata.description && (!formData.description.trim() || 
         await confirm('Auto-fill description?', `Replace current description with extracted content?`))) {
       let description = urlMetadata.description;
-      // If title was shortened, include full title in description
-      if (urlMetadata.title && urlMetadata.title.length > 60) {
-        description = `Full title: ${urlMetadata.title}\n\n${description}`;
-      }
+      // Keep full title available separately (no need to prepend to description)
       updatedFormData.description = description;
       fieldsUpdated.push('description');
     }
@@ -614,9 +611,9 @@ export default function PostDealScreen() {
 
       console.log('Creating deal with data:', dealData);
       
-      // Set up timeout for deal creation
+      // Set up timeout for deal creation (increased to 60s)
       const createDealTimeout = new Promise((_, reject) => 
-        setTimeout(() => reject(new Error('Deal creation timeout')), 30000)
+        setTimeout(() => reject(new Error('Deal creation timeout')), 60000)
       );
 
       const createDealPromise = dealService.createDeal(dealData);
@@ -783,12 +780,15 @@ export default function PostDealScreen() {
         
         console.log(`Uploading ${localImages.length} local images and ${externalImages.length} external images`);
         
-        // Set up upload timeout
+        // Set up upload timeout (increased to 60s)
         const uploadTimeoutPromise = new Promise((_, reject) => 
-          setTimeout(() => reject(new Error('Image upload timeout')), 45000)
+          setTimeout(() => reject(new Error('Image upload timeout')), 60000)
         );
 
-        const uploadPromise = storageService.uploadMultipleImages(selectedImages);
+  // Only upload local images (file:// or relative URIs). External http(s) URLs are passed through.
+  const localImagesToUpload = localImages;
+  const externalImageUrls = externalImages; // keep as-is
+  const uploadPromise = localImagesToUpload.length > 0 ? storageService.uploadMultipleImages(localImagesToUpload) : Promise.resolve({ data: [], error: null });
         
         try {
           const { data: uploadResults, error: uploadError } = await Promise.race([
@@ -824,9 +824,11 @@ export default function PostDealScreen() {
             uploadedImageUrls = (uploadResults || []).map((r: any) => r.url).filter(Boolean);
             
             // Provide feedback if some images failed
+            // merged external URLs as-is
+            uploadedImageUrls = [...uploadedImageUrls, ...externalImageUrls];
             if (uploadedImageUrls.length < selectedImages.length) {
               const failed = selectedImages.length - uploadedImageUrls.length;
-              notify('Partial Upload', `${uploadedImageUrls.length} of ${selectedImages.length} images uploaded successfully. ${failed} failed.`);
+              notify('Partial Upload', `${uploadedImageUrls.length} of ${selectedImages.length} images processed successfully. ${failed} failed.`);
             } else if (uploadedImageUrls.length > 0) {
               console.log(`Successfully uploaded ${uploadedImageUrls.length} images`);
             }
@@ -845,10 +847,11 @@ export default function PostDealScreen() {
             setLoading(false);
             return;
           }
-          uploadedImageUrls = [];
+          // Include external images even if upload timed out
+          uploadedImageUrls = [...externalImageUrls];
         }
         
-        setUploadingImages(false);
+  setUploadingImages(false);
       }
 
       await createDealRecord(uploadedImageUrls);
@@ -927,10 +930,7 @@ export default function PostDealScreen() {
     
     let description = templates[Math.floor(Math.random() * templates.length)];
     
-    // If we have a full title that's different from the short title, include it
-    if (fullTitle && fullTitle !== formData.title && fullTitle.length > formData.title.length) {
-      description = `Full title: ${fullTitle}\n\n${description}`;
-    }
+  // Keep fullTitle available separately; do not prepend it into the generated description
     
     return description;
   };
@@ -1391,6 +1391,15 @@ export default function PostDealScreen() {
                       : 'Link to the deal on the store&apos;s website - we&apos;ll auto-check it!'
                 }
               </Text>
+              {urlValidating && (
+                <View style={styles.fetchingRow}>
+                  <ActivityIndicator size={16} color="#6366f1" />
+                  <Text style={styles.fetchingText}>Fetching metadata...</Text>
+                  {urlMetadata?.images && urlMetadata.images.length > 0 && (
+                    <Image source={{ uri: urlMetadata.images[0] }} style={styles.fetchingThumb} />
+                  )}
+                </View>
+              )}
               {urlValid === true && (
                 <Text style={styles.helpTextSuccess}>
                   ✨ We'll automatically extract images and details when you enter the URL
@@ -1886,6 +1895,9 @@ const styles = StyleSheet.create({
   helpText: { fontSize: 12, color: '#64748b', marginTop: 4, fontStyle: 'italic' },
   helpTextContainer: { marginTop: 4 },
   helpTextSuccess: { fontSize: 12, color: '#10b981', marginTop: 2, fontWeight: '600' },
+  fetchingRow: { flexDirection: 'row', alignItems: 'center', marginTop: 8 },
+  fetchingText: { marginLeft: 8, color: '#f59e0b', fontSize: 13, fontWeight: '600' },
+  fetchingThumb: { width: 44, height: 44, borderRadius: 8, marginLeft: 8, backgroundColor: '#f1f5f9' },
   imageLimitText: { fontSize: 11, color: '#94a3b8', textAlign: 'center', marginTop: 4 },
   addImageUrlButton: {
     backgroundColor: '#ffffff',

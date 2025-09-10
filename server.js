@@ -350,8 +350,8 @@ app.get('/api/fetch-proxy', async (req, res) => {
     if (!/^https?:\/\//i.test(target)) return res.status(400).json({ error: 'Invalid URL' });
 
     // Simple server-side fetch with timeout
-    const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), 10000);
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), 60000);
 
     const fetch = require('node-fetch');
     const response = await fetch(target, { method: 'GET', signal: controller.signal, headers: { 'User-Agent': 'SaversDreamBot/1.0 (+https://example.com)' } });
@@ -369,6 +369,229 @@ app.get('/api/fetch-proxy', async (req, res) => {
     return res.status(500).json({ error: 'Failed to fetch target URL' });
   }
 });
+
+// Headless browser fetch using Playwright (returns rendered HTML)
+app.get('/api/headless-fetch', async (req, res) => {
+  try {
+    const target = req.query.url;
+    if (!target || typeof target !== 'string') return res.status(400).json({ error: 'Missing url query parameter' });
+    if (!/^https?:\/\//i.test(target)) return res.status(400).json({ error: 'Invalid URL' });
+
+    // Lazy-require Playwright so server doesn't crash if not installed
+    let playwright;
+    try {
+      playwright = require('playwright');
+    } catch (e) {
+      console.error('Playwright not installed:', e?.message || e);
+      return res.status(500).json({ error: 'Playwright not installed on server. Install with `npm install playwright`' });
+    }
+
+    const { chromium } = playwright;
+
+    // Launch browser in headless mode with common args for containerized environments
+    const browser = await chromium.launch({ args: ['--no-sandbox', '--disable-setuid-sandbox'], headless: true });
+    const page = await browser.newPage();
+
+    // Set a conservative timeout and user agent
+    await page.setUserAgent('Mozilla/5.0 (Windows NT 10.0; Win64; x64) SaversDreamBot/1.0');
+    try {
+      await page.goto(target, { waitUntil: 'networkidle', timeout: 60000 });
+    } catch (err) {
+      // If networkidle fails, try domcontentloaded as fallback
+      try {
+        await page.goto(target, { waitUntil: 'domcontentloaded', timeout: 60000 });
+      } catch (err2) {
+        console.error('Headless fetch navigation failed:', err2 && err2.message ? err2.message : err2);
+        await browser.close();
+        return res.status(504).json({ error: 'Timeout or navigation failure while loading target' });
+      }
+    }
+
+    // Give a short pause to let client-side scripts render important elements
+    await page.waitForTimeout(500);
+
+    // Grab the full HTML after rendering
+    const content = await page.content();
+
+    // Close browser
+    await browser.close();
+
+    // Return as HTML so existing extraction logic can parse it
+    res.set('Content-Type', 'text/html; charset=utf-8');
+    return res.status(200).send(content);
+  } catch (err) {
+    console.error('Headless fetch error:', err && err.message ? err.message : err);
+    return res.status(500).json({ error: 'Headless fetch failed' });
+  }
+});
+
+// Resolve short/share links by following redirects and returning the final URL
+app.get('/api/resolve-url', async (req, res) => {
+  const target = req.query.url;
+  if (!target || typeof target !== 'string') return res.status(400).json({ error: 'Missing url parameter' });
+  try {
+    const axios = require('axios');
+    // Use GET to allow servers that only redirect on GET; follow up to 10 redirects
+    const response = await axios.get(target, {
+      maxRedirects: 10,
+      timeout: 60000,
+      validateStatus: () => true,
+      headers: {
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
+      }
+    });
+
+    // Try common locations for the final URL in axios response
+    const finalUrl = (response && response.request && response.request.res && response.request.res.responseUrl) || response.config && response.config.url || target;
+
+    return res.json({ finalUrl, status: response.status, ok: response.status >= 200 && response.status < 400 });
+  } catch (err) {
+    console.error('Resolve URL error:', err && err.message ? err.message : err);
+    return res.status(500).json({ error: 'Failed to resolve URL' });
+  }
+});
+
+// Extract URL metadata with mobile-first headless rendering, then desktop fallback
+app.get('/api/extract-url', async (req, res) => {
+  const target = req.query.url;
+  if (!target || typeof target !== 'string') return res.status(400).json({ error: 'Missing url parameter' });
+
+  const axios = require('axios');
+  const cheerio = require('cheerio');
+
+  // helper: follow redirects to get final URL
+  async function resolveFinalUrl(u) {
+    try {
+      const response = await axios.get(u, { maxRedirects: 10, timeout: 60000, validateStatus: () => true, headers: { 'User-Agent': 'Mozilla/5.0' } });
+      const finalUrl = (response && response.request && response.request.res && response.request.res.responseUrl) || (response && response.config && response.config.url) || u;
+      return { finalUrl, status: response.status };
+    } catch (err) {
+      return { finalUrl: u, status: null };
+    }
+  }
+
+  // helper: render with Playwright and return parsed object
+  async function renderAndParse(u, opts) {
+    const playwright = require('playwright');
+    const browser = await playwright.chromium.launch({ headless: true, args: ['--no-sandbox','--disable-setuid-sandbox'] });
+    const context = await browser.newContext(opts.context || {});
+    const page = await context.newPage();
+    try {
+      await page.goto(u, { waitUntil: 'networkidle', timeout: 60000 });
+    } catch (err) {
+      try { await page.goto(u, { waitUntil: 'domcontentloaded', timeout: 60000 }); } catch (e) {}
+    }
+    await page.waitForTimeout(800);
+    const html = await page.content();
+    const status = page && page.response ? (page.response().status ? page.response().status() : null) : null;
+    try { await browser.close(); } catch (e) {}
+
+    const $ = cheerio.load(html);
+    // JSON-LD offers
+    const jsonLd = [];
+    $('script[type="application/ld+json"]').each((i, el) => { try { const txt = $(el).html(); const parsed = JSON.parse(txt); jsonLd.push(parsed); } catch (e) {} });
+
+    const title = $('meta[property="og:title"]').attr('content') || $('meta[name="twitter:title"]').attr('content') || $('title').text() || '';
+    const description = $('meta[name="description"]').attr('content') || $('meta[property="og:description"]').attr('content') || $('meta[name="twitter:description"]').attr('content') || $('p').first().text().trim() || '';
+    const images = [];
+    $('meta[property="og:image"]').each((i, el) => { const v = $(el).attr('content'); if (v) images.push(v); });
+    $('img').each((i, el) => { const src = $(el).attr('src') || $(el).attr('data-src'); if (src && /^(https?:)?\//i.test(src)) images.push(src.startsWith('http') ? src : (new URL(u)).origin + src); });
+    const uniqImages = Array.from(new Set(images)).slice(0, 12);
+
+    // price heuristics
+    const bodyText = $('body').text();
+    const priceRegex = /\$\s?[0-9]+(?:[,\.][0-9]{2})?/g;
+    const priceMatches = (bodyText.match(priceRegex) || []).map(s => s.replace(/[^0-9.]/g,'')).filter(Boolean);
+
+    // struck/list prices
+    const struck = [];
+    $('[class*="strike"], [class*="was"], del, s').each((i, el) => { const t = $(el).text(); const m = t.match(/\$\s?[0-9]+(?:[,\.][0-9]{2})?/g); if (m) struck.push(...m.map(x=>x.replace(/[^0-9.]/g,''))); });
+
+    // prefer JSON-LD Offer price if present
+    let jsonLdPrice = null, jsonLdOriginal = null;
+    for (const node of jsonLd) {
+      try {
+        if (!node) continue;
+        const items = Array.isArray(node) ? node : [node];
+        for (const it of items) {
+          if (it && it.offers) {
+            const off = Array.isArray(it.offers) ? it.offers[0] : it.offers;
+            if (off && (off.price || off.priceSpecification)) {
+              jsonLdPrice = off.price || (off.priceSpecification && off.priceSpecification.price) || jsonLdPrice;
+              jsonLdOriginal = off.listPrice || jsonLdOriginal;
+            }
+          }
+        }
+      } catch (e) {}
+    }
+
+    // first visible price heuristic: find elements with price-like ids/classes
+    let firstVisiblePrice = null;
+    const selectors = ['[id*=price]','[class*=price]','[class*=Price]'];
+    for (const sel of selectors) {
+      const el = $(sel).filter(function() { const txt = $(this).text().trim(); return txt && priceRegex.test(txt); }).first();
+      if (el && el.length) { const m = el.text().match(priceRegex); if (m) { firstVisiblePrice = m[0].replace(/[^0-9.]/g,''); break; } }
+    }
+
+    const result = {
+      title: (title || '').trim(),
+      description: (description || '').trim().substring(0,1000),
+      images: uniqImages,
+      priceCandidates: priceMatches,
+      firstVisiblePrice: firstVisiblePrice,
+      struckPrices: struck,
+      jsonLdPrice: jsonLdPrice || null,
+      jsonLdOriginal: jsonLdOriginal || null,
+      httpStatus: status
+    };
+
+    return result;
+  }
+
+  try {
+    const { finalUrl } = await resolveFinalUrl(target);
+
+    // Try mobile headless first
+    const mobileOpts = { context: { userAgent: 'Mozilla/5.0 (Linux; Android 12; Pixel 5) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Mobile Safari/537.36', viewport: { width: 412, height: 915 } } };
+    let parsed = await renderAndParse(finalUrl, mobileOpts);
+    let source = 'mobile_headless';
+
+    // If no meaningful data, try desktop headless
+    if ((!parsed.title || parsed.title.length < 3) && parsed.priceCandidates.length === 0 && parsed.images.length === 0) {
+      const desktopOpts = { context: { userAgent: 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36', viewport: { width: 1280, height: 800 } } };
+      parsed = await renderAndParse(finalUrl, desktopOpts);
+      source = 'desktop_headless';
+    }
+
+    // Apply rules to pick price and originalPrice
+    let price = null, originalPrice = null, currency = 'USD';
+    if (parsed.jsonLdPrice) price = parsed.jsonLdPrice;
+    else if (parsed.firstVisiblePrice) price = parsed.firstVisiblePrice;
+    else if (parsed.priceCandidates && parsed.priceCandidates.length) price = parsed.priceCandidates[0];
+
+    if (parsed.jsonLdOriginal) originalPrice = parsed.jsonLdOriginal;
+    else if (parsed.struckPrices && parsed.struckPrices.length) originalPrice = parsed.struckPrices[0];
+
+    const out = {
+      url: finalUrl,
+      store: (new URL(finalUrl)).hostname.replace('www.',''),
+      title: parsed.title,
+      description: parsed.description,
+      price: price ? String(price) : null,
+      originalPrice: originalPrice ? String(originalPrice) : null,
+      currency,
+      images: parsed.images,
+      source,
+      httpStatus: parsed.httpStatus
+    };
+
+    return res.json(out);
+  } catch (err) {
+    console.error('Extract URL error:', err && err.message ? err.message : err);
+    return res.status(500).json({ error: 'Extraction failed' });
+  }
+});
+
 
 // Role request endpoints
 

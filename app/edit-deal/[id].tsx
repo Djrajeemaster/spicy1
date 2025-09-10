@@ -620,6 +620,9 @@ export default function EditDealScreen() {
             <Zap size={20} color="#f59e0b" />
             <Text style={styles.sectionTitle}>Deal Link</Text>
             {urlValidating && <ActivityIndicator size="small" color="#f59e0b" style={{ marginLeft: 8 }} />}
+            {urlValidating && (
+              <Text style={styles.fetchingText}>Fetching metadata...</Text>
+            )}
             {urlValid === true && <CheckCircle size={20} color="#10b981" style={{ marginLeft: 8 }} />}
             {urlValid === false && <X size={20} color="#ef4444" style={{ marginLeft: 8 }} />}
           </View>
@@ -1151,6 +1154,7 @@ const styles = StyleSheet.create({
   helpTextSuccess: { fontSize: 11, color: '#10b981', marginTop: 2, fontWeight: '500' },
   helpTextError: { fontSize: 11, color: '#ef4444', marginTop: 2, fontWeight: '500' },
   helpText: { fontSize: 11, color: '#64748b', marginTop: 4, fontStyle: 'italic' },
+  fetchingText: { marginLeft: 8, color: '#f59e0b', fontSize: 13, fontWeight: '600' },
   
   // Extracted Images Styles
   extractedImagesSection: {

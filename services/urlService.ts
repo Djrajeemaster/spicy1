@@ -416,9 +416,94 @@ function extractAmazonTitle(html: string): string | null {
 function extractPriceIntelligently(html: string, store: string | null): { price: string | null; originalPrice: string | null } {
   let price: string | null = null;
   let originalPrice: string | null = null;
+
+  const cleanPrice = (raw: string | null | undefined) => {
+    if (!raw) return null;
+    // remove currency symbols and non-numeric chars except dot and comma
+    const s = String(raw).replace(/[^0-9.,]/g, '').replace(/,/g, '');
+    if (!s) return null;
+    return s;
+  };
+
+  // 1) Try to parse structured data (JSON-LD) which often contains canonical price info
+  try {
+    const ldMatches = html.match(/<script[^>]*type=["']application\/ld\+json["'][^>]*>([\s\S]*?)<\/script>/gi);
+    if (ldMatches) {
+      for (const scriptTag of ldMatches) {
+        const m = scriptTag.match(/<script[^>]*type=["']application\/ld\+json["'][^>]*>([\s\S]*?)<\/script>/i);
+        if (!m || !m[1]) continue;
+        try {
+          const obj = JSON.parse(m[1].trim());
+          const arr = Array.isArray(obj) ? obj : [obj];
+          for (const node of arr) {
+            // Schema.org Offer
+            if (node && node.offers) {
+              const offers = Array.isArray(node.offers) ? node.offers : [node.offers];
+              for (const off of offers) {
+                if (!price && (off.price || off.priceSpecification?.price)) {
+                  price = cleanPrice(off.price || off.priceSpecification?.price || null);
+                }
+                if (!originalPrice && off.listPrice) {
+                  originalPrice = cleanPrice(off.listPrice);
+                }
+                if (!originalPrice && off.priceSpecification && off.priceSpecification.price) {
+                  originalPrice = originalPrice || cleanPrice(off.priceSpecification.price);
+                }
+              }
+            }
+
+            // direct price fields
+            if (!price && node && (node.price || node.currentPrice)) {
+              price = cleanPrice(node.price || node.currentPrice || null);
+            }
+          }
+          if (price) break;
+        } catch (e) {
+          // ignore JSON parse errors and continue
+        }
+      }
+    }
+  } catch (err) {
+    // ignore
+  }
   
   // Enhanced Amazon-specific price patterns
   if (store === 'amazon') {
+    // DOM-order scan: find the first visible price and any struck/list price (del/s/strike or class indicators)
+    try {
+      const tagPriceRegex = /<([a-z0-9]+)([^>]*)>[^<]*?\$\s*([\d,]+\.?\d*)[^<]*<\/\1>/gi;
+      let m: RegExpExecArray | null;
+      let domDeal: string | null = null;
+      let domOriginal: string | null = null;
+
+      while ((m = tagPriceRegex.exec(html)) !== null) {
+        const tag = (m[1] || '').toLowerCase();
+        const attrs = m[2] || '';
+        const rawNum = m[3];
+        const cleaned = cleanPrice(rawNum);
+        if (!cleaned) continue;
+
+        // Heuristic: struck/list prices are often in <del>, <s>, <strike> or have classes like 'strike'/'a-text-strike'/'list-price'/'was'/'old'
+        const isStruck = /^(del|s|strike)$/.test(tag) || /strike|a-text-strike|list-price|was|old-price|price--was|price-old|a-price a-text-price/i.test(attrs);
+
+        if (isStruck && !domOriginal) {
+          domOriginal = cleaned;
+        } else if (!isStruck && !domDeal) {
+          domDeal = cleaned;
+        }
+
+        // If we have both, stop scanning
+        if (domDeal && domOriginal) break;
+      }
+
+      // If DOM-order yields a deal price, prefer it (visible first price). Keep original price if found.
+      if (domDeal) {
+        price = domDeal;
+        if (domOriginal) originalPrice = originalPrice || domOriginal;
+      }
+    } catch (err) {
+      // ignore DOM scan failures
+    }
     const amazonCurrentPricePatterns = [
       // Amazon specific current price patterns (from enhanced-test.js)
       /<span[^>]*class="[^"]*a-price[^"]*"[^>]*>.*?<span[^>]*class="[^"]*a-offscreen[^"]*"[^>]*>\$?([\d,]+\.?\d*)<\/span>/is,
@@ -456,26 +541,32 @@ function extractPriceIntelligently(html: string, store: string | null): { price:
       /list-price[^>]*>\$?([\d,]+\.?\d*)/i
     ];
     
-    // Extract current price
-    for (const pattern of amazonCurrentPricePatterns) {
-      const match = html.match(pattern);
-      if (match && match[1]) {
-        const priceNum = parseFloat(match[1].replace(/,/g, ''));
-        if (!isNaN(priceNum) && priceNum > 0) {
-          price = match[1]; // Remove $ symbol, return clean number
-          break;
+    // Extract current price (only if not found in JSON-LD)
+    if (!price) {
+      for (const pattern of amazonCurrentPricePatterns) {
+        const match = html.match(pattern);
+        if (match && match[1]) {
+          const cleaned = cleanPrice(match[1]);
+          const priceNum = parseFloat(cleaned || '0');
+          if (!isNaN(priceNum) && priceNum > 0) {
+            price = cleaned;
+            break;
+          }
         }
       }
     }
     
     // Extract original price
-    for (const pattern of amazonOriginalPricePatterns) {
-      const match = html.match(pattern);
-      if (match && match[1]) {
-        const priceNum = parseFloat(match[1].replace(/,/g, ''));
-        if (!isNaN(priceNum) && priceNum > 0) {
-          originalPrice = match[1]; // Remove $ symbol, return clean number
-          break;
+    if (!originalPrice) {
+      for (const pattern of amazonOriginalPricePatterns) {
+        const match = html.match(pattern);
+        if (match && match[1]) {
+          const cleaned = cleanPrice(match[1]);
+          const priceNum = parseFloat(cleaned || '0');
+          if (!isNaN(priceNum) && priceNum > 0) {
+            originalPrice = cleaned;
+            break;
+          }
         }
       }
     }
@@ -519,12 +610,13 @@ function extractPriceIntelligently(html: string, store: string | null): { price:
     for (const pattern of generalPricePatterns) {
       const match = html.match(pattern);
       if (match && match[1]) {
-        const priceNum = parseFloat(match[1].replace(/,/g, ''));
+        const cleaned = cleanPrice(match[1]);
+        const priceNum = parseFloat(cleaned || '0');
         if (!isNaN(priceNum) && priceNum > 0) {
           if (!price) {
-            price = match[1]; // Clean numeric value without $
-          } else if (!originalPrice && price !== match[1]) {
-            originalPrice = match[1]; // Clean numeric value without $
+            price = cleaned;
+          } else if (!originalPrice && price !== cleaned) {
+            originalPrice = cleaned;
           }
         }
       }
@@ -535,19 +627,17 @@ function extractPriceIntelligently(html: string, store: string | null): { price:
   if (!price) {
     const allPrices = html.match(/\$[\d,]+\.?\d*/g);
     if (allPrices && allPrices.length > 0) {
-      const uniquePrices = Array.from(new Set(allPrices));
-      const sortedPrices = uniquePrices.sort((a, b) => {
-        const aNum = parseFloat(a.replace(/[\$,]/g, ''));
-        const bNum = parseFloat(b.replace(/[\$,]/g, ''));
-        return aNum - bNum;
-      });
-      
-      if (sortedPrices.length > 0) {
-        price = sortedPrices[0].replace('$', ''); // Remove $ symbol
-      }
-      
-      if (!originalPrice && sortedPrices.length > 1) {
-        originalPrice = sortedPrices[sortedPrices.length - 1].replace('$', ''); // Remove $ symbol
+      const uniquePrices = Array.from(new Set(allPrices.map(p => cleanPrice(p)))).filter(Boolean);
+  const filtered = uniquePrices.filter((p): p is string => !!p);
+  const numeric = filtered.map(p => parseFloat(p)).filter(n => !isNaN(n) && n > 0);
+      if (numeric.length > 0) {
+        // choose the median-ish price (middle value) to avoid picking very small ancillary prices
+        numeric.sort((a, b) => a - b);
+        const mid = Math.floor((numeric.length - 1) / 2);
+        price = String(numeric[mid]);
+        if (!originalPrice && numeric.length > mid + 1) {
+          originalPrice = String(numeric[numeric.length - 1]);
+        }
       }
     }
   }
@@ -916,7 +1006,18 @@ function extractDescription(html: string, store: string | null, title: string | 
         
         // Clean up and format
         description = cleanText(description);
-        
+
+        // Remove any 'Full title:' prefix that may have been prepended elsewhere
+        description = description.replace(/^Full title:\s*[^\n]*\n\n?/i, '').trim();
+
+        // Avoid returning a description that is just the title repeated
+        if (title) {
+          const normalizedTitle = title.replace(/\s+/g, ' ').trim();
+          if (description.startsWith(normalizedTitle)) {
+            description = description.substring(normalizedTitle.length).trim();
+          }
+        }
+
         if (description.length > 50 && description.length < 2000) {
           // Limit to reasonable length
           return description.substring(0, 500).trim();
@@ -1003,14 +1104,37 @@ function isGenericTitle(title: string): boolean {
  * CORS proxy methods for fetching cross-origin content
  */
 async function fetchViaProxy(url: string): Promise<string> {
+  // If the URL looks like a common short/share link, try resolving it first
+  const shortDomains = ['amzn.eu', 'amzn.to', 't.co', 'bit.ly', 'tinyurl.com', 'goo.gl', 'rb.gy', 'share.samsung.com'];
+  try {
+    const parsed = new URL(url);
+    if (shortDomains.includes(parsed.hostname)) {
+      try {
+        const resolveRes = await fetch(`/api/resolve-url?url=${encodeURIComponent(url)}`);
+        if (resolveRes.ok) {
+          const json = await resolveRes.json();
+          if (json && json.finalUrl) {
+            url = json.finalUrl;
+          }
+        }
+      } catch (e) {
+        // ignore resolution failure and continue with original url
+      }
+    }
+  } catch (e) {
+    // ignore URL parsing issues
+  }
   const proxyMethods = [
-    // Local server proxy (preferred when available)
+    // Headless fetch via local server (preferred when available) - returns rendered HTML
+    {
+      name: 'headless',
+      getUrl: (url: string) => `/api/headless-fetch?url=${encodeURIComponent(url)}`,
+      local: true
+    },
+    // Local server proxy as a fallback (raw fetch)
     {
       name: 'local_server',
-      getUrl: (url: string) => {
-        // Use relative API path - apiClient.get will resolve to the server base URL
-        return `/api/fetch-proxy?url=${encodeURIComponent(url)}`;
-      },
+      getUrl: (url: string) => `/api/fetch-proxy?url=${encodeURIComponent(url)}`,
       local: true
     },
     // Method 1: allorigins.win
@@ -1153,6 +1277,32 @@ export async function extractUrlData(url: string): Promise<UrlData> {
   try {
     console.log('🧠 AI-powered URL extraction starting for:', url);
     
+    // First, try the server-side extractor which does resolve->mobile headless->desktop fallback
+    try {
+      const serverResult: any = await apiClient.get('/api/extract-url', { url });
+      if (serverResult && (serverResult.title || (serverResult.images && serverResult.images.length))) {
+        console.log('✅ Used server-side /api/extract-url result');
+        return {
+          title: serverResult.title || null,
+          description: serverResult.description || null,
+          image: serverResult.images && serverResult.images.length ? serverResult.images[0] : (serverResult.image || null),
+          images: serverResult.images || (serverResult.image ? [serverResult.image] : []),
+          price: serverResult.price || null,
+          originalPrice: serverResult.originalPrice || null,
+          store: serverResult.store || null,
+          category: null,
+          brand: null,
+          rating: null,
+          reviewCount: null,
+          availability: null,
+          couponCode: null,
+          isStoreDetected: !!serverResult.store
+        } as UrlData;
+      }
+    } catch (err) {
+      console.log('⚠️ Server-side extraction failed or returned no data, falling back to client-side extraction', (err as any) && (err as any).message ? (err as any).message : err);
+    }
+
     let processedUrl = url;
     
     // Resolve Amazon short links
