@@ -229,12 +229,9 @@ function incrementEarlyCodeUse(codeObj) {
 async function requireSuperAdmin(req, res, next) {
   try {
     const sessionId = req.cookies && req.cookies.session_id;
-    console.log('🔧 requireSuperAdmin: sessionId =', sessionId);
-    console.log('🔧 requireSuperAdmin: cookies =', req.cookies);
     
     if (!sessionId) return res.status(403).json({ error: 'Not authenticated' });
     const { rows } = await pool.query('SELECT id, role FROM users WHERE id = $1', [sessionId]);
-    console.log('🔧 requireSuperAdmin: user =', rows[0]);
     
     // accept both common variants just in case, but prefer 'superadmin'
     // Accept common privileged roles in development: 'superadmin', 'super_admin', and 'admin'
@@ -255,25 +252,20 @@ async function requireAuth(req, res, next) {
     // If no cookie session, check for x-session-id header (React Native)
     if (!sessionId) {
       sessionId = req.headers['x-session-id'];
-      console.log('🔧 requireAuth: Using x-session-id header for React Native:', sessionId);
     } else {
-      console.log('🔧 requireAuth: Using cookie session_id for web:', sessionId);
     }
     
     if (!sessionId) {
-      console.log('🔧 requireAuth: No session ID found in cookies or headers');
       return res.status(401).json({ error: 'Not authenticated' });
     }
     
     const { rows } = await pool.query('SELECT id, role FROM users WHERE id = $1', [sessionId]);
     if (!rows[0]) {
-      console.log('🔧 requireAuth: Invalid session ID:', sessionId);
       return res.status(401).json({ error: 'Invalid session' });
     }
     
     // Attach user info to request
     req.session = { id: sessionId, userId: sessionId, role: rows[0].role };
-    console.log('🔧 requireAuth: Authentication successful for user:', rows[0].id, 'role:', rows[0].role);
     next();
   } catch (err) {
     console.error('requireAuth error', err);
@@ -287,7 +279,6 @@ app.use(cors({
     // Allow requests with no origin (like mobile apps or curl requests)
     // Some clients send the literal string 'null' or 'undefined' as the Origin header — treat those as missing.
     if (!origin || origin === 'null' || origin === 'undefined') {
-      if (origin === 'null' || origin === 'undefined') console.log('CORS: received literal Origin header:', origin, 'treating as no-origin');
       return callback(null, true);
     }
 
@@ -500,8 +491,6 @@ app.get('/api/banners', requireAuth, async (req, res) => {
 // Test endpoint to check authentication status
 app.get('/api/auth/status', (req, res) => {
   const sessionId = req.cookies && req.cookies.session_id;
-  console.log('🔧 Auth status check: sessionId =', sessionId);
-  console.log('🔧 Auth status check: cookies =', req.cookies);
   res.json({ 
     authenticated: !!sessionId, 
     sessionId: sessionId,
@@ -526,8 +515,6 @@ app.get('/api/site/logos', requireSuperAdmin, (req, res) => {
 // Upload a new logo (super_admin only)
 app.post('/api/site/logo', upload.single('logo'), requireSuperAdmin, async (req, res) => {
   try {
-    console.log('Logo upload request received');
-    console.log('File info:', req.file ? { originalname: req.file.originalname, size: req.file.size, mimetype: req.file.mimetype } : 'No file');
     
     if (!req.file) {
       console.error('No file uploaded');
@@ -554,14 +541,11 @@ app.post('/api/site/logo', upload.single('logo'), requireSuperAdmin, async (req,
     const filename = `site-logo${ext}`;
     const target = path.join(__dirname, 'assets', filename);
 
-    console.log('Moving file from', req.file.path, 'to', target);
-
     // Backup existing logo if it exists
     if (fs.existsSync(target)) {
       const backupPath = path.join(__dirname, 'assets', `site-logo-backup-${Date.now()}${ext}`);
       try {
         fs.copyFileSync(target, backupPath);
-        console.log('Backed up existing logo to', backupPath);
       } catch (backupErr) {
         console.warn('Failed to backup existing logo:', backupErr);
       }
@@ -569,12 +553,10 @@ app.post('/api/site/logo', upload.single('logo'), requireSuperAdmin, async (req,
 
     // move file into assets
     fs.renameSync(req.file.path, target);
-    console.log('Logo file moved successfully');
 
     const settings = readSettings();
     settings.logoFilename = filename;
     writeSettings(settings);
-    console.log('Settings updated with new logo filename:', filename);
 
     res.json({ message: 'Logo uploaded successfully', filename });
   } catch (err) {
@@ -665,19 +647,15 @@ app.delete('/api/site/logo/:filename', requireSuperAdmin, (req, res) => {
 app.put('/api/site/settings', requireSuperAdmin, (req, res) => {
   try {
     const body = req.body || {};
-    console.log('Settings update request:', body);
     
     const settings = readSettings();
-    console.log('Current settings:', settings);
 
     // Apply branding updates (allow empty/false values)
     if (typeof body.headerTextColor !== 'undefined') {
       settings.headerTextColor = body.headerTextColor;
-      console.log('Updated headerTextColor to:', body.headerTextColor);
     }
     if (typeof body.logoFilename !== 'undefined') {
       settings.logoFilename = body.logoFilename;
-      console.log('Updated logoFilename to:', body.logoFilename);
     }
 
     // Feature toggles (booleans) and numeric values
@@ -703,12 +681,10 @@ app.put('/api/site/settings', requireSuperAdmin, (req, res) => {
     keys.forEach(k => {
       if (typeof body[k] !== 'undefined') {
         settings[k] = body[k];
-        console.log(`Updated ${k} to:`, body[k]);
       }
     });
 
     writeSettings(settings);
-    console.log('Settings saved successfully:', settings);
     
     res.json({ message: 'Settings updated successfully', settings });
   } catch (err) {
@@ -800,13 +776,10 @@ app.get('/api/auth/session', async (req, res) => {
   // If no cookie session, check for x-session-id header (React Native)
   if (!sessionId) {
     sessionId = req.headers['x-session-id'];
-    console.log('🔧 Session check: Using x-session-id header for React Native:', sessionId);
   } else {
-    console.log('🔧 Session check: Using cookie session_id for web:', sessionId);
   }
   
   if (!sessionId) {
-    console.log('🔧 Session check: No session ID found');
     return res.json({ user: null, authenticated: false });
   }
   
@@ -818,12 +791,10 @@ app.get('/api/auth/session', async (req, res) => {
     );
     
     if (rows.length === 0) {
-      console.log('🔧 Session check: User not found for session ID:', sessionId);
       return res.json({ user: null, authenticated: false });
     }
     
     const user = rows[0];
-    console.log('🔧 Session check: User authenticated:', user.username, 'role:', user.role);
     res.json({
       user: user,
       authenticated: true,
@@ -1349,8 +1320,6 @@ app.post('/api/deals/:id/vote', async (req, res) => {
     const { id } = req.params;
     const { userId, voteType } = req.body;
     
-    console.log('Vote request:', { dealId: id, userId, voteType });
-    
     if (!userId || !voteType) {
       return res.status(400).json({ error: 'Missing userId or voteType' });
     }
@@ -1377,7 +1346,6 @@ app.post('/api/deals/:id/vote', async (req, res) => {
       [id, userId, voteType]
     );
     
-    console.log('Vote successful');
     res.json({ success: true });
   } catch (err) {
     console.error('Error voting on deal:', err);
@@ -1507,16 +1475,9 @@ app.post('/api/admin/competitor-research', requireSuperAdmin, async (req, res) =
     const CompetitorResearcher = require('./scripts/competitor-research');
     const researcher = new CompetitorResearcher();
 
-    console.log('🔍 Starting competitor research...');
-    console.log('Competitors:', competitors);
-    console.log('Stores:', stores);
-    
     const deals = await researcher.researchAllCompetitors(competitors, stores);
 
-    console.log(`📊 Found ${deals.length} deals from competitors`);
-
     // Check for duplicates
-    console.log('🔍 Checking for duplicates...');
     const dealsWithDuplicates = await researcher.checkForDuplicates(deals, pool);
 
     const duplicates = dealsWithDuplicates.filter(deal => deal.isDuplicate);

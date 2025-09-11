@@ -229,12 +229,9 @@ function incrementEarlyCodeUse(codeObj) {
 async function requireSuperAdmin(req, res, next) {
   try {
     const sessionId = req.cookies && req.cookies.session_id;
-    console.log('🔧 requireSuperAdmin: sessionId =', sessionId);
-    console.log('🔧 requireSuperAdmin: cookies =', req.cookies);
     
     if (!sessionId) return res.status(403).json({ error: 'Not authenticated' });
     const { rows } = await pool.query('SELECT id, role FROM users WHERE id = $1', [sessionId]);
-    console.log('🔧 requireSuperAdmin: user =', rows[0]);
     
     // accept both common variants just in case, but prefer 'superadmin'
     // Accept common privileged roles in development: 'superadmin', 'super_admin', and 'admin'
@@ -255,25 +252,19 @@ async function requireAuth(req, res, next) {
     // If no cookie session, check for x-session-id header (React Native)
     if (!sessionId) {
       sessionId = req.headers['x-session-id'];
-      console.log('🔧 requireAuth: Using x-session-id header for React Native:', sessionId);
-    } else {
-      console.log('🔧 requireAuth: Using cookie session_id for web:', sessionId);
     }
     
     if (!sessionId) {
-      console.log('🔧 requireAuth: No session ID found in cookies or headers');
       return res.status(401).json({ error: 'Not authenticated' });
     }
     
     const { rows } = await pool.query('SELECT id, role FROM users WHERE id = $1', [sessionId]);
     if (!rows[0]) {
-      console.log('🔧 requireAuth: Invalid session ID:', sessionId);
       return res.status(401).json({ error: 'Invalid session' });
     }
     
     // Attach user info to request
     req.session = { id: sessionId, userId: sessionId, role: rows[0].role };
-    console.log('🔧 requireAuth: Authentication successful for user:', rows[0].id, 'role:', rows[0].role);
     next();
   } catch (err) {
     console.error('requireAuth error', err);
@@ -287,7 +278,6 @@ app.use(cors({
     // Allow requests with no origin (like mobile apps or curl requests)
     // Some clients send the literal string 'null' or 'undefined' as the Origin header — treat those as missing.
     if (!origin || origin === 'null' || origin === 'undefined') {
-      if (origin === 'null' || origin === 'undefined') console.log('CORS: received literal Origin header:', origin, 'treating as no-origin');
       return callback(null, true);
     }
 
@@ -340,257 +330,7 @@ app.use(cors({
   allowedHeaders: ['Content-Type', 'Authorization', 'Cookie', 'x-admin-elevation']
 }));
 
-// Simple server-side fetch proxy to avoid CORS issues for client-side URL validation
-app.get('/api/fetch-proxy', async (req, res) => {
-  try {
-    const target = req.query.url;
-    if (!target || typeof target !== 'string') return res.status(400).json({ error: 'Missing url query parameter' });
 
-    // Basic safety: only allow http(s) URLs
-    if (!/^https?:\/\//i.test(target)) return res.status(400).json({ error: 'Invalid URL' });
-
-    // Simple server-side fetch with timeout
-  const controller = new AbortController();
-  const timeout = setTimeout(() => controller.abort(), 60000);
-
-    const fetch = require('node-fetch');
-    const response = await fetch(target, { method: 'GET', signal: controller.signal, headers: { 'User-Agent': 'SaversDreamBot/1.0 (+https://example.com)' } });
-    clearTimeout(timeout);
-
-    const contentType = response.headers.get('content-type') || 'text/html';
-    const text = await response.text();
-
-    // Return raw HTML
-    res.set('Content-Type', contentType);
-    return res.status(200).send(text);
-  } catch (err) {
-    console.error('Proxy fetch error:', err && err.message ? err.message : err);
-    if (err && err.name === 'AbortError') return res.status(504).json({ error: 'Timeout fetching target' });
-    return res.status(500).json({ error: 'Failed to fetch target URL' });
-  }
-});
-
-// Headless browser fetch using Playwright (returns rendered HTML)
-app.get('/api/headless-fetch', async (req, res) => {
-  try {
-    const target = req.query.url;
-    if (!target || typeof target !== 'string') return res.status(400).json({ error: 'Missing url query parameter' });
-    if (!/^https?:\/\//i.test(target)) return res.status(400).json({ error: 'Invalid URL' });
-
-    // Lazy-require Playwright so server doesn't crash if not installed
-    let playwright;
-    try {
-      playwright = require('playwright');
-    } catch (e) {
-      console.error('Playwright not installed:', e?.message || e);
-      return res.status(500).json({ error: 'Playwright not installed on server. Install with `npm install playwright`' });
-    }
-
-    const { chromium } = playwright;
-
-    // Launch browser in headless mode with common args for containerized environments
-    const browser = await chromium.launch({ args: ['--no-sandbox', '--disable-setuid-sandbox'], headless: true });
-    const page = await browser.newPage();
-
-    // Set a conservative timeout and user agent
-    await page.setUserAgent('Mozilla/5.0 (Windows NT 10.0; Win64; x64) SaversDreamBot/1.0');
-    try {
-      await page.goto(target, { waitUntil: 'networkidle', timeout: 60000 });
-    } catch (err) {
-      // If networkidle fails, try domcontentloaded as fallback
-      try {
-        await page.goto(target, { waitUntil: 'domcontentloaded', timeout: 60000 });
-      } catch (err2) {
-        console.error('Headless fetch navigation failed:', err2 && err2.message ? err2.message : err2);
-        await browser.close();
-        return res.status(504).json({ error: 'Timeout or navigation failure while loading target' });
-      }
-    }
-
-    // Give a short pause to let client-side scripts render important elements
-    await page.waitForTimeout(500);
-
-    // Grab the full HTML after rendering
-    const content = await page.content();
-
-    // Close browser
-    await browser.close();
-
-    // Return as HTML so existing extraction logic can parse it
-    res.set('Content-Type', 'text/html; charset=utf-8');
-    return res.status(200).send(content);
-  } catch (err) {
-    console.error('Headless fetch error:', err && err.message ? err.message : err);
-    return res.status(500).json({ error: 'Headless fetch failed' });
-  }
-});
-
-// Resolve short/share links by following redirects and returning the final URL
-app.get('/api/resolve-url', async (req, res) => {
-  const target = req.query.url;
-  if (!target || typeof target !== 'string') return res.status(400).json({ error: 'Missing url parameter' });
-  try {
-    const axios = require('axios');
-    // Use GET to allow servers that only redirect on GET; follow up to 10 redirects
-    const response = await axios.get(target, {
-      maxRedirects: 10,
-      timeout: 60000,
-      validateStatus: () => true,
-      headers: {
-        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
-      }
-    });
-
-    // Try common locations for the final URL in axios response
-    const finalUrl = (response && response.request && response.request.res && response.request.res.responseUrl) || response.config && response.config.url || target;
-
-    return res.json({ finalUrl, status: response.status, ok: response.status >= 200 && response.status < 400 });
-  } catch (err) {
-    console.error('Resolve URL error:', err && err.message ? err.message : err);
-    return res.status(500).json({ error: 'Failed to resolve URL' });
-  }
-});
-
-// Extract URL metadata with mobile-first headless rendering, then desktop fallback
-app.get('/api/extract-url', async (req, res) => {
-  const target = req.query.url;
-  if (!target || typeof target !== 'string') return res.status(400).json({ error: 'Missing url parameter' });
-
-  const axios = require('axios');
-  const cheerio = require('cheerio');
-
-  // helper: follow redirects to get final URL
-  async function resolveFinalUrl(u) {
-    try {
-      const response = await axios.get(u, { maxRedirects: 10, timeout: 60000, validateStatus: () => true, headers: { 'User-Agent': 'Mozilla/5.0' } });
-      const finalUrl = (response && response.request && response.request.res && response.request.res.responseUrl) || (response && response.config && response.config.url) || u;
-      return { finalUrl, status: response.status };
-    } catch (err) {
-      return { finalUrl: u, status: null };
-    }
-  }
-
-  // helper: render with Playwright and return parsed object
-  async function renderAndParse(u, opts) {
-    const playwright = require('playwright');
-    const browser = await playwright.chromium.launch({ headless: true, args: ['--no-sandbox','--disable-setuid-sandbox'] });
-    const context = await browser.newContext(opts.context || {});
-    const page = await context.newPage();
-    try {
-      await page.goto(u, { waitUntil: 'networkidle', timeout: 60000 });
-    } catch (err) {
-      try { await page.goto(u, { waitUntil: 'domcontentloaded', timeout: 60000 }); } catch (e) {}
-    }
-    await page.waitForTimeout(800);
-    const html = await page.content();
-    const status = page && page.response ? (page.response().status ? page.response().status() : null) : null;
-    try { await browser.close(); } catch (e) {}
-
-    const $ = cheerio.load(html);
-    // JSON-LD offers
-    const jsonLd = [];
-    $('script[type="application/ld+json"]').each((i, el) => { try { const txt = $(el).html(); const parsed = JSON.parse(txt); jsonLd.push(parsed); } catch (e) {} });
-
-    const title = $('meta[property="og:title"]').attr('content') || $('meta[name="twitter:title"]').attr('content') || $('title').text() || '';
-    const description = $('meta[name="description"]').attr('content') || $('meta[property="og:description"]').attr('content') || $('meta[name="twitter:description"]').attr('content') || $('p').first().text().trim() || '';
-    const images = [];
-    $('meta[property="og:image"]').each((i, el) => { const v = $(el).attr('content'); if (v) images.push(v); });
-    $('img').each((i, el) => { const src = $(el).attr('src') || $(el).attr('data-src'); if (src && /^(https?:)?\//i.test(src)) images.push(src.startsWith('http') ? src : (new URL(u)).origin + src); });
-    const uniqImages = Array.from(new Set(images)).slice(0, 12);
-
-    // price heuristics
-    const bodyText = $('body').text();
-    const priceRegex = /\$\s?[0-9]+(?:[,\.][0-9]{2})?/g;
-    const priceMatches = (bodyText.match(priceRegex) || []).map(s => s.replace(/[^0-9.]/g,'')).filter(Boolean);
-
-    // struck/list prices
-    const struck = [];
-    $('[class*="strike"], [class*="was"], del, s').each((i, el) => { const t = $(el).text(); const m = t.match(/\$\s?[0-9]+(?:[,\.][0-9]{2})?/g); if (m) struck.push(...m.map(x=>x.replace(/[^0-9.]/g,''))); });
-
-    // prefer JSON-LD Offer price if present
-    let jsonLdPrice = null, jsonLdOriginal = null;
-    for (const node of jsonLd) {
-      try {
-        if (!node) continue;
-        const items = Array.isArray(node) ? node : [node];
-        for (const it of items) {
-          if (it && it.offers) {
-            const off = Array.isArray(it.offers) ? it.offers[0] : it.offers;
-            if (off && (off.price || off.priceSpecification)) {
-              jsonLdPrice = off.price || (off.priceSpecification && off.priceSpecification.price) || jsonLdPrice;
-              jsonLdOriginal = off.listPrice || jsonLdOriginal;
-            }
-          }
-        }
-      } catch (e) {}
-    }
-
-    // first visible price heuristic: find elements with price-like ids/classes
-    let firstVisiblePrice = null;
-    const selectors = ['[id*=price]','[class*=price]','[class*=Price]'];
-    for (const sel of selectors) {
-      const el = $(sel).filter(function() { const txt = $(this).text().trim(); return txt && priceRegex.test(txt); }).first();
-      if (el && el.length) { const m = el.text().match(priceRegex); if (m) { firstVisiblePrice = m[0].replace(/[^0-9.]/g,''); break; } }
-    }
-
-    const result = {
-      title: (title || '').trim(),
-      description: (description || '').trim().substring(0,1000),
-      images: uniqImages,
-      priceCandidates: priceMatches,
-      firstVisiblePrice: firstVisiblePrice,
-      struckPrices: struck,
-      jsonLdPrice: jsonLdPrice || null,
-      jsonLdOriginal: jsonLdOriginal || null,
-      httpStatus: status
-    };
-
-    return result;
-  }
-
-  try {
-    const { finalUrl } = await resolveFinalUrl(target);
-
-    // Try mobile headless first
-    const mobileOpts = { context: { userAgent: 'Mozilla/5.0 (Linux; Android 12; Pixel 5) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Mobile Safari/537.36', viewport: { width: 412, height: 915 } } };
-    let parsed = await renderAndParse(finalUrl, mobileOpts);
-    let source = 'mobile_headless';
-
-    // If no meaningful data, try desktop headless
-    if ((!parsed.title || parsed.title.length < 3) && parsed.priceCandidates.length === 0 && parsed.images.length === 0) {
-      const desktopOpts = { context: { userAgent: 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36', viewport: { width: 1280, height: 800 } } };
-      parsed = await renderAndParse(finalUrl, desktopOpts);
-      source = 'desktop_headless';
-    }
-
-    // Apply rules to pick price and originalPrice
-    let price = null, originalPrice = null, currency = 'USD';
-    if (parsed.jsonLdPrice) price = parsed.jsonLdPrice;
-    else if (parsed.firstVisiblePrice) price = parsed.firstVisiblePrice;
-    else if (parsed.priceCandidates && parsed.priceCandidates.length) price = parsed.priceCandidates[0];
-
-    if (parsed.jsonLdOriginal) originalPrice = parsed.jsonLdOriginal;
-    else if (parsed.struckPrices && parsed.struckPrices.length) originalPrice = parsed.struckPrices[0];
-
-    const out = {
-      url: finalUrl,
-      store: (new URL(finalUrl)).hostname.replace('www.',''),
-      title: parsed.title,
-      description: parsed.description,
-      price: price ? String(price) : null,
-      originalPrice: originalPrice ? String(originalPrice) : null,
-      currency,
-      images: parsed.images,
-      source,
-      httpStatus: parsed.httpStatus
-    };
-
-    return res.json(out);
-  } catch (err) {
-    console.error('Extract URL error:', err && err.message ? err.message : err);
-    return res.status(500).json({ error: 'Extraction failed' });
-  }
-});
 
 
 // Role request endpoints
@@ -753,8 +493,6 @@ app.get('/api/banners', requireAuth, async (req, res) => {
 // Test endpoint to check authentication status
 app.get('/api/auth/status', (req, res) => {
   const sessionId = req.cookies && req.cookies.session_id;
-  console.log('🔧 Auth status check: sessionId =', sessionId);
-  console.log('🔧 Auth status check: cookies =', req.cookies);
   res.json({ 
     authenticated: !!sessionId, 
     sessionId: sessionId,
@@ -779,9 +517,6 @@ app.get('/api/site/logos', requireSuperAdmin, (req, res) => {
 // Upload a new logo (super_admin only)
 app.post('/api/site/logo', upload.single('logo'), requireSuperAdmin, async (req, res) => {
   try {
-    console.log('Logo upload request received');
-    console.log('File info:', req.file ? { originalname: req.file.originalname, size: req.file.size, mimetype: req.file.mimetype } : 'No file');
-    
     if (!req.file) {
       console.error('No file uploaded');
       return res.status(400).json({ error: 'No file uploaded' });
@@ -807,14 +542,11 @@ app.post('/api/site/logo', upload.single('logo'), requireSuperAdmin, async (req,
     const filename = `site-logo${ext}`;
     const target = path.join(__dirname, 'assets', filename);
 
-    console.log('Moving file from', req.file.path, 'to', target);
-
     // Backup existing logo if it exists
     if (fs.existsSync(target)) {
       const backupPath = path.join(__dirname, 'assets', `site-logo-backup-${Date.now()}${ext}`);
       try {
         fs.copyFileSync(target, backupPath);
-        console.log('Backed up existing logo to', backupPath);
       } catch (backupErr) {
         console.warn('Failed to backup existing logo:', backupErr);
       }
@@ -822,12 +554,10 @@ app.post('/api/site/logo', upload.single('logo'), requireSuperAdmin, async (req,
 
     // move file into assets
     fs.renameSync(req.file.path, target);
-    console.log('Logo file moved successfully');
 
     const settings = readSettings();
     settings.logoFilename = filename;
     writeSettings(settings);
-    console.log('Settings updated with new logo filename:', filename);
 
     res.json({ message: 'Logo uploaded successfully', filename });
   } catch (err) {
@@ -918,19 +648,15 @@ app.delete('/api/site/logo/:filename', requireSuperAdmin, (req, res) => {
 app.put('/api/site/settings', requireSuperAdmin, (req, res) => {
   try {
     const body = req.body || {};
-    console.log('Settings update request:', body);
     
     const settings = readSettings();
-    console.log('Current settings:', settings);
 
     // Apply branding updates (allow empty/false values)
     if (typeof body.headerTextColor !== 'undefined') {
       settings.headerTextColor = body.headerTextColor;
-      console.log('Updated headerTextColor to:', body.headerTextColor);
     }
     if (typeof body.logoFilename !== 'undefined') {
       settings.logoFilename = body.logoFilename;
-      console.log('Updated logoFilename to:', body.logoFilename);
     }
 
     // Feature toggles (booleans) and numeric values
@@ -956,12 +682,10 @@ app.put('/api/site/settings', requireSuperAdmin, (req, res) => {
     keys.forEach(k => {
       if (typeof body[k] !== 'undefined') {
         settings[k] = body[k];
-        console.log(`Updated ${k} to:`, body[k]);
       }
     });
 
     writeSettings(settings);
-    console.log('Settings saved successfully:', settings);
     
     res.json({ message: 'Settings updated successfully', settings });
   } catch (err) {
@@ -1053,13 +777,9 @@ app.get('/api/auth/session', async (req, res) => {
   // If no cookie session, check for x-session-id header (React Native)
   if (!sessionId) {
     sessionId = req.headers['x-session-id'];
-    console.log('🔧 Session check: Using x-session-id header for React Native:', sessionId);
-  } else {
-    console.log('🔧 Session check: Using cookie session_id for web:', sessionId);
   }
   
   if (!sessionId) {
-    console.log('🔧 Session check: No session ID found');
     return res.json({ user: null, authenticated: false });
   }
   
@@ -1071,12 +791,10 @@ app.get('/api/auth/session', async (req, res) => {
     );
     
     if (rows.length === 0) {
-      console.log('🔧 Session check: User not found for session ID:', sessionId);
       return res.json({ user: null, authenticated: false });
     }
     
     const user = rows[0];
-    console.log('🔧 Session check: User authenticated:', user.username, 'role:', user.role);
     res.json({
       user: user,
       authenticated: true,
@@ -1602,8 +1320,6 @@ app.post('/api/deals/:id/vote', async (req, res) => {
     const { id } = req.params;
     const { userId, voteType } = req.body;
     
-    console.log('Vote request:', { dealId: id, userId, voteType });
-    
     if (!userId || !voteType) {
       return res.status(400).json({ error: 'Missing userId or voteType' });
     }
@@ -1630,7 +1346,6 @@ app.post('/api/deals/:id/vote', async (req, res) => {
       [id, userId, voteType]
     );
     
-    console.log('Vote successful');
     res.json({ success: true });
   } catch (err) {
     console.error('Error voting on deal:', err);
@@ -1760,22 +1475,13 @@ app.post('/api/admin/competitor-research', requireSuperAdmin, async (req, res) =
     const CompetitorResearcher = require('./scripts/competitor-research');
     const researcher = new CompetitorResearcher();
 
-    console.log('🔍 Starting competitor research...');
-    console.log('Competitors:', competitors);
-    console.log('Stores:', stores);
-    
     const deals = await researcher.researchAllCompetitors(competitors, stores);
 
-    console.log(`📊 Found ${deals.length} deals from competitors`);
-
     // Check for duplicates
-    console.log('🔍 Checking for duplicates...');
     const dealsWithDuplicates = await researcher.checkForDuplicates(deals, pool);
 
     const duplicates = dealsWithDuplicates.filter(deal => deal.isDuplicate);
     const unique = dealsWithDuplicates.filter(deal => !deal.isDuplicate);
-
-    console.log(`✅ Unique deals: ${unique.length}, Duplicates: ${duplicates.length}`);
 
     res.json({
       deals: dealsWithDuplicates,
@@ -1798,14 +1504,10 @@ app.post('/api/admin/insert-researched-deals', requireSuperAdmin, async (req, re
     const CompetitorResearcher = require('./scripts/competitor-research');
     const researcher = new CompetitorResearcher();
 
-    console.log(`💾 Inserting ${deals.length} researched deals...`);
-
     // Filter deals based on duplicate status
     const dealsToInsert = insertDuplicates
       ? deals
       : deals.filter(deal => !deal.isDuplicate);
-
-    console.log(`📝 Will insert ${dealsToInsert.length} deals (${insertDuplicates ? 'including' : 'excluding'} duplicates)`);
 
     const insertedDeals = await researcher.saveDealsToDatabase(dealsToInsert, pool, createdBy);
 
@@ -1830,7 +1532,6 @@ app.post('/api/admin/insert-researched-deals', requireSuperAdmin, async (req, re
       })
     ]);
 
-    console.log(`✅ Successfully inserted ${insertedDeals.length} deals`);
     res.json({
       inserted: insertedDeals.length,
       skipped: deals.length - dealsToInsert.length,
@@ -2055,8 +1756,6 @@ app.post('/api/auth/signin', async (req, res) => {
     
     // Return user data (without password) and include session info
     const { password_hash, ...userData } = user;
-    console.log('Signin successful - returning user:', userData);
-    console.log('Setting cookie for user ID:', user.id);
     res.json({ 
       user: userData, 
       authenticated: true,
@@ -3011,41 +2710,27 @@ app.get('/api/admin/user-stats/:userId', async (req, res) => {
 // Admin user action endpoints
 app.post('/api/admin/admin-ban-user', requireAuth, async (req, res) => {
   try {
-    console.log('🔧 Ban user request received:', req.body);
-    console.log('🔧 Headers:', req.headers);
-    
     const sessionId = req.session.id;
     const elevationToken = req.headers['x-admin-elevation'];
     
-    console.log('🔧 Session ID:', sessionId);
-    console.log('🔧 Elevation token:', elevationToken ? 'Present' : 'Missing');
-    
     if (!elevationToken) {
-      console.log('🔧 ERROR: No elevation token provided');
       return res.status(428).json({ error: 'Admin elevation required' });
     }
     
     // Verify user is admin/superadmin
     const { rows } = await pool.query('SELECT role FROM users WHERE id = $1', [req.session.userId]);
-    console.log('🔧 User role check:', rows[0]);
     
     if (rows.length === 0 || !['admin', 'superadmin'].includes(rows[0].role)) {
-      console.log('🔧 ERROR: Insufficient permissions');
       return res.status(403).json({ error: 'Insufficient permissions' });
     }
     
     const { user_id, reason, duration_days } = req.body;
     const banExpiry = duration_days ? new Date(Date.now() + duration_days * 24 * 60 * 60 * 1000) : null;
     
-    console.log('🔧 Banning user:', user_id, 'for', duration_days, 'days');
-    console.log('🔧 Ban expiry:', banExpiry);
-    
     const result = await pool.query(
       'UPDATE users SET status = $1, ban_expiry = $2 WHERE id = $3', 
       ['banned', banExpiry, user_id]
     );
-    
-    console.log('🔧 Database update result:', result.rowCount, 'rows affected');
     
     res.json({ success: true, message: 'User banned successfully' });
   } catch (err) {
@@ -3083,41 +2768,27 @@ app.post('/api/admin/admin-unban-user', requireAuth, async (req, res) => {
 
 app.post('/api/admin/admin-suspend-user', requireAuth, async (req, res) => {
   try {
-    console.log('🔧 Suspend user request received:', req.body);
-    console.log('🔧 Headers:', req.headers);
-    
     const sessionId = req.session.id;
     const elevationToken = req.headers['x-admin-elevation'];
     
-    console.log('🔧 Session ID:', sessionId);
-    console.log('🔧 Elevation token:', elevationToken ? 'Present' : 'Missing');
-    
     if (!elevationToken) {
-      console.log('🔧 ERROR: No elevation token provided');
       return res.status(428).json({ error: 'Admin elevation required' });
     }
     
     // Verify user is admin/superadmin
     const { rows } = await pool.query('SELECT role FROM users WHERE id = $1', [req.session.userId]);
-    console.log('🔧 User role check:', rows[0]);
     
     if (rows.length === 0 || !['admin', 'superadmin'].includes(rows[0].role)) {
-      console.log('🔧 ERROR: Insufficient permissions');
       return res.status(403).json({ error: 'Insufficient permissions' });
     }
     
     const { user_id, reason, duration_days } = req.body;
     const suspendExpiry = duration_days ? new Date(Date.now() + duration_days * 24 * 60 * 60 * 1000) : null;
     
-    console.log('🔧 Suspending user:', user_id, 'for', duration_days, 'days');
-    console.log('🔧 Suspend expiry:', suspendExpiry);
-    
     const result = await pool.query(
       'UPDATE users SET status = $1, suspend_expiry = $2 WHERE id = $3', 
       ['suspended', suspendExpiry, user_id]
     );
-    
-    console.log('🔧 Database update result:', result.rowCount, 'rows affected');
     
     res.json({ success: true, message: 'User suspended successfully' });
   } catch (err) {
@@ -3678,7 +3349,6 @@ app.post('/api/push/send', async (req, res) => {
   try {
     const { user_id, title, body, data } = req.body;
     // Mock implementation - in production, integrate with push service
-    console.log(`Push notification to user ${user_id}: ${title} - ${body}`);
     res.json({ success: true, message: 'Push notification sent' });
   } catch (err) {
     res.status(500).json({ error: err.message });
@@ -3710,7 +3380,6 @@ app.get('/api/gamification/stats/:userId', async (req, res) => {
 app.post('/api/gamification/award-points', async (req, res) => {
   try {
     const { userId, points, action } = req.body;
-    console.log(`Awarded ${points} points to user ${userId} for ${action}`);
     res.json({ success: true });
   } catch (err) {
     res.status(500).json({ error: err.message });
@@ -3720,7 +3389,6 @@ app.post('/api/gamification/award-points', async (req, res) => {
 app.post('/api/gamification/award-badge', async (req, res) => {
   try {
     const { userId, badgeId } = req.body;
-    console.log(`Awarded badge ${badgeId} to user ${userId}`);
     res.json({ success: true });
   } catch (err) {
     res.status(500).json({ error: err.message });
@@ -4656,5 +4324,4 @@ app.get('/health', (req, res) => {
 });
 
 app.listen(port, '0.0.0.0', () => {
-  console.log(`Server running on port ${port}`);
 });

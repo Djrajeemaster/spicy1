@@ -31,12 +31,10 @@ import {
 import { LinearGradient } from 'expo-linear-gradient';
 import { useLocalSearchParams, router } from 'expo-router';
 import { useAuth } from '@/contexts/AuthProvider';
-import { useDebounce } from '@/hooks/useDebounce';
 import { dealService, DealWithRelations, canEditDeal } from '@/services/dealService';
 import { categoryService } from '@/services/categoryService';
 import { storeService } from '@/services/storeService';
 import { storageService } from '@/services/storageService';
-import { validateUrl } from '@/services/urlService';
 import { Database } from '@/types/database';
 import * as ImagePicker from 'expo-image-picker';
 
@@ -76,15 +74,8 @@ export default function EditDealScreen() {
   const [dataLoading, setDataLoading] = useState(true);
   const [selectedImages, setSelectedImages] = useState<string[]>([]);
   const [uploadingImages, setUploadingImages] = useState(false);
-  const [urlValidating, setUrlValidating] = useState(false);
-  const [urlValid, setUrlValid] = useState<boolean | null>(null);
-  const [extractedImages, setExtractedImages] = useState<string[]>([]);
-  const [urlMetadata, setUrlMetadata] = useState<any>(null);
-  const [showAutoFill, setShowAutoFill] = useState(false);
 
   // Debounce the deal URL for validation
-  const debouncedDealUrl = useDebounce(formData.dealUrl, 1500);
-
   const isWeb = Platform.OS === 'web';
   const [notice, setNotice] = useState<{
     type: 'error' | 'success' | 'info';
@@ -114,17 +105,6 @@ export default function EditDealScreen() {
 
     return () => clearTimeout(timeoutId);
   }, [id, user]);
-
-  useEffect(() => {
-    if (debouncedDealUrl) {
-      validateDealUrl(debouncedDealUrl);
-    } else {
-      setUrlValid(null);
-      setUrlMetadata(null);
-      setExtractedImages([]);
-      setShowAutoFill(false);
-    }
-  }, [debouncedDealUrl]);
 
   const loadData = async () => {
     if (!id || !user) {
@@ -197,104 +177,6 @@ export default function EditDealScreen() {
       setInitialLoading(false);
       setDataLoading(false);
     }
-  };
-
-  const validateDealUrl = async (url: string) => {
-    if (!url.trim()) return;
-
-    setUrlValidating(true);
-    setUrlValid(null);
-
-    try {
-      const result = await validateUrl(url);
-      
-      if (!result.isReachable) {
-        setUrlValid(false);
-        setUrlMetadata(null);
-        setExtractedImages([]);
-        setShowAutoFill(false);
-        return;
-      }
-
-      setUrlValid(true);
-      
-      if (result) {
-        setUrlMetadata(result);
-        setExtractedImages(result.images || []);
-        setShowAutoFill(true);
-      }
-    } catch (error) {
-      console.error('URL validation error:', error);
-      setUrlValid(false);
-    } finally {
-      setUrlValidating(false);
-    }
-  };
-
-  const handleAutoFill = () => {
-    if (!urlMetadata) return;
-
-    const updatedFormData = { ...formData };
-    let hasChanges = false;
-
-    // Only auto-fill empty fields to avoid overwriting user edits
-    if (urlMetadata.title && !formData.title.trim()) {
-      updatedFormData.title = urlMetadata.title;
-      hasChanges = true;
-    }
-
-    // Description
-    if (urlMetadata.description && !formData.description.trim()) {
-      updatedFormData.description = urlMetadata.description;
-      hasChanges = true;
-    }
-
-    // Category matching
-    if (urlMetadata.category && categories.length > 0) {
-      const matchingCategory = categories.find((cat: Category) =>
-        cat.name.toLowerCase().includes(urlMetadata.category!.toLowerCase()) ||
-        urlMetadata.category!.toLowerCase().includes(cat.name.toLowerCase())
-      );
-      if (matchingCategory && !formData.selectedCategoryId) {
-        updatedFormData.selectedCategoryId = matchingCategory.id;
-        hasChanges = true;
-      }
-    }
-
-    // Store matching
-    if (urlMetadata.store && stores.length > 0) {
-      const matchingStore = stores.find((store: Store) =>
-        store.name.toLowerCase().includes(urlMetadata.store!.toLowerCase()) ||
-        urlMetadata.store!.toLowerCase().includes(store.name.toLowerCase())
-      );
-      if (matchingStore && !formData.selectedStoreId) {
-        updatedFormData.selectedStoreId = matchingStore.id;
-        hasChanges = true;
-      }
-    }
-
-    // Pricing
-    if (urlMetadata.price && !formData.price.trim()) {
-      updatedFormData.price = urlMetadata.price.toString();
-      hasChanges = true;
-    }
-
-    if (urlMetadata.originalPrice && !formData.originalPrice.trim()) {
-      updatedFormData.originalPrice = urlMetadata.originalPrice.toString();
-      hasChanges = true;
-    }
-
-    if (hasChanges) {
-      setFormData(updatedFormData);
-    }
-
-    // Add extracted images if we have space
-    if (extractedImages.length > 0 && selectedImages.length < 5) {
-      const imagesToAdd = extractedImages.slice(0, 5 - selectedImages.length);
-      setSelectedImages(prev => [...prev, ...imagesToAdd]);
-    }
-
-    setShowAutoFill(false);
   };
 
   const handleSubmit = async () => {
@@ -463,13 +345,6 @@ export default function EditDealScreen() {
     setSelectedImages(prev => prev.filter((_, i) => i !== index));
   };
 
-  const addExtractedImage = (imageUrl: string) => {
-    if (selectedImages.length >= 5 || selectedImages.includes(imageUrl)) {
-      return;
-    }
-    setSelectedImages(prev => [...prev, imageUrl]);
-  };
-
   if (initialLoading) {
     return (
       <SafeAreaView style={styles.container}>
@@ -619,12 +494,6 @@ export default function EditDealScreen() {
           <View style={styles.sectionHeader}>
             <Zap size={20} color="#f59e0b" />
             <Text style={styles.sectionTitle}>Deal Link</Text>
-            {urlValidating && <ActivityIndicator size="small" color="#f59e0b" style={{ marginLeft: 8 }} />}
-            {urlValidating && (
-              <Text style={styles.fetchingText}>Fetching metadata...</Text>
-            )}
-            {urlValid === true && <CheckCircle size={20} color="#10b981" style={{ marginLeft: 8 }} />}
-            {urlValid === false && <X size={20} color="#ef4444" style={{ marginLeft: 8 }} />}
           </View>
 
           <View style={styles.inputContainer}>
@@ -642,21 +511,6 @@ export default function EditDealScreen() {
               keyboardType="url"
             />
           </View>
-
-          {showAutoFill && urlMetadata && (
-            <TouchableOpacity style={styles.autoFillButton} onPress={handleAutoFill}>
-              <LinearGradient colors={['#f59e0b', '#d97706']} style={styles.autoFillButton}>
-                <Zap size={20} color="#FFFFFF" />
-                <Text style={styles.autoFillButtonText}>Auto-fill from URL</Text>
-              </LinearGradient>
-            </TouchableOpacity>
-          )}
-
-          {urlValid === false && (
-            <Text style={styles.helpTextError}>
-              ⚠️ Please enter a valid URL (e.g., https://amazon.com/...)
-            </Text>
-          )}
         </View>
 
         {/* Pricing */}
@@ -894,44 +748,6 @@ export default function EditDealScreen() {
             <Upload size={20} color="#8b5cf6" />
             <Text style={styles.sectionTitle}>Images</Text>
           </View>
-          
-          {/* Extracted Images from Deal URL */}
-          {extractedImages.length > 0 && (
-            <View style={styles.extractedImagesSection}>
-              <Text style={styles.extractedImagesTitle}>Images from Deal URL</Text>
-              <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.extractedImageContainer}>
-                {extractedImages.map((imageUrl, index) => (
-                  <TouchableOpacity 
-                    key={index} 
-                    style={styles.extractedImageWrapper}
-                    onPress={() => addExtractedImage(imageUrl)}
-                    disabled={selectedImages.length >= 5 || selectedImages.includes(imageUrl)}
-                  >
-                    <Image 
-                      source={{ uri: imageUrl }} 
-                      style={styles.extractedImage}
-                      onError={(error) => {
-                        console.log(`Failed to load image: ${imageUrl}`, error);
-                      }}
-                    />
-                    <View style={[
-                      styles.extractedImageOverlay,
-                      selectedImages.includes(imageUrl) ? styles.extractedImageOverlaySelected : null
-                    ]}>
-                      {selectedImages.includes(imageUrl) ? (
-                        <CheckSquare size={24} color="#22c55e" />
-                      ) : (
-                        <Plus size={24} color="#ffffff" />
-                      )}
-                    </View>
-                  </TouchableOpacity>
-                ))}
-              </ScrollView>
-              <Text style={styles.extractedHelpText}>
-                Tap to add images from the deal website
-              </Text>
-            </View>
-          )}
           
           {/* Selected Images */}
           <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.imageContainer}>

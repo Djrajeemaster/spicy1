@@ -67,7 +67,6 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
         const data = await response.json();
 
         if (!data.authenticated && user) {
-          console.log('Session expired, clearing local state');
           setSession(null);
           setUser(null);
           setProfile(null);
@@ -117,7 +116,6 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
             setSession(serverSession.session || { user_id: normalized.id });
             setUser(normalized);
             setProfile(normalized);
-            console.log('Session restored from storage and verified:', normalized);
             setLoading(false);
             return;
           }
@@ -140,7 +138,6 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
       
       if (response.ok) {
         const sessionData = await response.json();
-        console.log('Session data received:', sessionData);
 
         if (sessionData.authenticated && sessionData.user) {
           const normalized = normalizeUserRole(sessionData.user);
@@ -154,15 +151,12 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
             await AsyncStorage.setItem('user_data', JSON.stringify(normalized));
           }
           
-          console.log('User authenticated:', normalized);
         } else {
-          console.log('No authenticated user found');
           setSession(null);
           setUser(null);
           setProfile(null);
         }
       } else {
-        console.log('Session check failed:', response.status);
         setSession(null);
         setUser(null);
         setProfile(null);
@@ -198,7 +192,6 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
       
       const data = await response.json();
       logger.authEvent('signin_success');
-      console.log('Signin response data:', data);
       
       // Set the user and session data immediately from signin response
       if (data.authenticated && data.user) {
@@ -213,7 +206,6 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
           await AsyncStorage.setItem('user_data', JSON.stringify(normalized));
         }
         
-        console.log('User signed in successfully:', normalized);
       } else {
         console.error('Signin response missing user data');
         return { error: new Error('Invalid response from server') };

@@ -50,7 +50,6 @@ export async function listUsers(params?: { q?: string; role?: string; limit?: nu
   }
 
   // Fallback: Direct API query
-  console.log('Using direct database query for listUsers');
   
   try {
     const data = await apiClient.get('/users');

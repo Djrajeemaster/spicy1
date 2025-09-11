@@ -28,7 +28,6 @@ export default function ForgotPasswordScreen() {
   // Redirect if user is already logged in
   useEffect(() => {
     if (!authLoading && user) {
-      console.log('User already logged in, redirecting to home');
       router.replace('/(tabs)');
     }
   }, [authLoading, user]);

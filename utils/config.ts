@@ -69,7 +69,6 @@ export const getApiUrl = (path: string): string => {
   // Ensure path starts with /api if it doesn't already
   const apiPath = path.startsWith('/api') ? path : `/api${path}`;
   const fullUrl = `${baseUrl}${apiPath}`;
-  console.log(`🔧 getApiUrl: ${path} -> ${fullUrl}`);
   return fullUrl;
 };
 
@@ -108,12 +107,3 @@ export const getShareUrl = (path: string): string => {
 export const API_BASE_URL = config.API_BASE_URL;
 
 // Debug helper (remove in production)
-export const logConfig = () => {
-  console.log('🔧 App Configuration:', {
-    API_BASE_URL: config.API_BASE_URL,
-    DOMAIN_URL: getDomainUrl(),
-    ENVIRONMENT: config.ENVIRONMENT,
-    IS_LOCAL: config.IS_LOCAL,
-    hostname: typeof window !== 'undefined' ? window.location.hostname : 'server',
-  });
-};

@@ -12,7 +12,6 @@ export default function UserDebugInfo() {
       try {
         // Get current session
         const { data: session } = await supabase.auth.getSession();
-        console.log('Session:', session);
 
         if (session.session?.user?.id) {
           // Get user details from users table
@@ -22,7 +21,6 @@ export default function UserDebugInfo() {
             .eq('id', session.session.user.id)
             .single();
 
-          console.log('User data:', userData, 'Error:', error);
           setUserInfo({
             authUser: session.session.user,
             dbUser: userData,

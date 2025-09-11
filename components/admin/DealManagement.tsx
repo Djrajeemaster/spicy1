@@ -86,10 +86,8 @@ const DealItem: React.FC<{
         // Close modal immediately when user confirms
         setConfirmationModal(null);
         
-        console.log('Executing action:', action, 'for deal:', deal.id);
         try {
           await onDealAction(deal.id, action);
-          console.log('Action completed successfully');
           // Refresh data after action
           if (onRefresh) onRefresh();
         } catch (error) {
@@ -217,9 +215,7 @@ export const DealManagement: React.FC<DealManagementProps> = ({ deals, onDealAct
 
   const fetchAllSystemDeals = async () => {
     try {
-      console.log('Fetching all system deals...');
       const dealsData = await apiClient.get<AdminDeal[]>('/deals?moderation=true&limit=1000'); // Get all deals needing moderation with high limit
-      console.log('Fetched all system deals:', dealsData.length);
       setAllSystemDeals(dealsData);
     } catch (error) {
       console.error('Error fetching all system deals:', error);
@@ -229,9 +225,7 @@ export const DealManagement: React.FC<DealManagementProps> = ({ deals, onDealAct
 
   const fetchAllDeals = async () => {
     try {
-      console.log('Fetching all deals...');
       const dealsData = await apiClient.get<AdminDeal[]>('/deals?limit=1000'); // Get all deals with high limit
-      console.log('Fetched all deals:', dealsData.length);
       setAllDealsData(dealsData);
     } catch (error) {
       console.error('Error fetching all deals:', error);
@@ -276,11 +270,6 @@ export const DealManagement: React.FC<DealManagementProps> = ({ deals, onDealAct
       }
     });
   })();
-  
-  console.log('Current filter:', filter);
-  console.log('Pending deals:', allDeals.map(d => ({ id: d.id, title: d.title, status: d.status })));
-  console.log('All system deals:', allSystemDeals.map(d => ({ id: d.id, title: d.title, status: d.status })));
-  console.log('Filtered deals:', filteredDeals.map(d => ({ id: d.id, title: d.title, status: d.status })));
 
   const handleSelectDeal = (dealId: string) => {
     setSelectedDeals(prev => 
@@ -299,10 +288,8 @@ export const DealManagement: React.FC<DealManagementProps> = ({ deals, onDealAct
   };
 
   const handleBulkAction = async (action: 'approve' | 'reject' | 'delete' | 'harddelete') => {
-    console.log('handleBulkAction called with:', action, 'selectedDeals:', selectedDeals);
     
     if (selectedDeals.length === 0) {
-      console.log('No deals selected');
       setBulkConfirmationModal({
         visible: true,
         title: 'No Selection',
@@ -317,8 +304,6 @@ export const DealManagement: React.FC<DealManagementProps> = ({ deals, onDealAct
       ? `Are you sure you want to ${actionText} ${selectedDeals.length} deal(s)? This action cannot be undone!`
       : `Are you sure you want to ${actionText} ${selectedDeals.length} deal(s)?`;
     
-    console.log('Showing confirmation dialog for:', actionText);
-    
     setBulkConfirmationModal({
       visible: true,
       title: 'Confirm Bulk Action',
@@ -328,26 +313,19 @@ export const DealManagement: React.FC<DealManagementProps> = ({ deals, onDealAct
         // Close modal immediately when user confirms
         setBulkConfirmationModal(null);
         
-        console.log('User confirmed bulk action');
         const dealCount = selectedDeals.length;
         try {
           for (const dealId of selectedDeals) {
-            console.log('Processing deal:', dealId);
             try {
               if (action === 'approve') {
-                console.log('Calling onDealAction with Approve');
                 await onDealAction(dealId, 'Approve');
               } else if (action === 'reject') {
-                console.log('Calling onDealAction with Reject');
                 await onDealAction(dealId, 'Reject');
               } else if (action === 'harddelete') {
-                console.log('Calling onDealAction with HardDelete');
                 await onDealAction(dealId, 'HardDelete');
               } else {
-                console.log('Calling onDealAction with Delete');
                 await onDealAction(dealId, 'Delete');
               }
-              console.log('Deal action completed for:', dealId);
             } catch (error) {
               console.error('Error processing deal:', dealId, error);
               throw error;
@@ -433,25 +411,21 @@ export const DealManagement: React.FC<DealManagementProps> = ({ deals, onDealAct
           </TouchableOpacity>
           <View style={dealStyles.bulkActionButtons}>
             <TouchableOpacity onPress={() => {
-              console.log('Approve button clicked');
               handleBulkAction('approve');
             }} style={[dealStyles.bulkButton, dealStyles.approveButton]}>
               <Text style={dealStyles.bulkButtonText}>Approve ({selectedDeals.length})</Text>
             </TouchableOpacity>
             <TouchableOpacity onPress={() => {
-              console.log('Reject button clicked');
               handleBulkAction('reject');
             }} style={[dealStyles.bulkButton, dealStyles.rejectButton]}>
               <Text style={dealStyles.bulkButtonText}>Reject ({selectedDeals.length})</Text>
             </TouchableOpacity>
             <TouchableOpacity onPress={() => {
-              console.log('Delete button clicked');
               handleBulkAction('delete');
             }} style={[dealStyles.bulkButton, dealStyles.deleteButton]}>
               <Text style={dealStyles.bulkButtonText}>Delete ({selectedDeals.length})</Text>
             </TouchableOpacity>
             <TouchableOpacity onPress={() => {
-              console.log('Hard Delete button clicked');
               handleBulkAction('harddelete');
             }} style={[dealStyles.bulkButton, dealStyles.hardDeleteButton]}>
               <Text style={dealStyles.bulkButtonText}>Hard Delete ({selectedDeals.length})</Text>

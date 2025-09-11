@@ -29,12 +29,10 @@ import {
 import { LinearGradient } from 'expo-linear-gradient';
 import { useLocalSearchParams, router } from 'expo-router';
 import { useAuth } from '@/contexts/AuthProvider';
-import { useDebounce } from '@/hooks/useDebounce';
 import { dealService, DealWithRelations } from '@/services/dealService';
 import { categoryService } from '@/services/categoryService';
 import { storeService } from '@/services/storeService';
 import { storageService } from '@/services/storageService';
-import { urlService } from '@/services/urlService';
 import { Database } from '@/types/database';
 import * as ImagePicker from 'expo-image-picker';
 
@@ -70,14 +68,6 @@ export default function EditDealScreen() {
   const [dataLoading, setDataLoading] = useState(true);
   const [selectedImages, setSelectedImages] = useState<string[]>([]);
   const [uploadingImages, setUploadingImages] = useState(false);
-  const [urlValidating, setUrlValidating] = useState(false);
-  const [urlValid, setUrlValid] = useState<boolean | null>(null);
-  const [extractedImages, setExtractedImages] = useState<string[]>([]);
-  const [urlMetadata, setUrlMetadata] = useState<any>(null);
-  const [showAutoFill, setShowAutoFill] = useState(false);
-
-  // Debounce the deal URL for validation
-  const debouncedDealUrl = useDebounce(formData.dealUrl, 1500);
 
   const isWeb = Platform.OS === 'web';
   const [notice, setNotice] = useState<{
@@ -94,17 +84,6 @@ export default function EditDealScreen() {
   useEffect(() => {
     loadData();
   }, [id]);
-
-  useEffect(() => {
-    if (debouncedDealUrl) {
-      validateDealUrl(debouncedDealUrl);
-    } else {
-      setUrlValid(null);
-      setUrlMetadata(null);
-      setExtractedImages([]);
-      setShowAutoFill(false);
-    }
-  }, [debouncedDealUrl]);
 
   const loadData = async () => {
     if (!id || !user) return;
@@ -169,38 +148,6 @@ export default function EditDealScreen() {
     }
   };
 
-  const validateDealUrl = async (url: string) => {
-    if (!url.trim()) return;
-
-    setUrlValidating(true);
-    setUrlValid(null);
-
-    try {
-      const result = await urlService.validateUrl(url);
-      
-      if (!result.isValid) {
-        setUrlValid(false);
-        setUrlMetadata(null);
-        setExtractedImages([]);
-        setShowAutoFill(false);
-        return;
-      }
-
-      setUrlValid(true);
-      
-      if (result) {
-        setUrlMetadata(result);
-        setExtractedImages(result.images || []);
-        setShowAutoFill(true);
-      }
-    } catch (error) {
-      console.error('URL validation error:', error);
-      setUrlValid(false);
-    } finally {
-      setUrlValidating(false);
-    }
-  };
-
   const handleSubmit = async () => {
     if (!deal || !user) return;
 
@@ -239,9 +186,9 @@ export default function EditDealScreen() {
         original_price: formData.originalPrice ? Number(formData.originalPrice) : null,
         category_id: formData.selectedCategoryId,
         store_id: formData.selectedStoreId,
-        city: formData.city.trim() || null,
-        state: formData.state.trim() || null,
-        country: formData.country.trim() || null,
+        city: formData.city.trim() || undefined,
+        state: formData.state.trim() || undefined,
+        country: formData.country.trim() || undefined,
         expiry_date: formData.expiryDate || null,
         deal_url: formData.dealUrl.trim() || null,
         coupon_code: formData.couponCode.trim() || null,

@@ -55,11 +55,9 @@ export default function AlertsScreen() {
       
       // Only reload if data is stale
       if (timeSinceLastLoad > ALERTS_RELOAD_THRESHOLD) {
-        console.log('🔄 Alerts: Reloading data on focus');
         loadData();
         lastAlertsLoadRef.current = now;
       } else {
-        console.log('📱 Alerts: Skipping reload, data is fresh');
       }
     }, [loadData])
   );

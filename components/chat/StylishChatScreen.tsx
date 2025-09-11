@@ -135,7 +135,6 @@ const StylishChatScreen: React.FC<StylishChatScreenProps> = ({ visible, onClose 
 
   useEffect(() => {
     if (visible && user && !channelsLoadedRef.current) {
-      console.log('Loading channels for the first time');
       loadChannels();
       checkUserBanStatus();
       channelsLoadedRef.current = true;
@@ -220,13 +219,11 @@ const StylishChatScreen: React.FC<StylishChatScreenProps> = ({ visible, onClose 
 
   const loadChannels = async () => {
     if (!user || loading || channels.length > 0) {
-      console.log('Skipping loadChannels - already loaded or loading');
       return;
     }
 
     try {
       setLoading(true);
-      console.log('Loading channels...');
       const channelsData = await chatService.getChannels();
       const validChannels = Array.isArray(channelsData) ? channelsData : [];
       setChannels(validChannels);
@@ -389,16 +386,10 @@ const StylishChatScreen: React.FC<StylishChatScreenProps> = ({ visible, onClose 
 
   const handleGifSelect = async (gifUrl: string) => {
     if (!selectedChannel || !user) {
-      console.log('No selected channel or user for GIF');
       return;
     }
 
-    console.log('handleGifSelect called with URL:', gifUrl);
-    console.log('Selected channel:', selectedChannel.id);
-
     try {
-      console.log('Sending GIF directly to chat:', gifUrl);
-
       // Send GIF message directly
       const gifMessage = await chatService.sendMessage(
         selectedChannel.id,
@@ -409,16 +400,10 @@ const StylishChatScreen: React.FC<StylishChatScreenProps> = ({ visible, onClose 
         { gifUrl } // GIF URL in metadata
       );
 
-      console.log('GIF message sent:', gifMessage);
-      console.log('GIF message metadata:', gifMessage.metadata);
-      console.log('GIF message type:', gifMessage.message_type);
-
       // Add to local messages immediately
       setMessages(prev => {
         const currentMessages = Array.isArray(prev) ? prev : [];
         const updatedMessages = [...currentMessages, gifMessage];
-        console.log('Updated messages after GIF send:', updatedMessages.length, 'messages');
-        console.log('Last message:', updatedMessages[updatedMessages.length - 1]);
         return updatedMessages.slice(-100);
       });
 
@@ -708,12 +693,19 @@ const StylishChatScreen: React.FC<StylishChatScreenProps> = ({ visible, onClose 
 
     // Handle GIF content
     const renderMessageContent = () => {
-      console.log('Rendering message:', item.id, 'type:', item.message_type, 'content:', item.content, 'metadata:', item.metadata);
-
       // Check for GIF message type with metadata
       if (item.message_type === 'gif' && item.metadata?.gifUrl) {
-        console.log('Found GIF message with URL:', item.metadata.gifUrl);
         const hasError = gifLoadError[item.id];
+        
+        if (hasError) {
+          return (
+            <View style={styles.messageContent}>
+              <Text style={styles.messageText}>
+                [GIF Failed: {item.metadata.gifUrl}]
+              </Text>
+            </View>
+          );
+        }
         
         if (hasError) {
           return (
@@ -732,10 +724,9 @@ const StylishChatScreen: React.FC<StylishChatScreenProps> = ({ visible, onClose 
               style={styles.gifImage}
               resizeMode="contain"
               onError={(e) => {
-                console.log('GIF load error:', e.nativeEvent.error, 'URL:', item.metadata.gifUrl);
                 setGifLoadError(prev => ({ ...prev, [item.id]: true }));
               }}
-              onLoad={() => console.log('GIF loaded successfully:', item.metadata.gifUrl)}
+              onLoad={() => {}}
             />
           </View>
         );
@@ -746,8 +737,6 @@ const StylishChatScreen: React.FC<StylishChatScreenProps> = ({ visible, onClose 
         const gifMatch = item.content.match(/\[GIF:\s*(.*?)\]/);
         const gifUrl = gifMatch ? gifMatch[1] : null;
         const textContent = item.content.replace(/\[GIF:\s*.*?\]/, '').trim();
-
-        console.log('Found GIF in content, URL:', gifUrl);
 
         if (gifUrl) {
           const hasError = gifLoadError[item.id];
@@ -770,10 +759,9 @@ const StylishChatScreen: React.FC<StylishChatScreenProps> = ({ visible, onClose 
                 style={styles.gifImage}
                 resizeMode="contain"
                 onError={(e) => {
-                  console.log('GIF load error:', e.nativeEvent.error, 'URL:', gifUrl);
                   setGifLoadError(prev => ({ ...prev, [item.id]: true }));
                 }}
-                onLoad={() => console.log('GIF loaded successfully:', gifUrl)}
+                onLoad={() => {}}
               />
               {textContent ? <Text style={styles.messageText}>{textContent}</Text> : null}
             </View>

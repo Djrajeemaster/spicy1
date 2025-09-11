@@ -14,45 +14,25 @@ export default function EditBannerScreen() {
   const [isActive, setIsActive] = useState(true);
   const [loading, setLoading] = useState(false);
 
-  console.log('=== EDIT BANNER SCREEN INITIALIZED ===');
-  console.log('Initial params:', params);
-
   useEffect(() => {
-    console.log('EditBanner: useEffect triggered with params:', params);
-    console.log('EditBanner: Current state before update:', { title, description, imageUrl, priority, isActive });
-
     // Pre-fill form with existing banner data
     if (params.title) setTitle(params.title as string);
     if (params.description) setDescription(params.description as string);
     if (params.imageUrl) setImageUrl(params.imageUrl as string);
     if (params.priority) setPriority(params.priority as string);
     if (params.isActive) setIsActive(params.isActive === 'true');
-
-    console.log('EditBanner: Form state after update:', { title, description, imageUrl, priority, isActive });
   }, [params.title, params.description, params.imageUrl, params.priority, params.isActive]);
 
   const handleUpdateBanner = async () => {
-    console.log('=== UPDATE BANNER CALLED ===');
-    console.log('Current form values:');
-    console.log('- Title:', title);
-    console.log('- Description:', description);
-    console.log('- Image URL:', imageUrl);
-    console.log('- Priority:', priority);
-    console.log('- Is Active:', isActive);
-
     if (!title.trim() || !description.trim()) {
-      console.log('Validation failed: missing title or description');
       Alert.alert('Error', 'Please fill in title and description');
       return;
     }
 
     if (!params.bannerId) {
-      console.log('Validation failed: missing bannerId');
       Alert.alert('Error', 'Banner ID not found');
       return;
     }
-
-    console.log('Validation passed, proceeding with update...');
 
     try {
       setLoading(true);
@@ -65,20 +45,15 @@ export default function EditBannerScreen() {
         is_active: isActive,
       };
 
-      console.log('Sending updates:', updates);
-
       const { error } = await bannerService.updateBanner(params.bannerId as string, updates);
 
       if (error) {
-        console.log('Update error:', error);
         throw error;
       }
 
-      console.log('Update successful');
       Alert.alert('Success', 'Banner updated successfully');
       setTimeout(() => router.replace('/(tabs)/admin'), 1000);
     } catch (error: any) {
-      console.log('Update failed with error:', error);
       Alert.alert('Error', error.message || 'Failed to update banner');
     } finally {
       setLoading(false);
@@ -113,7 +88,6 @@ export default function EditBannerScreen() {
             onChangeText={(text) => {
               // Only log if text actually changed and is not empty
               if (text !== title && text.length > 0) {
-                console.log('Title changed to:', text);
               }
               setTitle(text);
             }}
@@ -138,7 +112,6 @@ export default function EditBannerScreen() {
             onChangeText={(text) => {
               // Only log if text actually changed and is not empty
               if (text !== description && text.length > 0) {
-                console.log('Description changed to:', text);
               }
               setDescription(text);
             }}
@@ -166,7 +139,6 @@ export default function EditBannerScreen() {
             onChangeText={(text) => {
               // Only log if text actually changed and is not empty
               if (text !== imageUrl && text.length > 0) {
-                console.log('Image URL changed to:', text);
               }
               setImageUrl(text);
             }}
@@ -191,7 +163,6 @@ export default function EditBannerScreen() {
             onChangeText={(text) => {
               // Only log if text actually changed and is not empty
               if (text !== priority && text.length > 0) {
-                console.log('Priority changed to:', text);
               }
               setPriority(text);
             }}
@@ -213,9 +184,7 @@ export default function EditBannerScreen() {
             <TouchableOpacity
               style={[styles.statusButton, !isActive && styles.statusButtonActive]}
               onPress={() => {
-                console.log('Inactive button pressed, current isActive:', isActive);
                 setIsActive(false);
-                console.log('isActive set to false');
               }}
             >
               <Text style={[styles.statusText, !isActive ? styles.statusTextActive : null]}>Inactive</Text>
@@ -223,9 +192,7 @@ export default function EditBannerScreen() {
             <TouchableOpacity
               style={[styles.statusButton, isActive && styles.statusButtonActive]}
               onPress={() => {
-                console.log('Active button pressed, current isActive:', isActive);
                 setIsActive(true);
-                console.log('isActive set to true');
               }}
             >
               <Text style={[styles.statusText, isActive ? styles.statusTextActive : null]}>Active</Text>
@@ -238,13 +205,6 @@ export default function EditBannerScreen() {
           <TouchableOpacity
             style={[styles.updateButton, loading ? styles.updateButtonDisabled : null]}
             onPress={() => {
-              console.log('=== DEBUG FORM STATE ===');
-              console.log('Title:', title);
-              console.log('Description:', description);
-              console.log('Image URL:', imageUrl);
-              console.log('Priority:', priority);
-              console.log('Is Active:', isActive);
-              console.log('=======================');
             }}
           >
             <View style={styles.updateButtonGradient}>
@@ -256,7 +216,6 @@ export default function EditBannerScreen() {
         <TouchableOpacity
           style={[styles.updateButton, loading ? styles.updateButtonDisabled : null]}
           onPress={() => {
-            console.log('Update button pressed');
             handleUpdateBanner();
           }}
           disabled={loading}

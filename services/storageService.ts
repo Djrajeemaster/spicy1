@@ -159,7 +159,6 @@ class StorageService {
       
       const uploadPromises = uris.map(async (uri, index) => {
         try {
-          console.log(`Uploading image ${index + 1}/${uris.length}: ${uri}`);
           return await this.uploadImage(uri, `image_${index + 1}`);
         } catch (error) {
           console.warn(`Failed to upload image ${index + 1} (${uri}):`, error);
@@ -176,8 +175,6 @@ class StorageService {
 
       // Check if any uploads failed
       const failedUploads = results.filter(result => result.error);
-      
-      console.log(`Upload summary: ${successfulUploads.length} succeeded, ${failedUploads.length} failed`);
       
       if (failedUploads.length > 0 && successfulUploads.length === 0) {
         // All uploads failed

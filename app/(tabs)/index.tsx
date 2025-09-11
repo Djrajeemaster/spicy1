@@ -147,7 +147,6 @@ export default function HomeScreen() {
         if (cachedLocation) {
           setUserLocation(cachedLocation);
           setLocationEnabled(true);
-          console.log('Found cached location:', cachedLocation);
           return;
         }
 
@@ -157,11 +156,9 @@ export default function HomeScreen() {
         if (location && !error) {
           setUserLocation(location);
           setLocationEnabled(true);
-          console.log('Retrieved current location:', location);
         }
       } catch (error) {
         // Silently fail - user will need to manually enable location
-        console.log('No existing location available');
       }
     };
     checkExistingLocation();
@@ -192,12 +189,6 @@ export default function HomeScreen() {
 
   // Debug authentication state
   useEffect(() => {
-    console.log('🔐 Auth state changed:', {
-      user: user ? `${user.email} (${user.id})` : 'Not logged in',
-      profile: profile ? `${profile.username} (${profile.role})` : 'No profile',
-      isGuest,
-      authLoading
-    });
   }, [user, profile, isGuest, authLoading]);
 
   // aliveRef prevents setState on unmounted component
@@ -206,7 +197,6 @@ export default function HomeScreen() {
 
   // ----- Filters data (categories/stores) -----
   const loadFilterData = useCallback(async () => {
-    console.log('🔄 Starting to load filter data...');
     
     // Set immediate fallbacks to prevent long loading
     setAvailableCategories([{ id: 'all' as any, name: 'All', emoji: '🔥' } as any]);
@@ -236,12 +226,6 @@ export default function HomeScreen() {
       const stores = storesRes.status === 'fulfilled' ? storesRes.value?.data || [] : [];
       const banners = bannersRes.status === 'fulfilled' ? bannersRes.value?.data || [] : [];
 
-      console.log('✅ Filter data loaded in background:', {
-        categories: categories.length,
-        stores: stores.length,
-        banners: banners.length
-      });
-
       // Update with actual data if available
       if (categories.length > 0) {
         setAvailableCategories([{ id: 'all' as any, name: 'All', emoji: '🔥' } as any, ...categories]);
@@ -259,7 +243,6 @@ export default function HomeScreen() {
   }, []);
 
   useEffect(() => {
-    console.log('🚀 Index page mounted, starting filter data load...');
     loadFilterData();
     
     // Reduced timeout to 5 seconds instead of 10
@@ -273,15 +256,11 @@ export default function HomeScreen() {
 
   // ----- Deals loader -----
   const loadDeals = useCallback(async () => {
-    console.log('🔄 Starting to load deals...');
     setLoading(true);
     try {
       const data = await fetchDealsFromApi();
-      console.log('📊 Deals fetched:', data?.length || 0, 'deals');
-      console.log('📋 Sample deal:', data?.[0] ? { id: data[0].id, title: data[0].title } : 'No deals');
       setDeals(data);
       setLoading(false);
-      console.log('✅ Deals loading completed');
     } catch (error) {
       console.error('❌ Error in loadDeals:', error);
       setDeals([]);
@@ -296,7 +275,6 @@ export default function HomeScreen() {
   // Apply filters whenever search query or filter options change
   useEffect(() => {
     const filterDeals = async () => {
-      console.log('🔍 Starting to filter deals...', { dealsCount: deals.length, searchQuery, selectedCategories, selectedStores });
       let filtered = [...deals];
 
       // Apply search query filter
@@ -418,7 +396,6 @@ export default function HomeScreen() {
       });
 
       setFilteredDeals(filtered);
-      console.log('🔍 Filtered deals:', filtered.length, 'deals after filtering');
     };
 
     filterDeals();
@@ -438,18 +415,9 @@ export default function HomeScreen() {
       // 2. It's been more than 10 minutes since last load
       // 3. User explicitly requested refresh
       if (deals.length === 0 || timeSinceLastLoad > RELOAD_THRESHOLD) {
-        console.log('🔄 Home: Reloading deals on focus', { 
-          dealsCount: deals.length, 
-          timeSinceLastLoad: Math.round(timeSinceLastLoad / 1000), 
-          loading 
-        });
         loadDeals();
         lastLoadTimeRef.current = now;
       } else {
-        console.log('📱 Home: Skipping reload, data is fresh', { 
-          dealsCount: deals.length, 
-          timeSinceLastLoad: Math.round(timeSinceLastLoad / 1000) 
-        });
       }
     }, [deals.length, loadDeals]) // Removed 'loading' dependency to prevent unnecessary reloads
   );
@@ -591,7 +559,6 @@ export default function HomeScreen() {
   const navigateToPost = () => router.push('/post');
 
   if (authLoading) {
-    console.log('🔐 Index page showing loading screen for authentication...');
     return (
       <SafeAreaView style={styles.loadingContainer}>
         <ActivityIndicator size="large" color="#6366f1" />
@@ -604,7 +571,6 @@ export default function HomeScreen() {
   }
 
   if (dataLoading) {
-    console.log('🕐 Index page showing loading screen for filter options...');
     return (
       <SafeAreaView style={styles.loadingContainer}>
         <ActivityIndicator size="large" color="#6366f1" />

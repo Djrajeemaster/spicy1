@@ -121,11 +121,9 @@ export default function UpDealsScreen() {
       
       // Only reload if data is stale or empty
       if (personalizedDeals.length === 0 || timeSinceLastLoad > RELOAD_THRESHOLD) {
-        console.log('🔄 For You: Reloading deals on focus');
         loadData();
         lastLoadTimeRef.current = now;
       } else {
-        console.log('📱 For You: Skipping reload, data is fresh');
       }
     }, [personalizedDeals.length, loadData, isGuest])
   );

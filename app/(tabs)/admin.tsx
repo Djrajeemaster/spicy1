@@ -38,7 +38,6 @@ export default function AdminScreen() {
   // Set initial tab based on URL parameter
   useEffect(() => {
     if (params.tab && typeof params.tab === 'string') {
-      console.log('Admin: Setting initial tab from URL parameter:', params.tab);
       setActiveTab(params.tab as AdminTab);
     }
   }, [params.tab]);
@@ -75,11 +74,9 @@ export default function AdminScreen() {
       
       // Only reload if data is stale or missing and refreshData is available
       if (refreshData && (timeSinceLastLoad > ADMIN_RELOAD_THRESHOLD || !adminStats)) {
-        console.log('🔄 Admin: Reloading data on focus');
         refreshData();
         lastAdminLoadRef.current = now;
       } else {
-        console.log('📱 Admin: Skipping reload, data is fresh or refreshData not available');
       }
     }, [refreshData, adminStats])
   );
@@ -95,10 +92,8 @@ export default function AdminScreen() {
         const data = await response.json();
 
         if (!data.authenticated) {
-          console.log('Admin: User not authenticated, redirecting to login');
           router.replace('/sign-in');
         } else {
-          console.log('Admin: User authenticated');
         }
       } catch (error) {
         console.error('Admin: Error checking authentication:', error);
@@ -178,10 +173,8 @@ export default function AdminScreen() {
           deals={pendingDeals} 
           onRefresh={refreshData}
           onDealAction={async (dealId, action) => {
-            console.log('Admin onDealAction called:', { dealId, action });
             try {
               await handleDealAction(dealId, action, profile?.id || '');
-              console.log('handleDealAction completed successfully');
               const actionText = action === 'HardDelete' ? 'permanently deleted' : `${action.toLowerCase()}d`;
               Alert.alert('Success', `Deal ${actionText} successfully`);
               refreshData();
@@ -206,23 +199,12 @@ export default function AdminScreen() {
           onToggleBanner={toggleBanner} 
           onAddNewBanner={addNewBanner} 
           onEditBanner={async (bannerId) => {
-            console.log('Admin: onEditBanner called with bannerId:', bannerId);
             const banner = banners.find(b => b.id === bannerId);
-            console.log('Admin: Found banner:', banner);
             if (!banner) {
-              console.log('Admin: Banner not found');
               return;
             }
 
             // Navigate to edit banner screen with banner data
-            console.log('Admin: Navigating to edit-banner with params:', {
-              bannerId: banner.id,
-              title: banner.title,
-              description: banner.description,
-              imageUrl: banner.image_url || '',
-              priority: banner.priority.toString(),
-              isActive: banner.is_active.toString()
-            });
             router.push({
               pathname: '/edit-banner',
               params: {

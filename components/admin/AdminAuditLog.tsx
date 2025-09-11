@@ -47,7 +47,6 @@ export default function AdminAuditLog() {
           });
         }
       } catch (err) {
-        console.log('Audit logs API may not exist yet:', err);
       }
       // Track deal moderation activities
       try {
@@ -73,7 +72,6 @@ export default function AdminAuditLog() {
           });
         }
       } catch (err) {
-        console.log('Could not load deal activities:', err);
       }
       // Sort activities by date
       activities.sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());

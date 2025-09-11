@@ -206,8 +206,8 @@ const ModernEmojiPicker: React.FC<ModernEmojiPickerProps> = ({ visible, type, on
         source={{ uri: item.url }} 
         style={styles.gifImage} 
         resizeMode="cover"
-        onError={(e) => console.log('Picker GIF load error:', e.nativeEvent.error, 'URL:', item.url)}
-        onLoad={() => console.log('Picker GIF loaded successfully:', item.url)}
+        onError={(e) => {}}
+        onLoad={() => {}}
       />
     </TouchableOpacity>
   );

@@ -56,11 +56,9 @@ export default function NearbyScreen() {
       // Only reload if location is enabled and data is stale
       if (locationEnabled && userLocation && 
           (timeSinceLastLoad > NEARBY_RELOAD_THRESHOLD || nearbyDeals.length === 0)) {
-        console.log('� Nearby: Reloading deals on focus');
         loadNearbyDeals();
         lastNearbyLoadRef.current = now;
       } else {
-        console.log('📱 Nearby: Skipping reload');
       }
     }, [locationEnabled, userLocation, nearbyDeals.length])
   );

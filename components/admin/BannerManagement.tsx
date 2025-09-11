@@ -36,7 +36,6 @@ const BannerItem: React.FC<{
           <TouchableOpacity
             style={bannerStyles.editButton}
             onPress={() => {
-              console.log('BannerManagement: Edit button pressed for banner:', banner.id);
               onEditBanner(banner.id);
             }}
           >
@@ -53,13 +52,6 @@ const BannerItem: React.FC<{
           <TouchableOpacity
             style={bannerStyles.deleteButton}
             onPress={() => {
-              console.log('🗑️ BannerManagement: Delete button pressed for banner:', banner.id);
-              console.log('🗑️ BannerManagement: onDeleteBanner function exists:', !!onDeleteBanner);
-              console.log('🗑️ BannerManagement: Banner details:', {
-                id: banner.id,
-                title: banner.title,
-                is_active: banner.is_active
-              });
               // Use native confirm on web (synchronous) and Alert on native platforms
               if (Platform.OS === 'web' && typeof window !== 'undefined' && typeof window.confirm === 'function') {
                 const ok = window.confirm(`Are you sure you want to delete "${banner.title}"?`);

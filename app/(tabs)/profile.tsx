@@ -199,13 +199,6 @@ useEffect(() => {
                           fetchedUserDeals.length === 0 || 
                           !followCounts;
 
-      console.log('👤 Profile: Focus effect', { 
-        shouldReload, 
-        timeSinceLastLoad: Math.round(timeSinceLastLoad / 1000),
-        tab: profileTab,
-        dealsCount: fetchedUserDeals.length 
-      });
-
       if (shouldReload) {
         lastProfileLoadRef.current = now;
         

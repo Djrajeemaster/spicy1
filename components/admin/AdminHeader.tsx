@@ -16,16 +16,13 @@ export const AdminHeader: React.FC<AdminHeaderProps> = ({ currentUserRole }) => 
   const [exiting, setExiting] = useState(false);
 
   const handleExitAdmin = () => {
-    console.log('Exit admin button pressed');
     setShowExitConfirm(true);
   };
 
   const confirmExit = async () => {
     setExiting(true);
     try {
-      console.log('Exiting admin mode...');
       router.replace('/(tabs)');
-      console.log('Successfully navigated to main tabs');
     } catch (error) {
       console.error('Navigation error:', error);
       // Fallback navigation

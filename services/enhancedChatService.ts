@@ -128,10 +128,8 @@ class EnhancedChatService {
   
   // Get all user's channels
   async getChannels(): Promise<ChatChannel[]> {
-    console.log('🔧 Calling getChannels endpoint');
     try {
       const response = await apiClient.get('/chat/channels') as any;
-      console.log('🔧 Response received');
       
       // Ensure we always return an array
       if (response && Array.isArray(response.data)) {
@@ -297,7 +295,6 @@ class EnhancedChatService {
     // This would typically emit a WebSocket event.
     // In a real implementation, you'd have something like:
     // socket.emit('typing:start', { channelId });
-    console.log(`User started typing in channel ${channelId}`);
   }
 
   // Stop typing indicator
@@ -305,7 +302,6 @@ class EnhancedChatService {
     // This would typically emit a WebSocket event.
     // In a real implementation, you'd have something like:
     // socket.emit('typing:stop', { channelId });
-    console.log(`User stopped typing in channel ${channelId}`);
   }
 
   // Add reaction to message

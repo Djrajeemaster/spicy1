@@ -334,7 +334,6 @@ export const SystemSettingsManagement: React.FC<SystemSettingsManagementProps> =
     form.append('logo', selectedLogoFile, selectedLogoFile.name);
     try {
       setUploading(true);
-      console.log('Uploading logo:', selectedLogoFile.name, 'Size:', selectedLogoFile.size);
       
       const res = await fetch(api('/api/site/logo'), {
         method: 'POST',
@@ -354,8 +353,6 @@ export const SystemSettingsManagement: React.FC<SystemSettingsManagementProps> =
         console.error('Error parsing response:', err);
       }
 
-      console.log('Upload response:', res.status, json || textBody);
-
       if (!res.ok) {
         const msg = (json && (json.error || JSON.stringify(json))) || textBody || `${res.status} ${res.statusText}`;
         console.error('Upload failed:', msg);
@@ -367,7 +364,6 @@ export const SystemSettingsManagement: React.FC<SystemSettingsManagementProps> =
           const sres = await fetch(api('/api/site/settings'), { credentials: 'include' });
           if (sres.ok) {
             const sjson = await sres.json();
-            console.log('Updated site settings:', sjson);
             if (sjson.logoFilename) setLogoFilename(sjson.logoFilename);
             if (typeof sjson.animatedLogo === 'boolean') setAnimatedLogo(sjson.animatedLogo);
             if (sjson.headerGradient && Array.isArray(sjson.headerGradient) && sjson.headerGradient.length >= 2) {
@@ -413,8 +409,6 @@ export const SystemSettingsManagement: React.FC<SystemSettingsManagementProps> =
   // include selected site font
   if (siteFont) payload.siteFont = siteFont;
 
-      console.log('Saving branding settings:', payload);
-
       const res = await fetch(api('/api/site/settings'), {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
@@ -434,8 +428,6 @@ export const SystemSettingsManagement: React.FC<SystemSettingsManagementProps> =
         console.error('Error parsing branding response:', err);
       }
 
-      console.log('Branding save response:', res.status, json || textBody);
-
       if (!res.ok) {
         const msg = (json && (json.error || JSON.stringify(json))) || textBody || `${res.status} ${res.statusText}`;
         console.error('Branding save failed:', msg);
@@ -447,7 +439,6 @@ export const SystemSettingsManagement: React.FC<SystemSettingsManagementProps> =
           const sres = await fetch(api('/api/site/settings'), { credentials: 'include' });
           if (sres.ok) {
             const sjson = await sres.json();
-            console.log('Broadcasting updated settings:', sjson);
             try {
               if (typeof window !== 'undefined' && (window as any).dispatchEvent) {
                 window.dispatchEvent(new CustomEvent('siteSettingsUpdated', { detail: sjson }));
@@ -605,7 +596,6 @@ export const SystemSettingsManagement: React.FC<SystemSettingsManagementProps> =
                       input.type = 'color';
                       input.value = headerColor || '#0A2540';
                       input.onchange = () => {
-                        console.log('Color changed to:', input.value);
                         setHeaderColor(input.value);
                       };
                       input.click();
