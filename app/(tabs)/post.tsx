@@ -16,7 +16,6 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import {
   MapPin,
   DollarSign,
-  Calendar,
   Shield,
   CircleCheck as CheckCircle,
   Sparkles,
@@ -33,6 +32,7 @@ import { dealService } from '@/services/dealService';
 import { categoryService } from '@/services/categoryService';
 import { storeService } from '@/services/storeService';
 import { storageService } from '@/services/storageService';
+import { apiClient } from '@/utils/apiClient';
 import { Database } from '@/types/database';
 import * as ImagePicker from 'expo-image-picker';
 
@@ -52,7 +52,6 @@ export default function PostDealScreen() {
     city: '',
     state: '',
     country: '',
-    expiryDate: '',
     dealUrl: '',
     couponCode: '',
     rulesAccepted: false,
@@ -64,6 +63,8 @@ export default function PostDealScreen() {
   const [dataLoading, setDataLoading] = useState(true);
   const [selectedImages, setSelectedImages] = useState<string[]>([]);
   const [uploadingImages, setUploadingImages] = useState(false);
+  const [scrapingLoading, setScrapingLoading] = useState(false);
+  const [scrapedImages, setScrapedImages] = useState<string[]>([]);
 
   // Enhanced state variables
   const [duplicates, setDuplicates] = useState<any[]>([]);
@@ -127,13 +128,13 @@ export default function PostDealScreen() {
       city: '',
       state: '',
       country: '',
-      expiryDate: '',
       dealUrl: '',
       couponCode: '',
       rulesAccepted: false,
     };
     setFormData(initialFormData);
     setSelectedImages([]);
+    setScrapedImages([]);
     setFullTitle('');
     setSuggestions({ title: [], description: '', tags: [] });
     setDiscountPercentage('');
@@ -152,7 +153,6 @@ export default function PostDealScreen() {
     useCallback(() => {
       // Only reset if user has some data and it's been more than 30 seconds since last interaction
       // This prevents accidental resets while actively using the form
-      const lastInteractionTime = Date.now();
       
       return () => {
         // On blur (leaving the page), mark the time
@@ -216,7 +216,7 @@ export default function PostDealScreen() {
     if (isWeb) {
       openGallery();
     } else {
-      Alert.alert('Add Photos', 'Choose how to add photos', [
+      Alert.alert('Add Images', 'Choose how to add images', [
         { text: '📷 Camera', onPress: () => openCamera() },
         { text: '🖼️ Gallery', onPress: () => openGallery() },
         { text: '🔗 Image URL', onPress: () => promptForImageUrl() },
@@ -243,7 +243,12 @@ export default function PostDealScreen() {
         notify('Image Too Large', 'Please select an image smaller than 2MB.');
         return;
       }
-      setSelectedImages((prev) => [...prev, asset.uri]);
+      // Check for duplicates
+      if (!selectedImages.includes(asset.uri)) {
+        setSelectedImages((prev) => [...prev, asset.uri]);
+      } else {
+        notify('Image Already Added', 'This image is already in your selection.', 'info');
+      }
     }
   };
 
@@ -265,14 +270,57 @@ export default function PostDealScreen() {
       });
       const newImageUris = validAssets.map((a) => a.uri);
       setSelectedImages((prev) => {
-        const combined = [...prev, ...newImageUris];
-        return combined.slice(0, 5);
+        // Filter out duplicates
+        const uniqueNewImages = newImageUris.filter(uri => !prev.includes(uri));
+        const combined = [...prev, ...uniqueNewImages];
+        const finalImages = combined.slice(0, 5);
+        
+        // Notify if some images were duplicates
+        if (uniqueNewImages.length < newImageUris.length) {
+          const duplicates = newImageUris.length - uniqueNewImages.length;
+          notify('Some Images Skipped', `${duplicates} image${duplicates > 1 ? 's were' : ' was'} already selected and skipped.`, 'info');
+        }
+        
+        return finalImages;
       });
     }
   };
 
-  const removeImage = (indexToRemove: number) => {
-    setSelectedImages((prev) => prev.filter((_, index) => index !== indexToRemove));
+  const addScrapedImage = (imageUrl: string) => {
+    if (selectedImages.length >= 5) {
+      notify('Image Limit Reached', 'You can only add up to 5 images per deal.', 'error');
+      return;
+    }
+    
+    if (!selectedImages.includes(imageUrl)) {
+      setSelectedImages(prev => [...prev, imageUrl]);
+      // Remove from scraped images
+      setScrapedImages(prev => prev.filter(img => img !== imageUrl));
+      notify('Image Added', 'Image added to your deal!', 'success');
+    }
+  };
+
+  const addAllScrapedImages = () => {
+    const remainingSlots = 5 - selectedImages.length;
+    if (remainingSlots <= 0) {
+      notify('Image Limit Reached', 'You can only add up to 5 images per deal.', 'error');
+      return;
+    }
+    
+    // Filter out images that are already selected to prevent duplicates
+    const imagesToAdd = scrapedImages
+      .filter(img => !selectedImages.includes(img))
+      .slice(0, remainingSlots);
+    
+    if (imagesToAdd.length === 0) {
+      notify('No New Images', 'All scraped images are already selected.', 'info');
+      return;
+    }
+    
+    setSelectedImages(prev => [...prev, ...imagesToAdd]);
+    setScrapedImages(prev => prev.filter(img => !imagesToAdd.includes(img)));
+    
+    notify(`${imagesToAdd.length} image${imagesToAdd.length > 1 ? 's' : ''} added`, 'All available images added to your deal!', 'success');
   };
 
   const promptForImageUrl = async () => {
@@ -333,15 +381,19 @@ export default function PostDealScreen() {
       return;
     }
 
-    // Add to selected images
-    setSelectedImages(prev => [...prev, url]);
-    
-    if (isAmazonImage) {
-      notify('Amazon Image Added!', 'Amazon image URL added successfully!', 'success');
-    } else if (isEbayImage) {
-      notify('eBay Image Added!', 'eBay image URL added successfully!', 'success');
+    // Add to selected images (check for duplicates)
+    if (!selectedImages.includes(url)) {
+      setSelectedImages(prev => [...prev, url]);
+      
+      if (isAmazonImage) {
+        notify('Amazon Image Added!', 'Amazon image URL added successfully!', 'success');
+      } else if (isEbayImage) {
+        notify('eBay Image Added!', 'eBay image URL added successfully!', 'success');
+      } else {
+        notify('Image Added!', 'Image URL added successfully!', 'success');
+      }
     } else {
-      notify('Image Added!', 'Image URL added successfully!', 'success');
+      notify('Image Already Added', 'This image is already in your selection.', 'info');
     }
   };
 
@@ -370,7 +422,7 @@ export default function PostDealScreen() {
         deal_url: formData.dealUrl.trim() || null,
         coupon_code: formData.couponCode.trim() || null,
         created_by: user!.id,
-        images: uploadedImageUrls,
+        images: [...uploadedImageUrls, ...selectedImages.filter(img => img.startsWith('http'))],
       };
 
       if (
@@ -391,7 +443,7 @@ export default function PostDealScreen() {
 
       const createDealPromise = dealService.createDeal(dealData);
       
-      const [error, result] = await Promise.race([
+      const [error] = await Promise.race([
         createDealPromise,
         createDealTimeout
       ]) as any;
@@ -501,7 +553,6 @@ export default function PostDealScreen() {
         
         // Separate local images from external URLs for better debugging
         const localImages = selectedImages.filter(uri => !uri.startsWith('http'));
-        const externalImages = selectedImages.filter(uri => uri.startsWith('http'));
         
         // Set up upload timeout (increased to 60s)
         const uploadTimeoutPromise = new Promise((_, reject) => 
@@ -510,7 +561,6 @@ export default function PostDealScreen() {
 
   // Only upload local images (file:// or relative URIs). External http(s) URLs are passed through.
   const localImagesToUpload = localImages;
-  const externalImageUrls = externalImages; // keep as-is
   const uploadPromise = localImagesToUpload.length > 0 ? storageService.uploadMultipleImages(localImagesToUpload) : Promise.resolve({ data: [], error: null });
         
         try {
@@ -547,11 +597,9 @@ export default function PostDealScreen() {
             uploadedImageUrls = (uploadResults || []).map((r: any) => r.url).filter(Boolean);
             
             // Provide feedback if some images failed
-            // merged external URLs as-is
-            uploadedImageUrls = [...uploadedImageUrls, ...externalImageUrls];
-            if (uploadedImageUrls.length < selectedImages.length) {
-              const failed = selectedImages.length - uploadedImageUrls.length;
-              notify('Partial Upload', `${uploadedImageUrls.length} of ${selectedImages.length} images processed successfully. ${failed} failed.`);
+            if (uploadedImageUrls.length < localImages.length) {
+              const failed = localImages.length - uploadedImageUrls.length;
+              notify('Partial Upload', `${uploadedImageUrls.length} of ${localImages.length} local images uploaded successfully. ${failed} failed. External images will still be included.`);
             } else if (uploadedImageUrls.length > 0) {
               // Successfully uploaded images
             }
@@ -560,7 +608,7 @@ export default function PostDealScreen() {
           console.error('Upload timeout or error:', uploadErr);
           const proceed = await confirm(
             'Upload Timeout',
-            'Image upload is taking too long. Continue without images?',
+            'Image upload is taking too long. Continue without uploading local images? External images will still be included.',
             'Continue',
             'Cancel'
           );
@@ -570,8 +618,8 @@ export default function PostDealScreen() {
             setLoading(false);
             return;
           }
-          // Include external images even if upload timed out
-          uploadedImageUrls = [...externalImageUrls];
+          // Don't include external images here to avoid duplication
+          uploadedImageUrls = [];
         }
         
   setUploadingImages(false);
@@ -695,8 +743,60 @@ export default function PostDealScreen() {
   );
 
   // Enhanced URL change handler with auto-detection
-  const handleUrlChange = (url: string) => {
+  const handleUrlChange = async (url: string) => {
     setFormData(prev => ({ ...prev, dealUrl: url }));
+
+    // Clear scraped images when URL changes
+    if (!url || !url.match(/^https?:\/\/.+/)) {
+      setScrapedImages([]);
+    }
+
+    // Check if URL is valid and scrape
+    if (url && url.match(/^https?:\/\/.+/)) {
+      setScrapingLoading(true);
+      try {
+        const scrapedData = await apiClient.post('/api/scrape-product', { url }) as {
+          title: string;
+          price: string;
+          description: string;
+          images: string[];
+          domain: string;
+        };
+        if (scrapedData.title && !formData.title) {
+          setFormData(prev => ({ ...prev, title: scrapedData.title }));
+        }
+        if (scrapedData.price && !formData.price) {
+          // Clean price by removing currency symbols and formatting
+          const cleanPrice = scrapedData.price.replace(/[$,₹,€,£,¥]/g, '').trim();
+          setFormData(prev => ({ ...prev, price: cleanPrice }));
+        }
+        if (scrapedData.description && !formData.description) {
+          setFormData(prev => ({ ...prev, description: scrapedData.description }));
+        }
+        // For store, we can try to find or suggest
+        if (scrapedData.domain) {
+          // Find matching store
+          const matchingStore = stores.find(store => 
+            store.name.toLowerCase().includes(scrapedData.domain.split('.')[0]) ||
+            scrapedData.domain.includes(store.name.toLowerCase())
+          );
+          if (matchingStore && !formData.selectedStoreId) {
+            setFormData(prev => ({ ...prev, selectedStoreId: matchingStore.id.toString() }));
+          }
+        }
+        if (scrapedData.images && scrapedData.images.length > 0) {
+          // Store scraped images for manual selection
+          setScrapedImages(scrapedData.images);
+          
+          // Show notification about found images
+          notify(`${scrapedData.images.length} image${scrapedData.images.length > 1 ? 's' : ''} found`, 'Images are available below for manual selection.', 'success');
+        }
+      } catch (error) {
+        console.error('Scraping failed:', error);
+      } finally {
+        setScrapingLoading(false);
+      }
+    }
   };
 
   // Reusable component for category/store buttons
@@ -707,10 +807,6 @@ export default function PostDealScreen() {
     isStore?: boolean;
   }) => {
     const displayText = item ? (isStore ? (item as Store).name : (item as Category).emoji + ' ' + (item as Category).name) : 'No Store';
-    const buttonStyle = isSelected ? styles.categoryButton : styles.categoryButtonInactive;
-    const textStyle = isSelected ? styles.categoryButtonTextActive : styles.categoryButtonText;
-    const emojiStyle = isSelected ? styles.categoryEmoji : styles.categoryEmojiInactive;
-
     return (
       <TouchableOpacity style={styles.categoryWrapper} onPress={onPress}>
         {isSelected ? (
@@ -1031,6 +1127,24 @@ export default function PostDealScreen() {
             keyboardType="url"
           />
 
+          {/* Auto Fetch Button */}
+          {formData.dealUrl && (
+            <TouchableOpacity 
+              style={styles.fetchButton}
+              onPress={() => handleUrlChange(formData.dealUrl)}
+              disabled={scrapingLoading}
+            >
+              {scrapingLoading ? (
+                <ActivityIndicator size="small" color="#6366f1" />
+              ) : (
+                <Zap size={16} color="#6366f1" />
+              )}
+              <Text style={styles.fetchButtonText}>
+                {scrapingLoading ? 'Fetching...' : 'Auto Fill from URL'}
+              </Text>
+            </TouchableOpacity>
+          )}
+
           {/* Duplicate Warning */}
           {duplicates.length > 0 && (
             <View style={styles.duplicateWarning}>
@@ -1069,18 +1183,22 @@ export default function PostDealScreen() {
         </View>
 
         <View style={styles.section}>
-          <Text style={styles.sectionTitle}>📸 Photos & Expiry</Text>
+          <Text style={styles.sectionTitle}>📸 Images</Text>
 
+          {/* Selected Images Preview */}
           {selectedImages.length > 0 && (
-            <View style={styles.imagePreviewContainer}>
-              <Text style={styles.imagePreviewTitle}>Selected Images ({selectedImages.length}/5)</Text>
-              <ScrollView horizontal showsHorizontalScrollIndicator={false}>
-                <View style={styles.imagePreviewList}>
+            <View style={styles.selectedImagesContainer}>
+              <Text style={styles.selectedImagesTitle}>Selected Images ({selectedImages.length}/5)</Text>
+              <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.selectedImagesScroll}>
+                <View style={styles.selectedImagesList}>
                   {selectedImages.map((uri, index) => (
-                    <View key={index} style={styles.imagePreviewItem}>
-                      <Image source={{ uri }} style={styles.imagePreview} />
-                      <TouchableOpacity style={styles.removeImageButton} onPress={() => removeImage(index)}>
-                        <X size={16} color="#FFFFFF" />
+                    <View key={index} style={styles.selectedImageItem}>
+                      <Image source={{ uri }} style={styles.selectedImage} />
+                      <TouchableOpacity
+                        style={styles.removeSelectedImageButton}
+                        onPress={() => setSelectedImages(prev => prev.filter((_, i) => i !== index))}
+                      >
+                        <X size={14} color="#FFFFFF" />
                       </TouchableOpacity>
                     </View>
                   ))}
@@ -1089,38 +1207,63 @@ export default function PostDealScreen() {
             </View>
           )}
 
-          <TouchableOpacity style={styles.imageUploader} onPress={handleImagePicker}>
-            <LinearGradient colors={['#f8fafc', '#f1f5f9']} style={styles.imageUploaderGradient}>
-              <View style={styles.uploadIconContainer}>
-                <Upload size={32} color="#6366f1" />
+          {/* Scraped Images Section */}
+          {scrapedImages.length > 0 && (
+            <View style={styles.scrapedImagesSection}>
+              <View style={styles.scrapedImagesHeader}>
+                <Text style={styles.scrapedImagesTitle}>📸 Found Images ({scrapedImages.length})</Text>
+                <TouchableOpacity 
+                  style={styles.addAllImagesButton}
+                  onPress={addAllScrapedImages}
+                >
+                  <Text style={styles.addAllImagesText}>
+                    Add All ({Math.min(scrapedImages.length, 5 - selectedImages.length)})
+                  </Text>
+                </TouchableOpacity>
               </View>
-              <Text style={styles.imageUploaderText}>{selectedImages.length > 0 ? 'Add More Photos' : 'Add Photos'}</Text>
-              <Text style={styles.imageUploaderSubtext}>
-                {selectedImages.length > 0 ? `${selectedImages.length}/5 photos selected` : 'Show off the deal with great photos'}
-              </Text>
-              <Text style={styles.imageLimitText}>Max 5 photos, 2MB each • Auto-compressed for web</Text>
-            </LinearGradient>
-          </TouchableOpacity>
+              <Text style={styles.scrapedImagesSubtitle}>Click images to add them to your deal</Text>
+              <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.scrapedImagesScroll}>
+                <View style={styles.scrapedImagesList}>
+                  {scrapedImages.map((uri, index) => (
+                    <TouchableOpacity 
+                      key={index} 
+                      style={styles.scrapedImageItem}
+                      onPress={() => addScrapedImage(uri)}
+                    >
+                      <Image source={{ uri }} style={styles.scrapedImage} />
+                      <View style={styles.scrapedImageOverlay}>
+                        <Text style={styles.scrapedImageText}>+</Text>
+                      </View>
+                    </TouchableOpacity>
+                  ))}
+                </View>
+              </ScrollView>
+            </View>
+          )}
 
           {/* Add Image URL Button */}
-          <TouchableOpacity style={styles.addImageUrlButton} onPress={promptForImageUrl}>
-            <View style={styles.addImageUrlContent}>
-              <Text style={styles.addImageUrlIcon}>🔗</Text>
-              <View style={styles.addImageUrlTextContainer}>
-                <Text style={styles.addImageUrlText}>Add Image URL</Text>
-                <Text style={styles.addImageUrlSubtext}>Amazon, eBay, or any direct image URL</Text>
+          <TouchableOpacity style={styles.addImageButton} onPress={promptForImageUrl}>
+            <View style={styles.addImageContent}>
+              <Text style={styles.addImageIcon}>🔗</Text>
+              <View style={styles.addImageTextContainer}>
+                <Text style={styles.addImageText}>Add Image URL</Text>
+                <Text style={styles.addImageSubtext}>Paste direct image URL from web</Text>
               </View>
             </View>
           </TouchableOpacity>
 
-          <FormInput
-            label="Expiry Date"
-            value={formData.expiryDate}
-            onChangeText={(text) => setFormData((prev) => ({ ...prev, expiryDate: text }))}
-            placeholder="MM/DD/YYYY"
-            icon={Calendar}
-            iconColor="#f59e0b"
-          />
+          {/* Upload Images Button - Only for verified/business users */}
+          {(profile?.role === 'verified' || profile?.role === 'business' || profile?.role === 'admin' || profile?.role === 'superadmin') && (
+            <TouchableOpacity style={styles.uploadImageButton} onPress={handleImagePicker}>
+              <View style={styles.uploadImageContent}>
+                <Upload size={20} color="#6366f1" />
+                <View style={styles.uploadImageTextContainer}>
+                  <Text style={styles.uploadImageText}>Upload Images</Text>
+                  <Text style={styles.uploadImageSubtext}>Select from gallery or camera</Text>
+                </View>
+              </View>
+            </TouchableOpacity>
+          )}
         </View>
 
         <View style={styles.section}>
@@ -1185,6 +1328,193 @@ const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: '#f8fafc' },
   loadingContainer: { flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: '#f8fafc' },
   loadingText: { marginTop: 10, fontSize: 16, color: '#64748b' },
+  scrapingLoadingContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginTop: 8,
+    padding: 8,
+    backgroundColor: '#f8fafc',
+    borderRadius: 6,
+  },
+  scrapedImagesContainer: {
+    marginTop: 16,
+    padding: 12,
+    backgroundColor: '#f0f9ff',
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: '#bae6fd',
+  },
+  scrapedImagesTitle: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: '#0369a1',
+    marginBottom: 4,
+  },
+  scrapedImagesSubtitle: {
+    fontSize: 14,
+    color: '#64748b',
+    marginBottom: 8,
+  },
+  scrapedImageContainer: {
+    position: 'relative',
+    marginRight: 8,
+  },
+  scrapedImageSelected: {
+    borderWidth: 2,
+    borderColor: '#6366f1',
+    borderRadius: 8,
+  },
+  selectionOverlay: {
+    position: 'absolute',
+    top: 4,
+    right: 4,
+    backgroundColor: 'rgba(99, 102, 241, 0.8)',
+    borderRadius: 12,
+    padding: 2,
+  },
+  imagesScroll: {
+    marginBottom: 8,
+  },
+  selectedImagesContainer: {
+    marginBottom: 16,
+    padding: 12,
+    backgroundColor: '#f8fafc',
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: '#e2e8f0',
+  },
+  selectedImagesTitle: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#374151',
+    marginBottom: 8,
+  },
+  selectedImagesScroll: {
+    marginTop: 8,
+  },
+  selectedImagesList: {
+    flexDirection: 'row',
+  },
+  selectedImageItem: {
+    position: 'relative',
+    marginRight: 8,
+  },
+  selectedImage: {
+    width: 60,
+    height: 60,
+    borderRadius: 6,
+  },
+  removeSelectedImageButton: {
+    position: 'absolute',
+    top: -4,
+    right: -4,
+    backgroundColor: '#ef4444',
+    borderRadius: 10,
+    width: 20,
+    height: 20,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  scrapedImagesSection: {
+    marginBottom: 16,
+    padding: 12,
+    backgroundColor: '#f0f9ff',
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: '#bae6fd',
+  },
+  scrapedImagesHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 4,
+  },
+  scrapedImagesScroll: {
+    marginTop: 8,
+  },
+  scrapedImagesList: {
+    flexDirection: 'row',
+  },
+  scrapedImageItem: {
+    position: 'relative',
+    marginRight: 8,
+    borderRadius: 8,
+    overflow: 'hidden',
+  },
+  scrapedImage: {
+    width: 80,
+    height: 80,
+    borderRadius: 6,
+  },
+  scrapedImageOverlay: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    backgroundColor: 'rgba(99, 102, 241, 0.8)',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  scrapedImageText: {
+    fontSize: 24,
+    color: '#FFFFFF',
+    fontWeight: 'bold',
+  },
+  addImageButton: {
+    marginBottom: 12,
+    padding: 12,
+    backgroundColor: '#f8fafc',
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: '#e2e8f0',
+  },
+  addImageContent: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  addImageIcon: {
+    fontSize: 20,
+    marginRight: 12,
+  },
+  addImageTextContainer: {
+    flex: 1,
+  },
+  addImageText: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: '#374151',
+  },
+  addImageSubtext: {
+    fontSize: 12,
+    color: '#6b7280',
+    marginTop: 2,
+  },
+  uploadImageButton: {
+    padding: 12,
+    backgroundColor: '#f0f9ff',
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: '#bae6fd',
+  },
+  uploadImageContent: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  uploadImageTextContainer: {
+    flex: 1,
+    marginLeft: 12,
+  },
+  uploadImageText: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: '#0369a1',
+  },
+  uploadImageSubtext: {
+    fontSize: 12,
+    color: '#0284c7',
+    marginTop: 2,
+  },
 
   // web notice banner
   notice: {
@@ -1456,7 +1786,6 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
   },
-  addImageText: { color: '#FFFFFF', fontSize: 24, fontWeight: '700' },
   imagePreviewOverlay: {
     position: 'absolute',
     top: 0,
@@ -1545,5 +1874,25 @@ const styles = StyleSheet.create({
     color: '#0369a1',
     fontWeight: '500',
   },
+
+  fetchButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#eef2ff',
+    borderWidth: 1,
+    borderColor: '#6366f1',
+    borderRadius: 12,
+    paddingVertical: 12,
+    paddingHorizontal: 16,
+    marginTop: 12,
+  },
+  fetchButtonText: {
+    color: '#6366f1',
+    fontSize: 14,
+    fontWeight: '600',
+    marginLeft: 8,
+  },
+
   bottomPadding: { height: 100 },
 });

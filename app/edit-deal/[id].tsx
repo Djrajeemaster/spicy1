@@ -25,8 +25,6 @@ import {
   ArrowLeft,
   Save,
   Trash2,
-  Plus,
-  CheckSquare,
 } from 'lucide-react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useLocalSearchParams, router } from 'expo-router';
@@ -35,6 +33,7 @@ import { dealService, DealWithRelations, canEditDeal } from '@/services/dealServ
 import { categoryService } from '@/services/categoryService';
 import { storeService } from '@/services/storeService';
 import { storageService } from '@/services/storageService';
+import { apiClient } from '@/utils/apiClient';
 import { Database } from '@/types/database';
 import * as ImagePicker from 'expo-image-picker';
 
@@ -47,7 +46,6 @@ export default function EditDealScreen() {
 
   // Local state for moderation status (admin only)
   const [status, setStatus] = useState<string | null>(null);
-  const [showStatusOptions, setShowStatusOptions] = useState(false);
 
   const [deal, setDeal] = useState<DealWithRelations | null>(null);
   const [initialLoading, setInitialLoading] = useState(true);
@@ -74,18 +72,15 @@ export default function EditDealScreen() {
   const [dataLoading, setDataLoading] = useState(true);
   const [selectedImages, setSelectedImages] = useState<string[]>([]);
   const [uploadingImages, setUploadingImages] = useState(false);
+  const [scrapingLoading, setScrapingLoading] = useState(false);
+  const [isInitialLoad, setIsInitialLoad] = useState(true);
+  const [scrapedImages, setScrapedImages] = useState<string[]>([]);
 
   // Debounce the deal URL for validation
   const isWeb = Platform.OS === 'web';
-  const [notice, setNotice] = useState<{
-    type: 'error' | 'success' | 'info';
-    title: string;
-    message: string;
-  } | null>(null);
 
   const notify = (title: string, message: string, type: 'error' | 'success' | 'info' = 'error') => {
-    if (isWeb) setNotice({ type, title, message });
-    else Alert.alert(title, message);
+    Alert.alert(title, message);
   };
 
   useEffect(() => {
@@ -176,6 +171,7 @@ export default function EditDealScreen() {
     } finally {
       setInitialLoading(false);
       setDataLoading(false);
+      setIsInitialLoad(false); // Allow scraping after initial load
     }
   };
 
@@ -314,7 +310,12 @@ export default function EditDealScreen() {
         setUploadingImages(true);
         const uploadResult = await storageService.uploadImage(result.assets[0].uri);
         if (uploadResult.data && uploadResult.data.url) {
-          setSelectedImages(prev => [...prev, uploadResult.data!.url]);
+          // Check for duplicates
+          if (!selectedImages.includes(uploadResult.data.url)) {
+            setSelectedImages(prev => [...prev, uploadResult.data!.url]);
+          } else {
+            notify('Image Already Added', 'This image is already in your selection.', 'info');
+          }
         } else {
           Alert.alert('Error', 'Failed to upload image');
         }
@@ -336,13 +337,95 @@ export default function EditDealScreen() {
         if (deal && deal.id) router.replace(`/deal-details?id=${deal.id}`);
         else router.replace('/(tabs)/');
       }
-    } catch (err) {
+    } catch (_) {
       router.replace('/(tabs)/');
     }
   };
 
   const removeImage = (index: number) => {
     setSelectedImages(prev => prev.filter((_, i) => i !== index));
+  };
+
+  const addScrapedImage = (imageUrl: string) => {
+    if (selectedImages.length >= 5) {
+      notify('Image Limit Reached', 'You can only add up to 5 images per deal.', 'error');
+      return;
+    }
+    
+    if (!selectedImages.includes(imageUrl)) {
+      setSelectedImages(prev => [...prev, imageUrl]);
+      // Remove from scraped images
+      setScrapedImages(prev => prev.filter(img => img !== imageUrl));
+      notify('Image Added', 'Image added to your deal!', 'success');
+    }
+  };
+
+  const addAllScrapedImages = () => {
+    const remainingSlots = 5 - selectedImages.length;
+    if (remainingSlots <= 0) {
+      notify('Image Limit Reached', 'You can only add up to 5 images per deal.', 'error');
+      return;
+    }
+    
+    // Filter out images that are already selected to prevent duplicates
+    const imagesToAdd = scrapedImages
+      .filter(img => !selectedImages.includes(img))
+      .slice(0, remainingSlots);
+    
+    if (imagesToAdd.length === 0) {
+      notify('No New Images', 'All scraped images are already selected.', 'info');
+      return;
+    }
+    
+    setSelectedImages(prev => [...prev, ...imagesToAdd]);
+    setScrapedImages(prev => prev.filter(img => !imagesToAdd.includes(img)));
+    
+    notify(`${imagesToAdd.length} image${imagesToAdd.length > 1 ? 's' : ''} added`, 'All available images added to your deal!', 'success');
+  };
+
+  const handleUrlChange = async (url: string) => {
+    setFormData(prev => ({ ...prev, dealUrl: url }));
+
+    // Clear scraped images when URL changes
+    if (!url || !url.match(/^https?:\/\/.+/)) {
+      setScrapedImages([]);
+    }
+
+    // Only scrape if this is not the initial load and URL is valid
+    if (!isInitialLoad && url && url.match(/^https?:\/\/.+/)) {
+      setScrapingLoading(true);
+      try {
+        const scrapedData = await apiClient.post('/api/scrape-product', { url }) as {
+          title: string;
+          price: string;
+          description: string;
+          images: string[];
+          domain: string;
+        };
+        if (scrapedData.title && !formData.title) {
+          setFormData(prev => ({ ...prev, title: scrapedData.title }));
+        }
+        if (scrapedData.price && !formData.price) {
+          // Clean price by removing currency symbols and formatting
+          const cleanPrice = scrapedData.price.replace(/[$,₹,€,£,¥]/g, '').trim();
+          setFormData(prev => ({ ...prev, price: cleanPrice }));
+        }
+        if (scrapedData.description && !formData.description) {
+          setFormData(prev => ({ ...prev, description: scrapedData.description }));
+        }
+        if (scrapedData.images && scrapedData.images.length > 0) {
+          // Store scraped images for manual selection
+          setScrapedImages(scrapedData.images);
+          
+          // Show notification about found images
+          notify(`${scrapedData.images.length} image${scrapedData.images.length > 1 ? 's' : ''} found`, 'Images are available below for manual selection.', 'success');
+        }
+      } catch (error) {
+        console.error('Scraping failed:', error);
+      } finally {
+        setScrapingLoading(false);
+      }
+    }
   };
 
   if (initialLoading) {
@@ -503,7 +586,7 @@ export default function EditDealScreen() {
             <TextInput
               style={styles.inputWithPadding}
               value={formData.dealUrl}
-              onChangeText={(text) => setFormData((p) => ({ ...p, dealUrl: text }))}
+              onChangeText={handleUrlChange}
               placeholder="Paste the deal URL here..."
               placeholderTextColor="#94a3b8"
               autoCapitalize="none"
@@ -511,6 +594,24 @@ export default function EditDealScreen() {
               keyboardType="url"
             />
           </View>
+
+          {/* Auto Fetch Button */}
+          {formData.dealUrl && (
+            <TouchableOpacity 
+              style={styles.fetchButton}
+              onPress={() => handleUrlChange(formData.dealUrl)}
+              disabled={scrapingLoading}
+            >
+              {scrapingLoading ? (
+                <ActivityIndicator size="small" color="#6366f1" />
+              ) : (
+                <Zap size={16} color="#6366f1" />
+              )}
+              <Text style={styles.fetchButtonText}>
+                {scrapingLoading ? 'Fetching...' : 'Auto Fill from URL'}
+              </Text>
+            </TouchableOpacity>
+          )}
         </View>
 
         {/* Pricing */}
@@ -773,15 +874,49 @@ export default function EditDealScreen() {
                 ) : (
                   <>
                     <Upload size={28} color="#6366f1" />
-                    <Text style={styles.addImageText}>Add Photo</Text>
+                    <Text style={styles.addImageText}>Add Image</Text>
                   </>
                 )}
               </TouchableOpacity>
             )}
           </ScrollView>
           <Text style={styles.helpText}>
-            Add high-quality images to showcase your deal - {selectedImages.length}/5 images
+            Add high-quality images to showcase your deal • {selectedImages.length}/5 images
           </Text>
+
+          {/* Scraped Images Section */}
+          {scrapedImages.length > 0 && (
+            <View style={styles.scrapedImagesContainer}>
+              <View style={styles.scrapedImagesHeader}>
+                <Text style={styles.scrapedImagesTitle}>📸 Found Images ({scrapedImages.length})</Text>
+                <TouchableOpacity 
+                  style={styles.addAllImagesButton}
+                  onPress={addAllScrapedImages}
+                >
+                  <Text style={styles.addAllImagesText}>
+                    Add All ({Math.min(scrapedImages.length, 5 - selectedImages.length)})
+                  </Text>
+                </TouchableOpacity>
+              </View>
+              <Text style={styles.scrapedImagesSubtitle}>Click images to add them to your deal</Text>
+              <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.scrapedImagesScroll}>
+                <View style={styles.scrapedImagesList}>
+                  {scrapedImages.map((uri, index) => (
+                    <TouchableOpacity 
+                      key={index} 
+                      style={styles.scrapedImageItem}
+                      onPress={() => addScrapedImage(uri)}
+                    >
+                      <Image source={{ uri }} style={styles.scrapedImage} />
+                      <View style={styles.scrapedImageOverlay}>
+                        <Text style={styles.scrapedImageText}>+</Text>
+                      </View>
+                    </TouchableOpacity>
+                  ))}
+                </View>
+              </ScrollView>
+            </View>
+          )}
         </View>
 
         <View style={styles.bottomPadding} />
@@ -1029,6 +1164,143 @@ const styles = StyleSheet.create({
   statusButton: { paddingVertical: 8, paddingHorizontal: 12, borderRadius: 8, marginRight: 8, backgroundColor: '#f8fafc', borderWidth: 1, borderColor: '#e2e8f0' },
   statusText: { color: '#475569', fontWeight: '600' },
   statusTextActive: { color: '#10b981' },
-  
+
+  // Scraped Images Styles
+  scrapingLoadingContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginTop: 8,
+    padding: 8,
+    backgroundColor: '#f0f9ff',
+    borderRadius: 8,
+  },
+  scrapedImagesContainer: {
+    marginTop: 16,
+    padding: 12,
+    backgroundColor: '#f0f9ff',
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: '#bae6fd',
+  },
+  scrapedImagesHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 4,
+  },
+  scrapedImagesTitle: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: '#0369a1',
+  },
+  scrapedImagesSubtitle: {
+    fontSize: 14,
+    color: '#64748b',
+    marginBottom: 8,
+  },
+  scrapedImagesScroll: {
+    marginTop: 8,
+  },
+  scrapedImagesList: {
+    flexDirection: 'row',
+  },
+  scrapedImageItem: {
+    position: 'relative',
+    marginRight: 8,
+    borderRadius: 8,
+    overflow: 'hidden',
+  },
+  scrapedImage: {
+    width: 80,
+    height: 80,
+    borderRadius: 6,
+  },
+  scrapedImageOverlay: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    backgroundColor: 'rgba(99, 102, 241, 0.8)',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  scrapedImageText: {
+    fontSize: 24,
+    color: '#FFFFFF',
+    fontWeight: 'bold',
+  },
+  addAllImagesButton: {
+    backgroundColor: '#6366f1',
+    borderRadius: 12,
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginLeft: 8,
+    height: 80,
+  },
+  addAllImagesText: { 
+    color: '#FFFFFF', 
+    fontSize: 12, 
+    fontWeight: '700', 
+    textAlign: 'center' 
+  },
+  imagesScroll: {
+    marginBottom: 8,
+  },
+  imagesRow: {
+    flexDirection: 'row',
+    paddingVertical: 4,
+  },
+  scrapedImageContainer: {
+    width: 80,
+    height: 80,
+    borderRadius: 12,
+    marginRight: 12,
+    borderWidth: 2,
+    borderColor: '#e2e8f0',
+    overflow: 'hidden',
+  },
+  scrapedImageSelected: {
+    borderColor: '#6366f1',
+    borderWidth: 3,
+  },
+  selectionOverlay: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    backgroundColor: 'rgba(99, 102, 241, 0.8)',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  scrapedImagesNote: {
+    fontSize: 11,
+    color: '#6b7280',
+    fontStyle: 'italic',
+    textAlign: 'center',
+  },
+
+  fetchButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#eef2ff',
+    borderWidth: 1,
+    borderColor: '#6366f1',
+    borderRadius: 12,
+    paddingVertical: 12,
+    paddingHorizontal: 16,
+    marginTop: 12,
+  },
+  fetchButtonText: {
+    color: '#6366f1',
+    fontSize: 14,
+    fontWeight: '600',
+    marginLeft: 8,
+  },
+
   bottomPadding: { height: 80 },
 });

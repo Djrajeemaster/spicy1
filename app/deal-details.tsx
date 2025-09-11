@@ -46,6 +46,7 @@ export default function DealDetailsScreen() {
   const [voteCounts, setVoteCounts] = useState({ up: 0, down: 0 });
   const [isSaved, setIsSaved] = useState(false);
   const [viewCount, setViewCount] = useState(0);
+  const [imageLoadErrors, setImageLoadErrors] = useState<Set<string>>(new Set());
 
   const loadData = useCallback(async () => {
     if (!id) return;
@@ -58,7 +59,7 @@ export default function DealDetailsScreen() {
       setDeal(dealData);
       setUserVote(dealData.user_vote || null);
       setVoteCounts({ up: dealData.votes_up || 0, down: dealData.votes_down || 0 });
-      setSelectedImage(dealData.images?.[0] || 'https://placehold.co/600x400');
+      setSelectedImage(dealData.images?.[0] || null);
       setViewCount(dealData.view_count || 0);
       
       // Check if deal is saved by current user
@@ -240,15 +241,26 @@ export default function DealDetailsScreen() {
   const discount = deal.original_price ? Math.round((1 - deal.price / deal.original_price) * 100) : 0;
 
   const renderThumbnails = () => {
-    if (!deal?.images || deal.images.length <= 1) return null;
+    if (!deal?.images || deal.images.length === 0) return null;
     return (
       <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.thumbnailContainer}>
         {deal.images.map((img, index) => (
           <TouchableOpacity key={index} onPress={() => setSelectedImage(img)}>
-            <Image source={{ uri: img }} style={[
-              styles.thumbnail, 
-              selectedImage === img && styles.thumbnailSelected
-            ]} />
+            <Image 
+              source={{ uri: img }} 
+              style={[
+                styles.thumbnail, 
+                selectedImage === img && styles.thumbnailSelected
+              ]}
+              onError={() => {
+                setImageLoadErrors(prev => new Set([...prev, img]));
+              }}
+            />
+            {imageLoadErrors.has(img) && (
+              <View style={styles.thumbnailError}>
+                <Text style={styles.thumbnailErrorText}>Failed to load</Text>
+              </View>
+            )}
           </TouchableOpacity>
         ))}
       </ScrollView>
@@ -267,7 +279,19 @@ export default function DealDetailsScreen() {
       {isDesktop && (
         <Image 
           source={{ uri: selectedImage || 'https://placehold.co/600x400' }} 
-          style={styles.desktopCardImage as any} 
+          style={styles.desktopCardImage as any}
+          onError={() => {
+            if (selectedImage) {
+              setImageLoadErrors(prev => new Set([...prev, selectedImage]));
+              // Try to select the next available image that hasn't failed
+              const availableImages = deal?.images?.filter((img: string) => !imageLoadErrors.has(img)) || [];
+              if (availableImages.length > 0) {
+                setSelectedImage(availableImages[0]);
+              } else {
+                setSelectedImage(null);
+              }
+            }
+          }}
         />
       )}
       {isDesktop && renderThumbnails()}
@@ -298,9 +322,9 @@ export default function DealDetailsScreen() {
 
       {/* Enhanced Price Section */}
       <View style={styles.priceSection}>
-        <Text style={styles.price}>{formatPrice(deal.price)}</Text>
+        <Text style={styles.price}>{formatPrice(deal.price, false)}</Text>
         {deal.original_price && (
-          <Text style={styles.originalPrice}>{formatPrice(deal.original_price)}</Text>
+          <Text style={styles.originalPrice}>{formatPrice(deal.original_price, false)}</Text>
         )}
         {discount > 0 && (
           <LinearGradient colors={['#ef4444', '#dc2626']} style={styles.discountBadge}>
@@ -667,5 +691,22 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     flexWrap: 'wrap',
     marginBottom: 16,
+  },
+  thumbnailError: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    backgroundColor: 'rgba(0,0,0,0.5)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    borderRadius: 8,
+  },
+  thumbnailErrorText: {
+    color: '#ffffff',
+    fontSize: 10,
+    fontWeight: '600',
+    textAlign: 'center',
   },
 });

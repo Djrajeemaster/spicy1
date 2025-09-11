@@ -11,6 +11,7 @@ const fs = require('fs');
 const multer = require('multer');
 // store uploads temporarily then move into assets
 const upload = multer({ dest: path.join(__dirname, 'tmp_uploads') });
+const { chromium } = require('playwright');
 
 // Import security middleware
 const { securityHeaders } = require('./middleware/security');
@@ -1204,8 +1205,8 @@ app.post('/api/deals', async (req, res) => {
     const { rows } = await pool.query(`
       INSERT INTO deals (
         title, description, price, original_price, discount_percentage,
-        deal_url, category_id, store_id, created_by, city, state, status, created_at
-      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, NOW())
+        deal_url, category_id, store_id, created_by, city, state, status, images, created_at
+      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, NOW())
       RETURNING *
     `, [
       dealData.title,
@@ -1219,7 +1220,8 @@ app.post('/api/deals', async (req, res) => {
       dealData.created_by,
       dealData.city || 'Unknown',
       dealData.state || 'Unknown',
-      dealData.status || 'pending'
+      dealData.status || 'pending',
+      dealData.images || []
     ]);
     
     res.json(rows[0]);
@@ -1398,6 +1400,812 @@ app.get('/api/deals/saved', async (req, res) => {
   } catch (err) {
     console.error('Error fetching saved deals:', err);
     res.status(500).json({ error: err.message });
+  }
+});
+
+// Scrape product data from URL
+app.post('/api/scrape-product', async (req, res) => {
+  try {
+    const { url } = req.body;
+    if (!url) {
+      return res.status(400).json({ error: 'URL is required' });
+    }
+
+    // Validate URL
+    const urlRegex = /^https?:\/\/.+/;
+    if (!urlRegex.test(url)) {
+      return res.status(400).json({ error: 'Invalid URL format' });
+    }
+
+    console.log('Starting scraping for URL:', url);
+
+    try {
+      // Try Playwright first
+      console.log('Attempting Playwright scraping...');
+      const browser = await chromium.launch({ 
+        headless: true,
+        args: [
+          '--no-sandbox',
+          '--disable-setuid-sandbox',
+          '--disable-dev-shm-usage',
+          '--disable-accelerated-2d-canvas',
+          '--no-first-run',
+          '--no-zygote',
+          '--disable-gpu'
+        ]
+      });
+      console.log('Browser launched successfully');
+      const page = await browser.newPage();
+
+      // Set user agent to avoid bot detection
+      await page.setUserAgent('Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36');
+
+      await page.goto(url, { waitUntil: 'networkidle', timeout: 30000 });
+
+      // Extract data
+      const data = await page.evaluate(() => {
+        const getTextContent = (selectors) => {
+          for (const selector of selectors) {
+            const element = document.querySelector(selector);
+            if (element && element.textContent?.trim()) {
+              return element.textContent.trim();
+            }
+          }
+          return '';
+        };
+
+        // Title selectors - more specific for product pages
+        let title = getTextContent([
+          'h1',
+          '[data-testid="product-title"]',
+          '.product-title',
+          '.product-name',
+          '#productTitle',
+          '#title',
+          '.a-size-large',
+          'meta[property="og:title"]'
+        ]) || document.title;
+
+        // Clean up title - remove domain prefixes and extra text
+        title = title.replace(/^(amazon\.com|www\.amazon\.com|flipkart\.com|www\.flipkart\.com|myntra\.com|www\.myntra\.com)\s*[-:]\s*/i, '');
+        title = title.replace(/\s*[-|]\s*amazon\.com.*$/i, '');
+        title = title.replace(/\s*[-|]\s*flipkart\.com.*$/i, '');
+        title = title.replace(/\s*[-|]\s*myntra\.com.*$/i, '');
+        title = title.trim();
+
+        // Price selectors - more specific for product prices
+        let price = getTextContent([
+          '[data-testid="price"]',
+          '.a-price .a-offscreen',
+          '.a-price-whole',
+          '.a-color-price',
+          '#priceblock_ourprice',
+          '#priceblock_dealprice',
+          '.price',
+          '.product-price',
+          '.current-price',
+          '[class*="price"]',
+          'meta[property="product:price:amount"]'
+        ]);
+
+        // Clean up price - extract only numeric values
+        const priceMatch = price.match(/[\$₹£€]?\s*[\d,]+\.?\d*/);
+        price = priceMatch ? priceMatch[0].trim() : '';
+
+        // Description selectors - more specific
+        let description = getTextContent([
+          '[data-testid="product-description"]',
+          '.product-description',
+          '#productDescription',
+          '#feature-bullets',
+          '.a-unordered-list',
+          'meta[name="description"]',
+          'meta[property="og:description"]'
+        ]);
+
+        // Clean up description - remove domain references
+        description = description.replace(/\b(amazon|flipkart|myntra)\.com\b/gi, '');
+        description = description.replace(/\s+/g, ' ').trim();
+
+        // Images - prioritize high-quality images over thumbnails
+        const images = [];
+        const processedUrls = new Set();
+
+        // Function to check if URL is likely a thumbnail
+        const isThumbnail = (url) => {
+          const lowerUrl = url.toLowerCase();
+          return lowerUrl.includes('thumb') ||
+                 lowerUrl.includes('thumbnail') ||
+                 lowerUrl.includes('small') ||
+                 lowerUrl.includes('tiny') ||
+                 lowerUrl.includes('mini') ||
+                 lowerUrl.includes('icon') ||
+                 lowerUrl.includes('32x32') ||
+                 lowerUrl.includes('64x64') ||
+                 lowerUrl.includes('100x100') ||
+                 lowerUrl.includes('150x150') ||
+                 lowerUrl.includes('200x200') ||
+                 // Amazon specific size parameters
+                 lowerUrl.includes('_ac_us') ||
+                 lowerUrl.includes('_ac_sx') ||
+                 lowerUrl.includes('_ac_sy') ||
+                 lowerUrl.includes('_ac_sl') ||
+                 lowerUrl.includes('_sr') ||
+                 // General size indicators
+                 /\d+x\d+/.test(lowerUrl) && parseInt(lowerUrl.match(/(\d+)x(\d+)/)[1]) < 300;
+        };
+
+        // Function to try to get full-size URL from thumbnail
+        const getFullSizeUrl = (thumbnailUrl) => {
+          let fullUrl = thumbnailUrl;
+
+          // Amazon patterns - more comprehensive handling
+          if (thumbnailUrl.includes('m.media-amazon.com/images/I/')) {
+            // Remove Amazon size parameters like _AC_US40_, _AC_SX466_, _AC_SY300_, etc.
+            fullUrl = fullUrl.replace(/_\w+\.jpg$/, '.jpg');
+            fullUrl = fullUrl.replace(/_\w+\.png$/, '.png');
+            fullUrl = fullUrl.replace(/_\w+\.jpeg$/, '.jpeg');
+            fullUrl = fullUrl.replace(/_\w+\.webp$/, '.webp');
+
+            // Handle multiple size parameters (rare but possible)
+            fullUrl = fullUrl.replace(/_\w+_\w+\./, '.');
+
+            // If still has size parameters, try a more aggressive approach
+            if (fullUrl.includes('_AC_') || fullUrl.includes('_SR') || fullUrl.includes('_SY') || fullUrl.includes('_SX')) {
+              const parts = fullUrl.split('.');
+              if (parts.length >= 2) {
+                const extension = parts[parts.length - 1];
+                const baseUrl = fullUrl.substring(0, fullUrl.lastIndexOf('.'));
+                // Remove all size-related parameters
+                const cleanBase = baseUrl.replace(/_\w+$/, '');
+                fullUrl = cleanBase + '.' + extension;
+              }
+            }
+          }
+
+          // Flipkart patterns
+          if (thumbnailUrl.includes('rukminim1.flixcart.com')) {
+            fullUrl = thumbnailUrl.replace(/\/image\/\d+x\d+\//, '/image/');
+          }
+
+          // General patterns
+          fullUrl = fullUrl.replace(/\/thumb\//, '/');
+          fullUrl = fullUrl.replace(/\/thumbnails?\//, '/');
+          fullUrl = fullUrl.replace(/_thumb\./, '.');
+          fullUrl = fullUrl.replace(/_thumbnail\./, '.');
+          fullUrl = fullUrl.replace(/_small\./, '.');
+
+          return fullUrl;
+        };
+
+        // Function to extract images from srcset
+        const extractFromSrcset = (srcset) => {
+          if (!srcset) return [];
+          const sources = srcset.split(',').map(s => s.trim().split(' ')[0]);
+          return sources.filter(url => url.startsWith('http'));
+        };
+
+        // Function to get image quality score (prefer larger images)
+        const getImageQualityScore = (url) => {
+          let score = 0;
+
+          // Prefer images with high resolution indicators
+          if (url.includes('1000x') || url.includes('1200x') || url.includes('1500x')) score += 10;
+          if (url.includes('800x') || url.includes('900x')) score += 8;
+          if (url.includes('600x') || url.includes('700x')) score += 6;
+          if (url.includes('400x') || url.includes('500x')) score += 4;
+
+          // Prefer certain file extensions
+          if (url.includes('.jpg') || url.includes('.jpeg')) score += 3;
+          if (url.includes('.png')) score += 2;
+
+          // Prefer images without size constraints
+          if (!url.includes('w=') && !url.includes('h=')) score += 2;
+
+          return score;
+        };
+
+        // Collect all potential images with quality scores
+        const imageCandidates = [];
+
+        // 1. Look for images with data attributes that might contain full-size versions
+        const allImgs = document.querySelectorAll('img');
+        allImgs.forEach(img => {
+          const sources = [];
+
+          // Check various attributes for image sources
+          const src = img.getAttribute('src');
+          const dataSrc = img.getAttribute('data-src');
+          const dataOriginal = img.getAttribute('data-original');
+          const dataLazy = img.getAttribute('data-lazy');
+          const dataLazySrc = img.getAttribute('data-lazy-src');
+          const dataZoom = img.getAttribute('data-zoom');
+          const dataFull = img.getAttribute('data-full');
+          const dataLarge = img.getAttribute('data-large');
+
+          if (src) sources.push(src);
+          if (dataSrc) sources.push(dataSrc);
+          if (dataOriginal) sources.push(dataOriginal);
+          if (dataLazy) sources.push(dataLazy);
+          if (dataLazySrc) sources.push(dataLazySrc);
+          if (dataZoom) sources.push(dataZoom);
+          if (dataFull) sources.push(dataFull);
+          if (dataLarge) sources.push(dataLarge);
+
+          // Check srcset for multiple sizes
+          const srcset = img.getAttribute('srcset');
+          if (srcset) {
+            sources.push(...extractFromSrcset(srcset));
+          }
+
+          sources.forEach(source => {
+            if (source && source.startsWith('http') && !processedUrls.has(source)) {
+              processedUrls.add(source);
+              const qualityScore = getImageQualityScore(source);
+              imageCandidates.push({
+                url: source,
+                score: qualityScore,
+                isThumbnail: isThumbnail(source)
+              });
+            }
+          });
+        });
+
+        // 2. Look for images in specific selectors that are likely to be product images
+        const productSelectors = [
+          'img[data-image-index]',
+          'img[data-old-hires]',
+          '#landingImage',
+          '#imgBlkFront',
+          '.a-dynamic-image',
+          'img[data-testid="product-image"]',
+          '.product-image img',
+          '.gallery img',
+          '.product-gallery img',
+          '.zoom img',
+          '.magnify img',
+          'img[alt*="product"]',
+          'img[alt*="item"]',
+          'img[src*="product"]',
+          'img[src*="image"]',
+          'img[src*="photo"]',
+          // Amazon specific selectors
+          '#main-image',
+          '#altImages img',
+          '.image img',
+          '.thumbnail img',
+          'img[alt*="ASUS"]',
+          'img[alt*="Chromebook"]',
+          'img[alt*="laptop"]',
+          'img[alt*="computer"]',
+          // More general product selectors
+          '.product img',
+          '.item img',
+          '.main-image img',
+          '.hero-image img',
+          'img[class*="product"]',
+          'img[class*="image"]',
+          'img[id*="image"]',
+          'img[id*="photo"]',
+          // Amazon specific data attributes
+          'img[data-image-url]',
+          'img[data-src]',
+          'img[data-lazy]',
+          'img[data-lazy-src]',
+          'img[data-zoom]',
+          'img[data-full]',
+          'img[data-large]',
+          'img[data-original]'
+        ];
+
+        productSelectors.forEach(selector => {
+          const imgs = document.querySelectorAll(selector);
+          imgs.forEach(img => {
+            const src = img.getAttribute('src') || img.getAttribute('data-src') || img.getAttribute('data-original');
+            if (src && src.startsWith('http') && !processedUrls.has(src)) {
+              processedUrls.add(src);
+              const qualityScore = getImageQualityScore(src) + 5; // Bonus for product-specific selectors
+              imageCandidates.push({
+                url: src,
+                score: qualityScore,
+                isThumbnail: isThumbnail(src)
+              });
+            }
+          });
+        });
+
+        // 3. Extract images from JavaScript variables and data attributes
+        // Look for image data in script tags and data attributes
+        const scripts = document.querySelectorAll('script');
+        scripts.forEach(script => {
+          const scriptContent = script.textContent || script.innerText;
+          if (scriptContent) {
+            // Look for common patterns in JavaScript that contain image URLs
+            const imagePatterns = [
+              /"image"\s*:\s*"([^"]+)"/gi,
+              /'image'\s*:\s*'([^']+)'/gi,
+              /"images"\s*:\s*\[([^\]]+)\]/gi,
+              /'images'\s*:\s*\[([^\]]+)\]/gi,
+              /"largeImage"\s*:\s*"([^"]+)"/gi,
+              /'largeImage'\s*:\s*'([^']+)'/gi,
+              /"hiRes"\s*:\s*"([^"]+)"/gi,
+              /'hiRes'\s*:\s*'([^']+)'/gi,
+              /"mainImage"\s*:\s*"([^"]+)"/gi,
+              /'mainImage'\s*:\s*'([^']+)'/gi,
+              // Amazon specific patterns
+              /"large"\s*:\s*"([^"]+)"/gi,
+              /'large'\s*:\s*'([^']+)'/gi,
+              /data-image-url="([^"]+)"/gi,
+              /data-old-hires="([^"]+)"/gi,
+              /data-image-index="([^"]+)"/gi
+            ];
+
+            imagePatterns.forEach(pattern => {
+              let match;
+              while ((match = pattern.exec(scriptContent)) !== null) {
+                const imageUrl = match[1];
+                if (imageUrl && imageUrl.startsWith('http') && !processedUrls.has(imageUrl)) {
+                  processedUrls.add(imageUrl);
+                  const qualityScore = getImageQualityScore(imageUrl) + 3; // Bonus for script-extracted images
+                  imageCandidates.push({
+                    url: imageUrl,
+                    score: qualityScore,
+                    isThumbnail: isThumbnail(imageUrl)
+                  });
+                }
+              }
+            });
+
+            // Look for image arrays in JavaScript
+            const arrayPatterns = [
+              /images\s*=\s*\[([^\]]+)\]/gi,
+              /imageList\s*=\s*\[([^\]]+)\]/gi,
+              /productImages\s*=\s*\[([^\]]+)\]/gi,
+              /gallery\s*=\s*\[([^\]]+)\]/gi
+            ];
+
+            arrayPatterns.forEach(pattern => {
+              let match;
+              while ((match = pattern.exec(scriptContent)) !== null) {
+                const arrayContent = match[1];
+                // Extract URLs from the array
+                const urlMatches = arrayContent.match(/"([^"]+)"/g) || arrayContent.match(/'([^']+)'/g);
+                if (urlMatches) {
+                  urlMatches.forEach(urlMatch => {
+                    const imageUrl = urlMatch.slice(1, -1); // Remove quotes
+                    if (imageUrl && imageUrl.startsWith('http') && !processedUrls.has(imageUrl)) {
+                      processedUrls.add(imageUrl);
+                      const qualityScore = getImageQualityScore(imageUrl) + 3;
+                      imageCandidates.push({
+                        url: imageUrl,
+                        score: qualityScore,
+                        isThumbnail: isThumbnail(imageUrl)
+                      });
+                    }
+                  });
+                }
+              }
+            });
+          }
+        });
+
+        // Look for images in data attributes of any element
+        const allElements = document.querySelectorAll('*');
+        allElements.forEach(element => {
+          const attributes = element.attributes;
+          for (let i = 0; i < attributes.length; i++) {
+            const attr = attributes[i];
+            if (attr.name.startsWith('data-') && attr.value && attr.value.startsWith('http') && attr.value.includes('image')) {
+              if (!processedUrls.has(attr.value)) {
+                processedUrls.add(attr.value);
+                const qualityScore = getImageQualityScore(attr.value) + 2;
+                imageCandidates.push({
+                  url: attr.value,
+                  score: qualityScore,
+                  isThumbnail: isThumbnail(attr.value)
+                });
+              }
+            }
+          }
+        });
+
+        // 4. Sort by quality score (highest first) and filter
+        imageCandidates.sort((a, b) => b.score - a.score);
+
+        // 4. Select the best images, preferring non-thumbnails
+        const selectedImages = [];
+        const maxImages = 20;
+
+        // First, try to get non-thumbnail images
+        for (const candidate of imageCandidates) {
+          if (!candidate.isThumbnail && selectedImages.length < maxImages) {
+            let finalUrl = candidate.url;
+
+            // Try to get full-size version
+            if (candidate.isThumbnail) {
+              finalUrl = getFullSizeUrl(candidate.url);
+            }
+
+            // Clean up URL
+            finalUrl = finalUrl.split('?')[0]; // Remove query parameters
+
+            if (!images.includes(finalUrl)) {
+              images.push(finalUrl);
+              selectedImages.push(finalUrl);
+            }
+          }
+        }
+
+        // If we don't have enough images, add thumbnails as fallback
+        if (selectedImages.length < maxImages) {
+          for (const candidate of imageCandidates) {
+            if (selectedImages.length < maxImages) {
+              let finalUrl = candidate.url;
+
+              // Try to get full-size version even for thumbnails
+              finalUrl = getFullSizeUrl(candidate.url);
+              finalUrl = finalUrl.split('?')[0];
+
+              if (!images.includes(finalUrl)) {
+                images.push(finalUrl);
+                selectedImages.push(finalUrl);
+              }
+            }
+          }
+        }
+
+        // Store/domain
+        const domain = window.location.hostname;
+
+        return {
+          title,
+          price,
+          description,
+          images,
+          domain
+        };
+      });
+
+      await browser.close();
+      console.log('Scraping completed successfully');
+      res.json(data);
+
+    } catch (playwrightError) {
+      console.error('Playwright scraping failed:', playwrightError);
+      
+      // Fallback: Try simple HTTP request with cheerio
+      try {
+        console.log('Attempting fallback scraping with cheerio...');
+        const axios = require('axios');
+        const cheerio = require('cheerio');
+        
+        const response = await axios.get(url, {
+          headers: {
+            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36'
+          },
+          timeout: 10000
+        });
+        
+        const $ = cheerio.load(response.data);
+        
+        let title = $('title').text().trim() || 
+                   $('meta[property="og:title"]').attr('content') || 
+                   $('h1').first().text().trim() ||
+                   $('#productTitle').text().trim();
+        
+        // Clean up title - remove domain prefixes
+        title = title.replace(/^(amazon\.com|www\.amazon\.com|flipkart\.com|www\.flipkart\.com|myntra\.com|www\.myntra\.com)\s*[-:]\s*/i, '');
+        title = title.replace(/\s*[-|]\s*amazon\.com.*$/i, '');
+        title = title.replace(/\s*[-|]\s*flipkart\.com.*$/i, '');
+        title = title.replace(/\s*[-|]\s*myntra\.com.*$/i, '');
+        title = title.trim();
+        
+        let price = $('.a-price .a-offscreen').text().trim() ||
+                   $('.a-price-whole').text().trim() ||
+                   $('#priceblock_ourprice').text().trim() ||
+                   $('#priceblock_dealprice').text().trim() ||
+                   $('meta[property="product:price:amount"]').attr('content') ||
+                   $('.price').first().text().trim() ||
+                   $('[class*="price"]').first().text().trim();
+        
+        // Clean up price - extract only numeric values
+        const priceMatch = price.match(/[\$₹£€]?\s*[\d,]+\.?\d*/);
+        price = priceMatch ? priceMatch[0].trim() : '';
+        
+        let description = $('#productDescription').text().trim() ||
+                         $('#feature-bullets').text().trim() ||
+                         $('.product-description').text().trim() ||
+                         $('meta[name="description"]').attr('content') ||
+                         $('meta[property="og:description"]').attr('content') ||
+                         $('.description').first().text().trim();
+        
+        // Clean up description - remove domain references
+        description = description.replace(/\b(amazon|flipkart|myntra)\.com\b/gi, '');
+        description = description.replace(/\s+/g, ' ').trim();
+        
+        // Images - improved fallback scraping with quality prioritization
+        const images = [];
+        const processedUrls = new Set();
+
+        // Function to check if URL is likely a thumbnail
+        const isThumbnail = (url) => {
+          const lowerUrl = url.toLowerCase();
+          return lowerUrl.includes('thumb') ||
+                 lowerUrl.includes('thumbnail') ||
+                 lowerUrl.includes('small') ||
+                 lowerUrl.includes('tiny') ||
+                 lowerUrl.includes('mini') ||
+                 lowerUrl.includes('icon') ||
+                 lowerUrl.includes('32x32') ||
+                 lowerUrl.includes('64x64') ||
+                 lowerUrl.includes('100x100') ||
+                 lowerUrl.includes('150x150') ||
+                 lowerUrl.includes('200x200') ||
+                 // Amazon specific size parameters
+                 lowerUrl.includes('_ac_us') ||
+                 lowerUrl.includes('_ac_sx') ||
+                 lowerUrl.includes('_ac_sy') ||
+                 lowerUrl.includes('_ac_sl') ||
+                 lowerUrl.includes('_sr') ||
+                 // General size indicators
+                 /\d+x\d+/.test(lowerUrl) && parseInt(lowerUrl.match(/(\d+)x(\d+)/)[1]) < 300;
+        };
+
+        // Function to try to get full-size URL from thumbnail
+        const getFullSizeUrl = (thumbnailUrl) => {
+          let fullUrl = thumbnailUrl;
+
+          // Amazon patterns - more comprehensive handling
+          if (thumbnailUrl.includes('m.media-amazon.com/images/I/')) {
+            // Remove Amazon size parameters like _AC_US40_, _AC_SX466_, _AC_SY300_, etc.
+            fullUrl = fullUrl.replace(/_\w+\.jpg$/, '.jpg');
+            fullUrl = fullUrl.replace(/_\w+\.png$/, '.png');
+            fullUrl = fullUrl.replace(/_\w+\.jpeg$/, '.jpeg');
+            fullUrl = fullUrl.replace(/_\w+\.webp$/, '.webp');
+
+            // Handle multiple size parameters (rare but possible)
+            fullUrl = fullUrl.replace(/_\w+_\w+\./, '.');
+
+            // If still has size parameters, try a more aggressive approach
+            if (fullUrl.includes('_AC_') || fullUrl.includes('_SR') || fullUrl.includes('_SY') || fullUrl.includes('_SX')) {
+              const parts = fullUrl.split('.');
+              if (parts.length >= 2) {
+                const extension = parts[parts.length - 1];
+                const baseUrl = fullUrl.substring(0, fullUrl.lastIndexOf('.'));
+                // Remove all size-related parameters
+                const cleanBase = baseUrl.replace(/_\w+$/, '');
+                fullUrl = cleanBase + '.' + extension;
+              }
+            }
+          }
+
+          // Flipkart patterns
+          if (thumbnailUrl.includes('rukminim1.flixcart.com')) {
+            fullUrl = thumbnailUrl.replace(/\/image\/\d+x\d+\//, '/image/');
+          }
+
+          // General patterns
+          fullUrl = fullUrl.replace(/\/thumb\//, '/');
+          fullUrl = fullUrl.replace(/\/thumbnails?\//, '/');
+          fullUrl = fullUrl.replace(/_thumb\./, '.');
+          fullUrl = fullUrl.replace(/_thumbnail\./, '.');
+          fullUrl = fullUrl.replace(/_small\./, '.');
+
+          return fullUrl;
+        };
+
+        // Function to get image quality score
+        const getImageQualityScore = (url) => {
+          let score = 0;
+
+          if (url.includes('1000x') || url.includes('1200x') || url.includes('1500x')) score += 10;
+          if (url.includes('800x') || url.includes('900x')) score += 8;
+          if (url.includes('600x') || url.includes('700x')) score += 6;
+          if (url.includes('400x') || url.includes('500x')) score += 4;
+
+          if (url.includes('.jpg') || url.includes('.jpeg')) score += 3;
+          if (url.includes('.png')) score += 2;
+
+          if (!url.includes('w=') && !url.includes('h=')) score += 2;
+
+          return score;
+        };
+
+        // Extract images from JavaScript variables and data attributes in cheerio
+        const imageCandidates = [];
+
+        $('script').each((i, script) => {
+          const scriptContent = $(script).html();
+          if (scriptContent) {
+            // Look for common patterns in JavaScript that contain image URLs
+            const imagePatterns = [
+              /"image"\s*:\s*"([^"]+)"/gi,
+              /'image'\s*:\s*'([^']+)'/gi,
+              /"images"\s*:\s*\[([^\]]+)\]/gi,
+              /'images'\s*:\s*\[([^\]]+)\]/gi,
+              /"largeImage"\s*:\s*"([^"]+)"/gi,
+              /'largeImage'\s*:\s*'([^']+)'/gi,
+              /"hiRes"\s*:\s*"([^"]+)"/gi,
+              /'hiRes'\s*:\s*'([^']+)'/gi,
+              /"mainImage"\s*:\s*"([^"]+)"/gi,
+              /'mainImage'\s*:\s*'([^']+)'/gi,
+              // Amazon specific patterns
+              /"large"\s*:\s*"([^"]+)"/gi,
+              /'large'\s*:\s*'([^']+)'/gi,
+              /data-image-url="([^"]+)"/gi,
+              /data-old-hires="([^"]+)"/gi,
+              /data-image-index="([^"]+)"/gi
+            ];
+
+            imagePatterns.forEach(pattern => {
+              let match;
+              while ((match = pattern.exec(scriptContent)) !== null) {
+                const imageUrl = match[1];
+                if (imageUrl && imageUrl.startsWith('http') && !processedUrls.has(imageUrl)) {
+                  processedUrls.add(imageUrl);
+                  const qualityScore = getImageQualityScore(imageUrl) + 3; // Bonus for script-extracted images
+                  imageCandidates.push({
+                    url: imageUrl,
+                    score: qualityScore,
+                    isThumbnail: isThumbnail(imageUrl)
+                  });
+                }
+              }
+            });
+
+            // Look for image arrays in JavaScript
+            const arrayPatterns = [
+              /images\s*=\s*\[([^\]]+)\]/gi,
+              /imageList\s*=\s*\[([^\]]+)\]/gi,
+              /productImages\s*=\s*\[([^\]]+)\]/gi,
+              /gallery\s*=\s*\[([^\]]+)\]/gi
+            ];
+
+            arrayPatterns.forEach(pattern => {
+              let match;
+              while ((match = pattern.exec(scriptContent)) !== null) {
+                const arrayContent = match[1];
+                // Extract URLs from the array
+                const urlMatches = arrayContent.match(/"([^"]+)"/g) || arrayContent.match(/'([^']+)'/g);
+                if (urlMatches) {
+                  urlMatches.forEach(urlMatch => {
+                    const imageUrl = urlMatch.slice(1, -1); // Remove quotes
+                    if (imageUrl && imageUrl.startsWith('http') && !processedUrls.has(imageUrl)) {
+                      processedUrls.add(imageUrl);
+                      const qualityScore = getImageQualityScore(imageUrl) + 3;
+                      imageCandidates.push({
+                        url: imageUrl,
+                        score: qualityScore,
+                        isThumbnail: isThumbnail(imageUrl)
+                      });
+                    }
+                  });
+                }
+              }
+            });
+          }
+        });
+
+        // Look for images in data attributes of any element
+        $('*').each((i, element) => {
+          const attrs = element.attributes;
+          if (attrs) {
+            for (let j = 0; j < attrs.length; j++) {
+              const attr = attrs[j];
+              if (attr.name && attr.name.startsWith('data-') && attr.value && attr.value.startsWith('http') && attr.value.includes('image')) {
+                if (!processedUrls.has(attr.value)) {
+                  processedUrls.add(attr.value);
+                  const qualityScore = getImageQualityScore(attr.value) + 2;
+                  imageCandidates.push({
+                    url: attr.value,
+                    score: qualityScore,
+                    isThumbnail: isThumbnail(attr.value)
+                  });
+                }
+              }
+            }
+          }
+        });
+
+        // Collect image candidates from img tags
+
+        $('img').each((i, img) => {
+          const sources = [];
+
+          const src = $(img).attr('src');
+          const dataSrc = $(img).attr('data-src');
+          const dataOriginal = $(img).attr('data-original');
+          const dataLazy = $(img).attr('data-lazy');
+          const dataLazySrc = $(img).attr('data-lazy-src');
+          const dataZoom = $(img).attr('data-zoom');
+          const dataFull = $(img).attr('data-full');
+          const dataLarge = $(img).attr('data-large');
+
+          if (src) sources.push(src);
+          if (dataSrc) sources.push(dataSrc);
+          if (dataOriginal) sources.push(dataOriginal);
+          if (dataLazy) sources.push(dataLazy);
+          if (dataLazySrc) sources.push(dataLazySrc);
+          if (dataZoom) sources.push(dataZoom);
+          if (dataFull) sources.push(dataFull);
+          if (dataLarge) sources.push(dataLarge);
+
+          sources.forEach(source => {
+            if (source && source.startsWith('http') && !processedUrls.has(source)) {
+              processedUrls.add(source);
+              const qualityScore = getImageQualityScore(source);
+              imageCandidates.push({
+                url: source,
+                score: qualityScore,
+                isThumbnail: isThumbnail(source)
+              });
+            }
+          });
+        });
+
+        // Sort by quality and select best images
+        imageCandidates.sort((a, b) => b.score - a.score);
+
+        const selectedImages = [];
+        const maxImages = 20;
+
+        // Prefer non-thumbnails first
+        for (const candidate of imageCandidates) {
+          if (!candidate.isThumbnail && selectedImages.length < maxImages) {
+            let finalUrl = candidate.url;
+            if (candidate.isThumbnail) {
+              finalUrl = getFullSizeUrl(candidate.url);
+            }
+            finalUrl = finalUrl.split('?')[0];
+
+            if (!images.includes(finalUrl)) {
+              images.push(finalUrl);
+              selectedImages.push(finalUrl);
+            }
+          }
+        }
+
+        // Add thumbnails as fallback
+        if (selectedImages.length < maxImages) {
+          for (const candidate of imageCandidates) {
+            if (selectedImages.length < maxImages) {
+              let finalUrl = candidate.url;
+              finalUrl = getFullSizeUrl(candidate.url);
+              finalUrl = finalUrl.split('?')[0];
+
+              if (!images.includes(finalUrl)) {
+                images.push(finalUrl);
+                selectedImages.push(finalUrl);
+              }
+            }
+          }
+        }
+        
+        const urlObj = new URL(url);
+        const domain = urlObj.hostname;
+        
+        const fallbackData = {
+          title: title || 'Product Title',
+          price: price || '',
+          description: description || '',
+          images,
+          domain
+        };
+        
+        console.log('Fallback scraping completed');
+        res.json(fallbackData);
+        
+      } catch (fallbackError) {
+        console.error('Fallback scraping also failed:', fallbackError);
+        res.status(500).json({ 
+          error: 'Failed to scrape product data', 
+          details: 'Both Playwright and fallback methods failed' 
+        });
+      }
+    }
+  } catch (error) {
+    console.error('General scraping error:', error);
+    res.status(500).json({ error: 'Failed to process scraping request' });
   }
 });
 
