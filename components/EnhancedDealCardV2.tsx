@@ -1,6 +1,7 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, Alert, Share, Image, useWindowDimensions, Platform, Animated } from 'react-native';
-import { Heart, Share2, Bookmark, Clock, TrendingUp, Star, MapPin, Eye, Edit3 } from 'lucide-react-native';
+import AsyncStorage from '@react-native-async-storage/async-storage';
+import { Heart, Share2, Bookmark, Clock, TrendingUp, Star, MapPin, Eye, Edit3, Zap, MessageCircle } from 'lucide-react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useTheme } from '@/contexts/ThemeProvider';
 import { useCurrency } from '@/contexts/CurrencyProvider';
@@ -19,6 +20,9 @@ interface Deal {
   created_at: string;
   votes_up?: number;
   view_count?: number;
+  comments?: number;
+  comment_count?: number;
+  comments_count?: number;
   save_count?: number;
   isPinned?: boolean;
   expiry_date?: string;
@@ -58,7 +62,6 @@ export function EnhancedDealCardV2({ deal, isGuest, onVote, userRole, userId }: 
     setIsSaved(true);
     Alert.alert('Saved!', 'Deal added to your saved collection');
   };
-
   const handleEdit = () => {
     router.push(`/edit-deal/${deal.id}`);
   };
@@ -69,24 +72,20 @@ export function EnhancedDealCardV2({ deal, isGuest, onVote, userRole, userId }: 
   const handleShare = async () => {
     try {
       await Share.share({
-        message: `Check out this amazing deal: ${deal.title} for ${deal.price}`,
+        message: `Check out this amazing deal: ${deal.title}`,
         url: getShareUrl(`/deal/${deal.id}`),
       });
-    } catch (error) {
-      console.error('Error sharing:', error);
+    } catch (e) {
+      console.error('Share failed', e);
     }
   };
 
   const handleLike = async () => {
     if (isGuest || !userId) {
-      Alert.alert(
-        'Sign In Required',
-        'Please sign in or create an account to like deals.',
-        [
-          { text: 'Cancel', style: 'cancel' },
-          { text: 'Sign In', onPress: () => router.push('/sign-in') },
-        ]
-      );
+      Alert.alert('Sign In Required', 'Please sign in to like deals', [
+        { text: 'Cancel', style: 'cancel' },
+        { text: 'Sign In', onPress: () => router.push('/sign-in') },
+      ]);
       return;
     }
     setIsLiked(!isLiked);
@@ -94,17 +93,18 @@ export function EnhancedDealCardV2({ deal, isGuest, onVote, userRole, userId }: 
 
   const handleVote = async (voteType: 'up' | 'down') => {
     if (isGuest || !userId) {
-      Alert.alert(
-        'Sign In Required',
-        'Please sign in or create an account to vote on deals.',
-        [
-          { text: 'Cancel', style: 'cancel' },
-          { text: 'Sign In', onPress: () => router.push('/sign-in') },
-        ]
-      );
+      Alert.alert('Sign In Required', 'Please sign in to vote on deals', [
+        { text: 'Cancel', style: 'cancel' },
+        { text: 'Sign In', onPress: () => router.push('/sign-in') },
+      ]);
       return;
     }
-    onVote(Number(deal.id), voteType);
+
+    try {
+      onVote(Number(deal.id), voteType);
+    } catch (e) {
+      console.error('Vote failed', e);
+    }
   };
 
   const getTimeRemaining = () => {
@@ -126,46 +126,94 @@ export function EnhancedDealCardV2({ deal, isGuest, onVote, userRole, userId }: 
   const timeRemaining = getTimeRemaining();
   const isExpiringSoon = timeRemaining && timeRemaining.includes('h') && parseInt(timeRemaining) < 24;
 
-  const getStatusPill = () => {
-  const netVotes = deal.votes_up || 0;
-  const views = (deal.view_count as number) || (deal as any).views_count || 0;
-    
+  const [hasViewed, setHasViewed] = useState(false);
+  useEffect(() => {
+    if (!deal || !deal.id) return;
+    const viewedKey = `deal_viewed_${deal.id}`;
+    try {
+      if (typeof window !== 'undefined' && (window as any).sessionStorage) {
+        const v = sessionStorage.getItem(viewedKey);
+        setHasViewed(Boolean(v));
+      } else {
+        AsyncStorage.getItem(viewedKey).then(v => setHasViewed(Boolean(v))).catch(() => {});
+      }
+    } catch (e) {
+      // ignore
+    }
+  }, [deal]);
+
+  // Return an array of status pills (HOT, TRENDING, POPULAR, EXPIRING, PROMOTED)
+  const getBadges = () => {
+    const b: any[] = [];
+    const netVotes = deal.votes_up || 0;
+    const views = (deal.view_count as number) || (deal as any).views_count || 0;
+    const discount = deal.original_price && deal.price ? Math.round((1 - deal.price / deal.original_price) * 100) : 0;
+
+    // NEW: not viewed and within 3 days
+    try {
+      const threeDaysMs = 3 * 24 * 60 * 60 * 1000;
+      const createdAt = new Date(deal.created_at).getTime();
+      const ageMs = Date.now() - createdAt;
+      if (ageMs <= threeDaysMs && !hasViewed) {
+        b.push(
+          <View key="new" style={[styles.statusPill, { backgroundColor: '#10b981' }]}>
+            <Text style={styles.pillText}>NEW</Text>
+          </View>
+        );
+      }
+    } catch (e) {
+      // ignore malformed date
+    }
+
     if (isExpiringSoon) {
-      return (
-        <View style={[styles.statusPill, styles.expiringPill]}>
+      b.push(
+        <View key="expiring" style={[styles.statusPill, styles.expiringPill]}>
           <Clock size={10} color="#FFFFFF" />
           <Text style={styles.pillText}>EXPIRING</Text>
         </View>
       );
     }
-    
-    if (netVotes >= 10 && views >= 50) {
-      return (
-        <View style={[styles.statusPill, styles.hotPill]}>
-          <TrendingUp size={10} color="#FFFFFF" />
+
+    // HOT: large discount
+    if (discount > 50) {
+      b.push(
+        <View key="hot" style={[styles.statusPill, styles.hotPill]}>
+          <Zap size={10} color="#FFFFFF" />
           <Text style={styles.pillText}>HOT</Text>
         </View>
       );
     }
-    
-    if (netVotes >= 5 || views >= 25) {
-      return (
-        <View style={[styles.statusPill, styles.trendingPill]}>
+
+    // TRENDING: many upvotes
+    if (netVotes > 10) {
+      b.push(
+        <View key="trending" style={[styles.statusPill, styles.trendingPill]}>
           <Star size={10} color="#FFFFFF" />
           <Text style={styles.pillText}>TRENDING</Text>
         </View>
       );
     }
-    
+
+    // POPULAR: many views
+    if (views > 100) {
+      b.push(
+        <View key="popular" style={[styles.statusPill, styles.promotedPill]}>
+          <Star size={10} color="#FFFFFF" />
+          <Text style={styles.pillText}>POPULAR</Text>
+        </View>
+      );
+    }
+
+    // Promoted/pinned last
     if (deal.isPinned) {
-      return (
-        <View style={[styles.statusPill, styles.promotedPill]}>
+      b.push(
+        <View key="promoted" style={[styles.statusPill, styles.promotedPill]}>
           <Text style={styles.pillText}>PROMOTED</Text>
         </View>
       );
     }
-    
-    return null;
+
+    return b;
   };
 
   const { formatPrice } = useCurrency();
@@ -173,14 +221,35 @@ export function EnhancedDealCardV2({ deal, isGuest, onVote, userRole, userId }: 
     ? Math.round((1 - deal.price / deal.original_price) * 100) 
     : 0;
 
+  // Determine gradient colors for the 'View Deal' button: keep original desktop web gradient
+  const isDesktopWeb = Platform.OS === 'web' && width >= 768;
+  const viewDealGradientColors = isDesktopWeb ? ['#6366f1', '#4f46e5'] : [colors.primary, colors.primary];
+
   // Mobile compact layout
   if (isMobile) {
+  const mobileBadges = getBadges();
     return (
       <TouchableOpacity 
         style={[styles.mobileContainer, { backgroundColor: colors.surface }]}
         onPress={() => router.push(`/deal-details?id=${deal.id}&title=${encodeURIComponent(deal.title)}&price=${deal.price}`)}
         activeOpacity={0.95}
       >
+        {/* Card-level top badges (NEW left, HOT right) - absolute, won't affect layout */}
+        {mobileBadges.length > 0 && (
+          <>
+            {mobileBadges.find((b: any) => b?.key === 'new') && (
+              <View style={styles.mobileCardNewBadge} pointerEvents="none">
+                {mobileBadges.find((b: any) => b?.key === 'new')}
+              </View>
+            )}
+            {mobileBadges.find((b: any) => b?.key === 'hot') && (
+              <View style={styles.mobileCardHotBadge} pointerEvents="none">
+                {mobileBadges.find((b: any) => b?.key === 'hot')}
+              </View>
+            )}
+          </>
+        )}
+
         <View style={styles.mobileImageContainer}>
           <Image 
             source={{ uri: deal.images?.[0] || 'https://placehold.co/100x80/e2e8f0/64748b?text=No+Image' }}
@@ -192,9 +261,20 @@ export function EnhancedDealCardV2({ deal, isGuest, onVote, userRole, userId }: 
               <Text style={styles.mobileDiscountText}>{discountPercentage}%</Text>
             </View>
           )}
+          {/* show only NEW as overlay on image for mobile */}
+          {/* badges moved to card-level; nothing overlayed on image */}
         </View>
 
         <View style={styles.mobileContent}>
+          {/* render other badges (excluding NEW/HOT) inline here so they don't overlap image */}
+          {mobileBadges.length > 0 && (
+            <View style={styles.mobileCardBadgesRow}>
+              {mobileBadges.filter((b: any) => b?.key !== 'new' && b?.key !== 'hot').map((b: any, i: number) => (
+                <React.Fragment key={i}>{b}</React.Fragment>
+              ))}
+            </View>
+          )}
+
           <Text style={styles.mobileTitle} numberOfLines={2}>{deal.title}</Text>
           
           <View style={styles.mobilePriceRow}>
@@ -218,11 +298,8 @@ export function EnhancedDealCardV2({ deal, isGuest, onVote, userRole, userId }: 
             <Text style={styles.mobileTimeAgo}>{formatTimeAgo(deal.created_at)}</Text>
           </View>
 
-          {getStatusPill() && (
-            <View style={styles.mobileStatusContainer}>
-              {React.isValidElement(getStatusPill()) ? getStatusPill() : <Text>{getStatusPill()}</Text>}
-            </View>
-          )}
+          {/* render non-NEW badges below image so they don't cover it */}
+          {/* non-NEW badges are overlaid inside the image frame on mobile, so nothing rendered here */}
         </View>
       </TouchableOpacity>
     );
@@ -235,6 +312,17 @@ export function EnhancedDealCardV2({ deal, isGuest, onVote, userRole, userId }: 
       onPress={() => router.push(`/deal-details?id=${deal.id}&title=${encodeURIComponent(deal.title)}&price=${deal.price}`)}
       activeOpacity={0.95}
     >
+      {/* Desktop card-level badges: NEW (top-left) and HOT (top-right) */}
+      {getBadges().length > 0 && (
+        <>
+          {getBadges().find((b: any) => b?.key === 'new') && (
+            <View style={styles.cardNewBadge} pointerEvents="none">{getBadges().find((b: any) => b?.key === 'new')}</View>
+          )}
+          {getBadges().find((b: any) => b?.key === 'hot') && (
+            <View style={styles.cardHotBadge} pointerEvents="none">{getBadges().find((b: any) => b?.key === 'hot')}</View>
+          )}
+        </>
+      )}
       {/* Enhanced Image Container */}
       <View style={styles.imageContainer}>
         <Image 
@@ -244,14 +332,19 @@ export function EnhancedDealCardV2({ deal, isGuest, onVote, userRole, userId }: 
         />
         <View style={styles.imageOverlay} />
         
-        {/* Enhanced Badges */}
-        <View style={styles.badgeContainer}>
+        {/* Enhanced Badges: keep NEW/HOT card-level; show discounts and other pills bottom-left */}
+        <View style={styles.badgeContainer} />
+        <View style={styles.badgeBottomContainer}>
           {discountPercentage > 0 && (
             <View style={styles.discountBadge}>
               <Text style={styles.discountText}>{discountPercentage}% OFF</Text>
             </View>
           )}
-          {getStatusPill()}
+          <View style={styles.bottomPillsRow}>
+            {getBadges().filter((b: any) => {
+              try { const key = (b as any).key; return key !== 'new' && key !== 'hot'; } catch (e) { return true; }
+            }).map((b, i) => <React.Fragment key={i}>{b}</React.Fragment>)}
+          </View>
         </View>
 
         {/* Enhanced Price Overlay */}
@@ -294,6 +387,10 @@ export function EnhancedDealCardV2({ deal, isGuest, onVote, userRole, userId }: 
               <Heart size={10} color="#ef4444" />
               <Text style={styles.statText}>{typeof deal.votes_up === 'number' ? deal.votes_up : 0}</Text>
             </View>
+            <View style={styles.stat}>
+              <MessageCircle size={10} color="#94a3b8" />
+              <Text style={styles.statText}>{deal.comments ?? deal.comment_count ?? (deal as any).comments_count ?? 0}</Text>
+            </View>
           </View>
           
           {timeRemaining && (
@@ -325,8 +422,9 @@ export function EnhancedDealCardV2({ deal, isGuest, onVote, userRole, userId }: 
             router.push(`/deal-details?id=${deal.id}&title=${encodeURIComponent(deal.title)}&price=${deal.price}`); 
           }}
         >
-          <LinearGradient colors={['#6366f1', '#4f46e5']} style={styles.getDealGradient}>
-            <Text style={styles.getDealText}>View Deal</Text>
+          <LinearGradient colors={viewDealGradientColors as any} style={[styles.getDealGradient, { backgroundColor: viewDealGradientColors[0] }]}
+          >
+            <Text style={[styles.getDealText, { color: '#FFFFFF' }]}>{'View Deal'}</Text>
           </LinearGradient>
         </TouchableOpacity>
       </View>
@@ -389,9 +487,24 @@ const styles = StyleSheet.create({
     position: 'absolute',
     top: 8,
     left: 8,
-    flexDirection: 'column',
-    gap: 4,
+  flexDirection: 'column',
+  // use explicit spacing for RN (gap not supported reliably)
+  paddingTop: 0,
     zIndex: 3,
+  },
+
+  // Desktop card-level badges (do not affect layout height)
+  cardNewBadge: {
+    position: 'absolute',
+    top: 10,
+    left: 10,
+    zIndex: 20,
+  },
+  cardHotBadge: {
+    position: 'absolute',
+    top: 10,
+    right: 10,
+    zIndex: 20,
   },
   
   discountBadge: {
@@ -404,6 +517,23 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.4,
     shadowRadius: 8,
     elevation: 8,
+  },
+
+  badgeBottomContainer: {
+    position: 'absolute',
+    bottom: 8,
+    left: 8,
+    right: 8,
+    zIndex: 15,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'flex-start',
+    gap: 8,
+  },
+  bottomPillsRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
   },
   
   discountText: {
@@ -421,7 +551,8 @@ const styles = StyleSheet.create({
     paddingHorizontal: 6,
     paddingVertical: 3,
     borderRadius: 10,
-    gap: 2,
+  marginBottom: 6,
+  marginRight: 6,
   },
   
   hotPill: {
@@ -695,8 +826,58 @@ const styles = StyleSheet.create({
     color: '#94a3b8',
   },
   mobileStatusContainer: {
-    marginTop: 4,
-    alignSelf: 'flex-start',
+  position: 'absolute',
+  top: 6,
+  left: 6,
+  flexDirection: 'row',
+  gap: 6,
+  zIndex: 10,
+  },
+  mobileNewBadgeOverlay: {
+    position: 'absolute',
+    top: 6,
+    left: 6,
+    zIndex: 12,
+  },
+  mobileHotBadgeOverlay: {
+    position: 'absolute',
+    top: 6,
+    right: 6,
+    zIndex: 12,
+  },
+  mobileCardNewBadge: {
+    position: 'absolute',
+    top: 6,
+    left: 10,
+    zIndex: 20,
+  },
+  mobileCardHotBadge: {
+    position: 'absolute',
+    top: 6,
+    right: 10,
+    zIndex: 20,
+  },
+  mobileCardBadgesRow: {
+    flexDirection: 'row',
+    gap: 6,
+    marginBottom: 6,
+  },
+  mobileBadgesOverlay: {
+    position: 'absolute',
+    bottom: 6,
+    left: 6,
+    right: 6,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'flex-start',
+    zIndex: 11,
+    gap: 6,
+  },
+  // smaller pill style for mobile overlay
+  mobilePillSmall: {
+    paddingHorizontal: 6,
+    paddingVertical: 3,
+    borderRadius: 8,
   },
   editButton: {
     flexDirection: 'row',

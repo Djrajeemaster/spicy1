@@ -1,5 +1,6 @@
-import React from 'react';
+import React, { useEffect, useState } from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, Image } from 'react-native';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Heart, Share2, Bookmark, Clock, TrendingUp, Star, MapPin, Eye, MessageCircle, ChevronUp, ChevronDown, Edit3 } from 'lucide-react-native';
 import { router } from 'expo-router';
@@ -48,6 +49,22 @@ interface DealListCardProps {
 }
 
 export default function DealListCard({ deal, isGuest, onVote, userRole, userId }: DealListCardProps) {
+  const [hasViewed, setHasViewed] = useState(false);
+
+  useEffect(() => {
+    if (!deal || !deal.id) return;
+    const viewedKey = `deal_viewed_${deal.id}`;
+    try {
+      if (typeof window !== 'undefined' && window.sessionStorage) {
+        const v = sessionStorage.getItem(viewedKey);
+        setHasViewed(Boolean(v));
+      } else {
+        AsyncStorage.getItem(viewedKey).then(v => setHasViewed(Boolean(v))).catch(() => {});
+      }
+    } catch (e) {
+      // ignore
+    }
+  }, [deal]);
   const votesUp = deal.votes_up || 0;
   const votesDown = deal.votes_down || 0;
   const netVotes = votesUp - votesDown;
@@ -64,11 +81,30 @@ export default function DealListCard({ deal, isGuest, onVote, userRole, userId }
   const isExpiring = deal.expires_at && 
     new Date(deal.expires_at).getTime() - Date.now() < 24 * 60 * 60 * 1000;
 
-  const isTrending = (() => {
-    const hoursAgo = (Date.now() - new Date(deal.created_at).getTime()) / (1000 * 60 * 60);
-    // Use normalized views_count when available for consistency with server normalization
+  // Compute status badges (align thresholds with detail page / enhanced card)
+  const badges = (() => {
+    const b: string[] = [];
     const views = (deal.views_count as number) || (deal as any).view_count || 0;
-    return hoursAgo <= 24 && votesUp > 5 && views > 5;
+    const discount = deal.original_price && Number(deal.original_price) > Number(deal.price) ? 
+      Math.max(0, Math.round(((Number(deal.original_price) - Number(deal.price)) / Number(deal.original_price)) * 100)) : 0;
+    // NEW: show until user opens the deal and only for first 3 days after creation
+    try {
+      const threeDaysMs = 3 * 24 * 60 * 60 * 1000;
+      const createdAt = new Date(deal.created_at).getTime();
+      const ageMs = Date.now() - createdAt;
+      if (ageMs <= threeDaysMs && !hasViewed) b.push('NEW');
+    } catch (e) {
+      // ignore malformed date
+    }
+
+    // HOT: large discount
+    if (discount > 50) b.push('HOT');
+    // TRENDING: many upvotes
+    if ((deal.votes_up || 0) > 10) b.push('TRENDING');
+    // POPULAR: many views
+    if (views > 100) b.push('POPULAR');
+
+    return b;
   })();
 
   const handleEdit = () => {
@@ -102,20 +138,41 @@ export default function DealListCard({ deal, isGuest, onVote, userRole, userId }
               </LinearGradient>
             )}
             
-            {/* Overlay badges */}
+            {/* Overlay badges: NEW (top-left), HOT (top-right), others bottom-left */}
             <View style={styles.imageBadges}>
-              {isTrending && (
-                <View style={styles.trendingBadge}>
+              {badges.includes('NEW') && (
+                <View style={styles.newBadge}>
+                  <Text style={styles.badgeText}>NEW</Text>
+                </View>
+              )}
+
+              {badges.includes('HOT') && (
+                <View style={[styles.trendingBadge, styles.hotTopRight]}>
                   <TrendingUp size={12} color="#ffffff" />
                   <Text style={styles.badgeText}>HOT</Text>
                 </View>
               )}
-              {isExpiring && (
-                <View style={styles.expiringBadge}>
-                  <Clock size={12} color="#ffffff" />
-                  <Text style={styles.badgeText}>ENDS SOON</Text>
-                </View>
-              )}
+
+              <View style={styles.bottomBadgeRow} pointerEvents="none">
+                {badges.includes('TRENDING') && (
+                  <View style={styles.expiringBadge}>
+                    <TrendingUp size={12} color="#ffffff" />
+                    <Text style={styles.badgeText}>TRENDING</Text>
+                  </View>
+                )}
+                {badges.includes('POPULAR') && (
+                  <View style={styles.popularBadge}>
+                    <Eye size={12} color="#ffffff" />
+                    <Text style={styles.badgeText}>POPULAR</Text>
+                  </View>
+                )}
+                {isExpiring && (
+                  <View style={styles.expiringBadge}>
+                    <Clock size={12} color="#ffffff" />
+                    <Text style={styles.badgeText}>ENDS SOON</Text>
+                  </View>
+                )}
+              </View>
             </View>
           </View>
 
@@ -291,6 +348,15 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     backgroundColor: '#ef4444',
+    paddingHorizontal: 6,
+    paddingVertical: 3,
+    borderRadius: 12,
+    gap: 3,
+  },
+  popularBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#8b5cf6',
     paddingHorizontal: 6,
     paddingVertical: 3,
     borderRadius: 12,

@@ -222,7 +222,7 @@ export default function DealDetailsScreen() {
     if (!deal) return [];
     
     const badges = [];
-    const discount = deal.original_price ? Math.round((1 - deal.price / deal.original_price) * 100) : 0;
+    const discount = deal.original_price ? Math.max(0, Math.round((1 - deal.price / deal.original_price) * 100)) : 0;
     
     if (discount > 50) {
       badges.push(
@@ -266,7 +266,7 @@ export default function DealDetailsScreen() {
     );
   }
 
-  const discount = deal.original_price ? Math.round((1 - deal.price / deal.original_price) * 100) : 0;
+  const discount = deal.original_price ? Math.max(0, Math.round((1 - deal.price / deal.original_price) * 100)) : 0;
 
   const renderThumbnails = () => {
     if (!deal?.images || deal.images.length === 0) return null;
@@ -334,9 +334,9 @@ export default function DealDetailsScreen() {
 
       {/* Enhanced Price Section */}
       <View style={styles.priceSection}>
-        <Text style={styles.price}>{formatPrice(deal.price, false)}</Text>
+        <Text style={styles.price}>{formatPrice(deal.price)}</Text>
         {deal.original_price && (
-          <Text style={styles.originalPrice}>{formatPrice(deal.original_price, false)}</Text>
+          <Text style={styles.originalPrice}>{formatPrice(deal.original_price)}</Text>
         )}
         {discount > 0 && (
           <LinearGradient colors={['#ef4444', '#dc2626']} style={styles.discountBadge}>
@@ -570,7 +570,7 @@ const styles = StyleSheet.create({
   price: { fontSize: 32, fontWeight: 'bold', color: '#10b981' },
   originalPrice: { fontSize: 18, color: '#94a3b8', textDecorationLine: 'line-through', marginLeft: 12 },
   discountBadge: { backgroundColor: '#fef2f2', paddingHorizontal: 8, paddingVertical: 4, borderRadius: 8, marginLeft: 12, borderWidth: 1, borderColor: '#fee2e2' },
-  discountText: { color: '#ef4444', fontWeight: 'bold', fontSize: 14 },
+  discountText: { color: '#ffffff', fontWeight: '800', fontSize: 13, textTransform: 'uppercase' },
   
   ctaButton: { borderRadius: 12, overflow: 'hidden', marginBottom: 16 },
   ctaGradient: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', paddingVertical: 16 },
@@ -757,11 +757,19 @@ const styles = StyleSheet.create({
     minWidth: 36,
     justifyContent: 'center',
   },
+  smallCounterMobile: {
+    paddingHorizontal: 6,
+    paddingVertical: 4,
+    minWidth: 36,
+  },
   smallCounterText: {
-    marginLeft: 6,
+  marginLeft: 6,
+  fontSize: 11,
+  color: '#475569',
+  fontWeight: '700',
+  },
+  smallCounterTextMobile: {
     fontSize: 11,
-    color: '#475569',
-    fontWeight: '700',
   },
   smallCounterDesktop: {
     paddingHorizontal: 10,
