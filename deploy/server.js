@@ -11,6 +11,106 @@ const fs = require('fs');
 const multer = require('multer');
 // store uploads temporarily then move into assets
 const upload = multer({ dest: path.join(__dirname, 'tmp_uploads') });
+const { chromium } = require('playwright');
+const axios = require('axios');
+
+// Shared Playwright browser to avoid launching per-request (speeds up scraping)
+let sharedBrowser = null;
+let sharedBrowserLaunching = false;
+
+const getSharedBrowser = async () => {
+  if (sharedBrowser) return sharedBrowser;
+  if (sharedBrowserLaunching) {
+    // wait until browser is launched
+    while (sharedBrowserLaunching && !sharedBrowser) {
+      await new Promise(r => setTimeout(r, 100));
+    }
+    return sharedBrowser;
+  }
+
+  try {
+    sharedBrowserLaunching = true;
+    sharedBrowser = await chromium.launch({
+      headless: true,
+      args: [
+        '--no-sandbox',
+        '--disable-setuid-sandbox',
+        '--disable-dev-shm-usage',
+        '--disable-accelerated-2d-canvas',
+        '--no-first-run',
+        '--no-zygote',
+        '--disable-gpu',
+        '--disable-blink-features=AutomationControlled'
+      ]
+    });
+    sharedBrowserLaunching = false;
+    return sharedBrowser;
+  } catch (e) {
+    sharedBrowserLaunching = false;
+    throw e;
+  }
+};
+
+// Helper: parse width from common URL tokens (Flipkart, Amazon, general patterns)
+const getWidthFromUrl = (u) => {
+  if (!u || typeof u !== 'string') return null;
+  try {
+    let m;
+    // Flipkart style /image/800x800/
+    m = u.match(/\/image\/(\d{2,5})x(\d{2,5})\//i);
+    if (m) return parseInt(m[1], 10);
+    // explicit WxH e.g., 800x800 in filename
+    m = u.match(/(\d{2,5})x(\d{2,5})/);
+    if (m) return parseInt(m[1], 10);
+    // Amazon _SX800_ or _SY800_
+    m = u.match(/_SX(\d{2,5})_/i);
+    if (m) return parseInt(m[1], 10);
+    m = u.match(/_SY(\d{2,5})_/i);
+    if (m) return parseInt(m[1], 10);
+    // path segments like /800/800/
+    m = u.match(/\/(\d{2,5})\/(\d{2,5})\//);
+    if (m) return parseInt(m[1], 10);
+  } catch (e) {}
+  return null;
+};
+
+// Helper: filter images by minimum width. Uses URL tokens first, then HEAD size heuristic as fallback.
+const filterImagesByMinWidth = async (images, minWidth = 400) => {
+  if (!Array.isArray(images) || images.length === 0) return images;
+
+  const kept = [];
+  const toHead = [];
+
+  for (const img of images) {
+    const w = getWidthFromUrl(img);
+    if (w !== null) {
+      if (w >= minWidth) kept.push(img);
+      continue;
+    }
+    toHead.push(img);
+  }
+
+  // For URLs without tokens, do a fast HEAD and accept if content-length > threshold
+  const headThreshold = 20 * 1024; // 20 KB
+  if (toHead.length > 0) {
+    const headChecks = toHead.map(async (url) => {
+      try {
+        const resp = await axios.head(url, { timeout: 3000, maxRedirects: 3 });
+        const len = resp.headers && resp.headers['content-length'] ? parseInt(resp.headers['content-length'], 10) : 0;
+        if (!isNaN(len) && len >= headThreshold) {
+          kept.push(url);
+        }
+      } catch (e) {
+        // ignore failures; do not keep the image
+      }
+    });
+
+    await Promise.all(headChecks);
+  }
+
+  // If filtering stripped everything, return the original list as a fallback
+  return kept.length > 0 ? kept : images;
+};
 
 // Import security middleware
 const { securityHeaders } = require('./middleware/security');
@@ -22,6 +122,10 @@ const port = process.env.PORT || 3000;
 const pool = new Pool({
   connectionString: process.env.DATABASE_URL,
 });
+
+// In-memory recent view increments to prevent rapid duplicate increments per session/IP
+// Key format: `${dealId}:${sessionIdOrIp}` -> timestamp (ms)
+const recentViewIncrements = new Map();
 
 // Parse JSON bodies
 app.use(express.json());
@@ -252,7 +356,6 @@ async function requireAuth(req, res, next) {
     // If no cookie session, check for x-session-id header (React Native)
     if (!sessionId) {
       sessionId = req.headers['x-session-id'];
-    } else {
     }
     
     if (!sessionId) {
@@ -330,6 +433,9 @@ app.use(cors({
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
   allowedHeaders: ['Content-Type', 'Authorization', 'Cookie', 'x-admin-elevation']
 }));
+
+
+
 
 // Role request endpoints
 
@@ -515,7 +621,6 @@ app.get('/api/site/logos', requireSuperAdmin, (req, res) => {
 // Upload a new logo (super_admin only)
 app.post('/api/site/logo', upload.single('logo'), requireSuperAdmin, async (req, res) => {
   try {
-    
     if (!req.file) {
       console.error('No file uploaded');
       return res.status(400).json({ error: 'No file uploaded' });
@@ -776,7 +881,6 @@ app.get('/api/auth/session', async (req, res) => {
   // If no cookie session, check for x-session-id header (React Native)
   if (!sessionId) {
     sessionId = req.headers['x-session-id'];
-  } else {
   }
   
   if (!sessionId) {
@@ -1138,6 +1242,54 @@ app.get('/api/deals/:id', async (req, res) => {
   }
 });
 
+// Increment view count for a deal
+app.post('/api/deals/:id/view', async (req, res) => {
+  try {
+    const { id } = req.params;
+    // Dedupe rapid duplicate increments from the same session or IP.
+    const sessionId = req.cookies && req.cookies.session_id;
+    const ip = req.ip || req.connection && req.connection.remoteAddress || req.headers['x-forwarded-for'] || 'unknown';
+    const ownerKey = `${id}:${sessionId || ip}`;
+
+    const now = Date.now();
+    const windowMs = 5000; // 5 seconds
+
+    // Clean up old entries occasionally
+    if (recentViewIncrements.size > 5000) {
+      for (const [k, v] of recentViewIncrements) {
+        if (now - v > 60000) recentViewIncrements.delete(k);
+      }
+    }
+
+    const last = recentViewIncrements.get(ownerKey) || 0;
+    if (now - last < windowMs) {
+      // Treat as a duplicate rapid call; return current view_count without incrementing
+      try {
+        const { rows: found } = await pool.query('SELECT view_count FROM deals WHERE id = $1', [id]);
+        if (found.length === 0) return res.status(404).json({ error: 'Deal not found' });
+        return res.json({ view_count: found[0].view_count, deduped: true });
+      } catch (e) {
+        return res.status(500).json({ error: 'Failed to read deal' });
+      }
+    }
+
+    // Record this increment attempt
+    recentViewIncrements.set(ownerKey, now);
+
+    const { rows } = await pool.query(
+      `UPDATE deals SET view_count = COALESCE(view_count, 0) + 1 WHERE id = $1 RETURNING view_count`,
+      [id]
+    );
+
+    if (rows.length === 0) return res.status(404).json({ error: 'Deal not found' });
+
+    res.json({ view_count: rows[0].view_count });
+  } catch (err) {
+    console.error('Error incrementing view count:', err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
 // Update deal
 app.put('/api/deals/:id', async (req, res) => {
   try {
@@ -1204,8 +1356,8 @@ app.post('/api/deals', async (req, res) => {
     const { rows } = await pool.query(`
       INSERT INTO deals (
         title, description, price, original_price, discount_percentage,
-        deal_url, category_id, store_id, created_by, city, state, status, created_at
-      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, NOW())
+        deal_url, category_id, store_id, created_by, city, state, status, images, created_at
+      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, NOW())
       RETURNING *
     `, [
       dealData.title,
@@ -1219,7 +1371,8 @@ app.post('/api/deals', async (req, res) => {
       dealData.created_by,
   dealData.city || '',
   dealData.state || '',
-      dealData.status || 'pending'
+      dealData.status || 'pending',
+      dealData.images || []
     ]);
     
     res.json(rows[0]);
@@ -1401,6 +1554,1359 @@ app.get('/api/deals/saved', async (req, res) => {
   }
 });
 
+// Scrape product data from URL
+app.post('/api/scrape-product', async (req, res) => {
+  try {
+    const { url } = req.body;
+    if (!url) {
+      return res.status(400).json({ error: 'URL is required' });
+    }
+
+    // Validate URL
+    const urlRegex = /^https?:\/\/.+/;
+    if (!urlRegex.test(url)) {
+      return res.status(400).json({ error: 'Invalid URL format' });
+    }
+
+    console.log('Starting scraping for URL:', url);
+
+    try {
+      // Try Playwright first
+      console.log('Attempting Playwright scraping...');
+      let browser = await getSharedBrowser();
+
+      // Create a context with a realistic user agent and small anti-detection scripts
+      let context;
+      try {
+        context = await browser.newContext({
+        userAgent: 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/116.0.0.0 Safari/537.36',
+        viewport: { width: 1280, height: 800 },
+      });
+      } catch (e) {
+        // If the shared browser appears closed, reset and retry once
+        console.warn('Shared browser context creation failed, restarting shared browser...', e && (e.message || e));
+        try {
+          sharedBrowser = null;
+          browser = await getSharedBrowser();
+          context = await browser.newContext({
+            userAgent: 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/116.0.0.0 Safari/537.36',
+            viewport: { width: 1280, height: 800 },
+          });
+        } catch (err) {
+          throw err;
+        }
+      }
+
+      // Reduce automation fingerprints
+      await context.addInitScript(() => {
+        try {
+          Object.defineProperty(navigator, 'webdriver', { get: () => false });
+        } catch (e) {}
+        try {
+          window.navigator.chrome = { runtime: {} };
+        } catch (e) {}
+        try {
+          Object.defineProperty(navigator, 'languages', { get: () => ['en-US', 'en'] });
+        } catch (e) {}
+        try {
+          Object.defineProperty(navigator, 'plugins', { get: () => [1,2,3,4,5] });
+        } catch (e) {}
+      });
+
+      const page = await context.newPage();
+
+      // Navigate quickly to DOMContentLoaded and then wait briefly for likely selectors
+      await page.goto(url, { waitUntil: 'domcontentloaded', timeout: 30000 });
+
+      // Short targeted waits for typical product page markers (title/price/meta)
+      const quickSelectors = [
+        'h1',
+        'title',
+        'meta[property="og:title"]',
+        'meta[name="description"]',
+        '.a-price',
+        '#priceblock_ourprice',
+        '.price',
+        '._30jeq3',
+        'span.B_NuCI'
+      ];
+
+      try {
+        await page.waitForSelector(quickSelectors.join(','), { timeout: 2500 });
+      } catch (e) {
+        // If no quick selector appeared, continue — some pages need longer JS
+      }
+
+      // Extract data
+      const data = await page.evaluate(() => {
+        const getTextContent = (selectors) => {
+          for (const selector of selectors) {
+            const element = document.querySelector(selector);
+            if (!element) continue;
+            // If meta tag, read content
+            if (element.tagName && element.tagName.toLowerCase() === 'meta') {
+              const c = element.getAttribute('content');
+              if (c && c.trim()) return c.trim();
+            }
+            if (element && element.textContent?.trim()) {
+              return element.textContent.trim();
+            }
+          }
+          return '';
+        };
+
+        // Title selectors - prioritize Amazon product title first, then others
+        let title = getTextContent([
+          '#productTitle', // Amazon primary
+          '#title',
+          'h1#title',
+          'h1',
+          'span.B_NuCI', // Flipkart
+          'span._35KyD6',
+          '[data-testid="product-title"]',
+          '.product-title',
+          '.product-name',
+          'meta[property="og:title"]',
+          'meta[name="twitter:title"]'
+        ]) || document.title || '';
+
+        // Try JSON-LD product data for title/price/description if present
+        try {
+          const ldScripts = document.querySelectorAll('script[type="application/ld+json"]');
+          for (const s of ldScripts) {
+            try {
+              const json = JSON.parse(s.textContent || s.innerText || '{}');
+              const product = (Array.isArray(json) ? json.find(j => j['@type'] && j['@type'].toLowerCase() === 'product') : (json['@type'] && json['@type'].toLowerCase() === 'product' ? json : null));
+              if (product) {
+                if (!title || title.length < 5) title = (product.name || title);
+                if ((!price || price === '') && product.offers) {
+                  price = (product.offers.priceCurrency ? product.offers.priceCurrency + ' ' : '') + (product.offers.price || '');
+                }
+                if (!description || description.length < 5) description = product.description || description;
+                break;
+              }
+            } catch (e) {
+              // ignore JSON parse errors
+            }
+          }
+        } catch (e) {}
+
+  // Clean up title - remove domain prefixes and helper UI text
+  title = title.replace(/^(amazon\.com|www\.amazon\.com|flipkart\.com|www\.flipkart\.com|myntra\.com|www\.myntra\.com)\s*[-:]\s*/i, '');
+  title = title.replace(/\s*[-|]\s*amazon\.com.*$/i, '');
+  title = title.replace(/\s*[-|]\s*flipkart\.com.*$/i, '');
+  title = title.replace(/\s*[-|]\s*myntra\.com.*$/i, '');
+  // Remove repeated UI helper fragments such as 'Product summary presents key product information' or keyboard shortcuts
+  title = title.replace(/Product summary presents key product information/gi, '');
+  title = title.replace(/Keyboard shortcut[\s\S]*$/i, '');
+  title = title.replace(/\s*See more product details.*$/i, '');
+  title = title.replace(/\s+/g, ' ').trim();
+
+        // Price selectors - more specific for product prices
+        let price = getTextContent([
+          '[data-testid="price"]',
+          '.a-price .a-offscreen',
+          '.a-price-whole',
+          '.a-color-price',
+          '#priceblock_ourprice',
+          '#priceblock_dealprice',
+          '.price',
+          '.product-price',
+          '.current-price',
+          '[class*="price"]',
+          'meta[property="product:price:amount"]',
+          '._30jeq3', // Flipkart main price
+          'div._30jeq3',
+          'div._30jeq3._1_WHN1',
+          '._3I9_wc', // Flipkart alternate price class
+          '._25b18c',
+          '._16Jk6d',
+          '.\_1vC4OE'
+        ]);
+
+        // Clean up price - extract only numeric values
+        const priceMatch = price.match(/[\$₹£€]?\s*[\d,]+\.?\d*/);
+        price = priceMatch ? priceMatch[0].trim() : '';
+        
+        // Try to extract an original / list price (Amazon often shows a 'List Price' or struck-through price)
+        let originalPrice = '';
+        try {
+          // Common Amazon selectors for list/strike price and other hosts where list price is present
+          const listSelectors = [
+            '#priceblock_listprice',
+            '#price_feature_div .a-text-strike',
+            '.a-text-strike',
+            '.priceBlockStrikePriceString',
+            '.priceBlockSavingsString',
+            '.list-price',
+            '.strike',
+            '.comparison_price'
+          ];
+          for (const sel of listSelectors) {
+            const el = document.querySelector(sel);
+            if (el && el.textContent && el.textContent.trim()) {
+              const m = el.textContent.trim().match(/[\$₹£€]?\s*[\d,]+\.?\d*/);
+              if (m) { originalPrice = m[0].trim(); break; }
+            }
+          }
+        } catch (e) {}
+
+        // Description selectors - prioritize structured Amazon/feature bullets and product description
+        let description = '';
+
+        // Prefer Amazon feature bullets if present
+        try {
+          const bullets = document.querySelectorAll('#feature-bullets .a-list-item');
+          if (bullets && bullets.length > 0) {
+            const parts = [];
+            bullets.forEach(b => {
+              const t = b.textContent && b.textContent.trim();
+              if (t) parts.push(t);
+            });
+            if (parts.length > 0) description = parts.join('\n');
+          }
+        } catch (e) {}
+
+        if (!description) {
+          description = getTextContent([
+            '#productDescription',
+            '[data-testid="product-description"]',
+            '.product-description',
+            '.a-unordered-list',
+            'meta[name="description"]',
+            'meta[property="og:description"]',
+            '.\_1mXcCf',
+            '.\_2RngUh',
+            '.\_2418kt',
+            'div._1mXcCf',
+            'div._2RngUh'
+          ]);
+        }
+
+        // Clean up description - remove domain references and UI helper noise
+        description = (description || '').replace(/\b(amazon|flipkart|myntra)\.com\b/gi, '');
+        // Remove repeated UI helper fragments and keyboard shortcut blocks
+        description = description.replace(/Product summary presents key product information/gi, '');
+        description = description.replace(/Keyboard shortcut[\s\S]*?(?=About this item|$)/gi, '');
+        description = description.replace(/›?\s*See more product details[\s\S]*$/i, '');
+        description = description.replace(/\s+/g, ' ').trim();
+
+        // As a last resort, try JSON-LD again for description
+        try {
+          const ldScripts2 = document.querySelectorAll('script[type="application/ld+json"]');
+          for (const s of ldScripts2) {
+            try {
+              const json = JSON.parse(s.textContent || s.innerText || '{}');
+              const product = (Array.isArray(json) ? json.find(j => j['@type'] && j['@type'].toLowerCase() === 'product') : (json['@type'] && json['@type'].toLowerCase() === 'product' ? json : null));
+              if (product) {
+                if (!description || description.length < 5) description = product.description || description;
+                if ((!price || price === '') && product.offers) price = (product.offers.priceCurrency ? product.offers.priceCurrency + ' ' : '') + (product.offers.price || '');
+                break;
+              }
+            } catch (e) {}
+          }
+        } catch (e) {}
+
+        // Images - prioritize high-quality images over thumbnails
+        const images = [];
+        const processedUrls = new Set();
+
+        // For Amazon product pages, prefer extracting the gallery thumbnails (main product images)
+        // directly from the product gallery selectors. This avoids picking up unrelated suggestion
+        // images that appear elsewhere on the page.
+        try {
+          const hostname = (window.location.hostname || '').toLowerCase();
+          if (/amazon\./i.test(hostname)) {
+            const gallerySelectors = [
+              '#altImages img',
+              'div#altImages img',
+              '#imgTagWrapperId img',
+              'img#landingImage',
+              'img[data-image-index]',
+              'div#mainImageContainer img',
+              'div#img-canvas img'
+            ];
+
+            const galleryUrls = [];
+            gallerySelectors.forEach(sel => {
+              const nodes = document.querySelectorAll(sel);
+              nodes.forEach(img => {
+                // Try various attributes where Amazon stores larger urls
+                const candidates = [];
+                const dataA = img.getAttribute('data-a-dynamic-image');
+                if (dataA) {
+                  try {
+                    const parsed = JSON.parse(dataA);
+                    // parsed keys are URLs mapped to sizes
+                    Object.keys(parsed || {}).forEach(k => candidates.push(k));
+                  } catch (e) {}
+                }
+                const attrs = ['data-old-hires','data-src','data-lazy','data-lazy-src','data-old-hires','src'];
+                attrs.forEach(a => {
+                  const v = img.getAttribute(a);
+                  if (v) candidates.push(v);
+                });
+
+                candidates.forEach(c => {
+                  if (c && typeof c === 'string' && c.startsWith('http')) {
+                    // convert to a probable full-size URL using existing thumbnail-to-full logic
+                    let full = c.split('?')[0];
+                    try {
+                      if (full.includes('m.media-amazon.com/images/I/')) {
+                        full = full.replace(/_AC_[A-Z0-9_]+/g, '');
+                        full = full.replace(/_SX\d+_SY\d+_/, '');
+                        full = full.replace(/_SX\d+_/, '');
+                        full = full.replace(/_SY\d+_/, '');
+                        full = full.replace(/\.\./g, '.');
+                      }
+                    } catch (e) {}
+                    if (!galleryUrls.includes(full)) galleryUrls.push(full);
+                  }
+                });
+              });
+            });
+
+            if (galleryUrls.length > 0) {
+              galleryUrls.forEach(u => {
+                processedUrls.add(u);
+                images.push(u);
+              });
+            }
+          }
+        } catch (e) {
+          // ignore Amazon gallery extraction errors and fall back to general logic
+        }
+
+        // Function to check if URL is likely a thumbnail
+        const isThumbnail = (url) => {
+          const lowerUrl = url.toLowerCase();
+          return lowerUrl.includes('thumb') ||
+                 lowerUrl.includes('thumbnail') ||
+                 lowerUrl.includes('small') ||
+                 lowerUrl.includes('tiny') ||
+                 lowerUrl.includes('mini') ||
+                 lowerUrl.includes('icon') ||
+                 lowerUrl.includes('32x32') ||
+                 lowerUrl.includes('64x64') ||
+                 lowerUrl.includes('100x100') ||
+                 lowerUrl.includes('150x150') ||
+                 lowerUrl.includes('200x200') ||
+                 // Amazon specific size parameters
+                 lowerUrl.includes('_ac_us') ||
+                 lowerUrl.includes('_ac_sx') ||
+                 lowerUrl.includes('_ac_sy') ||
+                 lowerUrl.includes('_ac_sl') ||
+                 lowerUrl.includes('_sr') ||
+                 // General size indicators
+                 /\d+x\d+/.test(lowerUrl) && parseInt(lowerUrl.match(/(\d+)x(\d+)/)[1]) < 300;
+        };
+
+        // Function to try to get full-size URL from thumbnail
+        const getFullSizeUrl = (thumbnailUrl) => {
+          let fullUrl = thumbnailUrl;
+
+          // Amazon patterns - more comprehensive handling
+          if (thumbnailUrl.includes('m.media-amazon.com/images/I/')) {
+            // Remove Amazon size parameters like _AC_US40_, _AC_SX466_, _AC_SY300_, etc.
+            fullUrl = fullUrl.replace(/_\w+\.jpg$/, '.jpg');
+            fullUrl = fullUrl.replace(/_\w+\.png$/, '.png');
+            fullUrl = fullUrl.replace(/_\w+\.jpeg$/, '.jpeg');
+            fullUrl = fullUrl.replace(/_\w+\.webp$/, '.webp');
+
+            // Handle multiple size parameters (rare but possible)
+            fullUrl = fullUrl.replace(/_\w+_\w+\./, '.');
+
+            // If still has size parameters, try a more aggressive approach
+            if (fullUrl.includes('_AC_') || fullUrl.includes('_SR') || fullUrl.includes('_SY') || fullUrl.includes('_SX')) {
+              const parts = fullUrl.split('.');
+              if (parts.length >= 2) {
+                const extension = parts[parts.length - 1];
+                const baseUrl = fullUrl.substring(0, fullUrl.lastIndexOf('.'));
+                // Remove all size-related parameters
+                const cleanBase = baseUrl.replace(/_\w+$/, '');
+                fullUrl = cleanBase + '.' + extension;
+              }
+            }
+          }
+
+          // Flipkart patterns
+          if (thumbnailUrl.includes('rukminim1.flixcart.com')) {
+            fullUrl = thumbnailUrl.replace(/\/image\/\d+x\d+\//, '/image/');
+          }
+
+          // General patterns
+          fullUrl = fullUrl.replace(/\/thumb\//, '/');
+          fullUrl = fullUrl.replace(/\/thumbnails?\//, '/');
+          fullUrl = fullUrl.replace(/_thumb\./, '.');
+          fullUrl = fullUrl.replace(/_thumbnail\./, '.');
+          fullUrl = fullUrl.replace(/_small\./, '.');
+
+          return fullUrl;
+        };
+
+        // Function to extract images from srcset
+        const extractFromSrcset = (srcset) => {
+          if (!srcset) return [];
+          const sources = srcset.split(',').map(s => s.trim().split(' ')[0]);
+          return sources.filter(url => url.startsWith('http'));
+        };
+
+        // Function to get image quality score (prefer larger images)
+        const getImageQualityScore = (url) => {
+          let score = 0;
+
+          // Prefer images with high resolution indicators
+          if (url.includes('1000x') || url.includes('1200x') || url.includes('1500x')) score += 10;
+          if (url.includes('800x') || url.includes('900x')) score += 8;
+          if (url.includes('600x') || url.includes('700x')) score += 6;
+          if (url.includes('400x') || url.includes('500x')) score += 4;
+
+          // Prefer certain file extensions
+          if (url.includes('.jpg') || url.includes('.jpeg')) score += 3;
+          if (url.includes('.png')) score += 2;
+
+          // Prefer images without size constraints
+          if (!url.includes('w=') && !url.includes('h=')) score += 2;
+
+          return score;
+        };
+
+        // Collect all potential images with quality scores
+        const imageCandidates = [];
+
+        // 1. Look for images with data attributes that might contain full-size versions
+        const allImgs = document.querySelectorAll('img');
+        allImgs.forEach(img => {
+          const sources = [];
+
+          // Check various attributes for image sources
+          const src = img.getAttribute('src');
+          const dataSrc = img.getAttribute('data-src');
+          const dataOriginal = img.getAttribute('data-original');
+          const dataLazy = img.getAttribute('data-lazy');
+          const dataLazySrc = img.getAttribute('data-lazy-src');
+          const dataZoom = img.getAttribute('data-zoom');
+          const dataFull = img.getAttribute('data-full');
+          const dataLarge = img.getAttribute('data-large');
+
+          if (src) sources.push(src);
+          if (dataSrc) sources.push(dataSrc);
+          if (dataOriginal) sources.push(dataOriginal);
+          if (dataLazy) sources.push(dataLazy);
+          if (dataLazySrc) sources.push(dataLazySrc);
+          if (dataZoom) sources.push(dataZoom);
+          if (dataFull) sources.push(dataFull);
+          if (dataLarge) sources.push(dataLarge);
+
+          // Check srcset for multiple sizes
+          const srcset = img.getAttribute('srcset');
+          if (srcset) {
+            sources.push(...extractFromSrcset(srcset));
+          }
+
+          sources.forEach(source => {
+            if (source && source.startsWith('http') && !processedUrls.has(source)) {
+              processedUrls.add(source);
+              const qualityScore = getImageQualityScore(source);
+              imageCandidates.push({
+                url: source,
+                score: qualityScore,
+                isThumbnail: isThumbnail(source)
+              });
+            }
+          });
+        });
+
+        // 2. Look for images in specific selectors that are likely to be product images
+        const productSelectors = [
+          'img[data-image-index]',
+          'img[data-old-hires]',
+          '#landingImage',
+          '#imgBlkFront',
+          '.a-dynamic-image',
+          'img[data-testid="product-image"]',
+          '.product-image img',
+          '.gallery img',
+          '.product-gallery img',
+          '.zoom img',
+          '.magnify img',
+          'img[alt*="product"]',
+          'img[alt*="item"]',
+          'img[src*="product"]',
+          'img[src*="image"]',
+          'img[src*="photo"]',
+          // Amazon specific selectors
+          '#main-image',
+          '#altImages img',
+          '.image img',
+          '.thumbnail img',
+          'img[alt*="ASUS"]',
+          'img[alt*="Chromebook"]',
+          'img[alt*="laptop"]',
+          'img[alt*="computer"]',
+          // More general product selectors
+          '.product img',
+          '.item img',
+          '.main-image img',
+          '.hero-image img',
+          'img[class*="product"]',
+          'img[class*="image"]',
+          'img[id*="image"]',
+          'img[id*="photo"]',
+          // Amazon specific data attributes
+          'img[data-image-url]',
+          'img[data-src]',
+          'img[data-lazy]',
+          'img[data-lazy-src]',
+          'img[data-zoom]',
+          'img[data-full]',
+          'img[data-large]',
+          'img[data-original]'
+          ,
+          // Flipkart specific selectors
+          '._396cs4',
+          '._2r_TV6 img',
+          'img[class*="_396cs4"]',
+        ];
+
+        productSelectors.forEach(selector => {
+          const imgs = document.querySelectorAll(selector);
+          imgs.forEach(img => {
+            const src = img.getAttribute('src') || img.getAttribute('data-src') || img.getAttribute('data-original');
+            if (src && src.startsWith('http') && !processedUrls.has(src)) {
+              processedUrls.add(src);
+              const qualityScore = getImageQualityScore(src) + 5; // Bonus for product-specific selectors
+              imageCandidates.push({
+                url: src,
+                score: qualityScore,
+                isThumbnail: isThumbnail(src)
+              });
+            }
+          });
+        });
+
+        // 3. Extract images from JavaScript variables and data attributes
+        // Look for image data in script tags and data attributes
+        const scripts = document.querySelectorAll('script');
+        scripts.forEach(script => {
+          const scriptContent = script.textContent || script.innerText;
+          if (scriptContent) {
+            // Look for common patterns in JavaScript that contain image URLs
+            const imagePatterns = [
+              /"image"\s*:\s*"([^"]+)"/gi,
+              /'image'\s*:\s*'([^']+)'/gi,
+              /"images"\s*:\s*\[([^\]]+)\]/gi,
+              /'images'\s*:\s*\[([^\]]+)\]/gi,
+              /"largeImage"\s*:\s*"([^"]+)"/gi,
+              /'largeImage'\s*:\s*'([^']+)'/gi,
+              /"hiRes"\s*:\s*"([^"]+)"/gi,
+              /'hiRes'\s*:\s*'([^']+)'/gi,
+              /"mainImage"\s*:\s*"([^"]+)"/gi,
+              /'mainImage'\s*:\s*'([^']+)'/gi,
+              // Amazon specific patterns
+              /"large"\s*:\s*"([^"]+)"/gi,
+              /'large'\s*:\s*'([^']+)'/gi,
+              /data-image-url="([^"]+)"/gi,
+              /data-old-hires="([^"]+)"/gi,
+              /data-image-index="([^"]+)"/gi
+            ];
+
+            imagePatterns.forEach(pattern => {
+              let match;
+              while ((match = pattern.exec(scriptContent)) !== null) {
+                const imageUrl = match[1];
+                if (imageUrl && imageUrl.startsWith('http') && !processedUrls.has(imageUrl)) {
+                  processedUrls.add(imageUrl);
+                  const qualityScore = getImageQualityScore(imageUrl) + 3; // Bonus for script-extracted images
+                  imageCandidates.push({
+                    url: imageUrl,
+                    score: qualityScore,
+                    isThumbnail: isThumbnail(imageUrl)
+                  });
+                }
+              }
+            });
+
+            // Look for image arrays in JavaScript
+            const arrayPatterns = [
+              /images\s*=\s*\[([^\]]+)\]/gi,
+              /imageList\s*=\s*\[([^\]]+)\]/gi,
+              /productImages\s*=\s*\[([^\]]+)\]/gi,
+              /gallery\s*=\s*\[([^\]]+)\]/gi
+            ];
+
+            arrayPatterns.forEach(pattern => {
+              let match;
+              while ((match = pattern.exec(scriptContent)) !== null) {
+                const arrayContent = match[1];
+                // Extract URLs from the array
+                const urlMatches = arrayContent.match(/"([^"]+)"/g) || arrayContent.match(/'([^']+)'/g);
+                if (urlMatches) {
+                  urlMatches.forEach(urlMatch => {
+                    const imageUrl = urlMatch.slice(1, -1); // Remove quotes
+                    if (imageUrl && imageUrl.startsWith('http') && !processedUrls.has(imageUrl)) {
+                      processedUrls.add(imageUrl);
+                      const qualityScore = getImageQualityScore(imageUrl) + 3;
+                      imageCandidates.push({
+                        url: imageUrl,
+                        score: qualityScore,
+                        isThumbnail: isThumbnail(imageUrl)
+                      });
+                    }
+                  });
+                }
+              }
+            });
+          }
+        });
+
+        // Look for images in data attributes of any element
+        const allElements = document.querySelectorAll('*');
+        allElements.forEach(element => {
+          const attributes = element.attributes;
+          for (let i = 0; i < attributes.length; i++) {
+            const attr = attributes[i];
+            if (attr.name.startsWith('data-') && attr.value && attr.value.startsWith('http') && attr.value.includes('image')) {
+              if (!processedUrls.has(attr.value)) {
+                processedUrls.add(attr.value);
+                const qualityScore = getImageQualityScore(attr.value) + 2;
+                imageCandidates.push({
+                  url: attr.value,
+                  score: qualityScore,
+                  isThumbnail: isThumbnail(attr.value)
+                });
+              }
+            }
+          }
+        });
+
+        // 4. Sort by quality score (highest first) and filter
+        imageCandidates.sort((a, b) => b.score - a.score);
+
+        // 4. Select the best images, preferring non-thumbnails
+        const selectedImages = [];
+        const maxImages = 20;
+
+        // First, try to get non-thumbnail images
+        for (const candidate of imageCandidates) {
+          if (!candidate.isThumbnail && selectedImages.length < maxImages) {
+            let finalUrl = candidate.url;
+
+            // Try to get full-size version
+            if (candidate.isThumbnail) {
+              finalUrl = getFullSizeUrl(candidate.url);
+            }
+
+            // Clean up URL
+            finalUrl = finalUrl.split('?')[0]; // Remove query parameters
+
+            if (!images.includes(finalUrl)) {
+              images.push(finalUrl);
+              selectedImages.push(finalUrl);
+            }
+          }
+        }
+
+        // If we don't have enough images, add thumbnails as fallback
+        if (selectedImages.length < maxImages) {
+          for (const candidate of imageCandidates) {
+            if (selectedImages.length < maxImages) {
+              let finalUrl = candidate.url;
+
+              // Try to get full-size version even for thumbnails
+              finalUrl = getFullSizeUrl(candidate.url);
+              finalUrl = finalUrl.split('?')[0];
+
+              if (!images.includes(finalUrl)) {
+                images.push(finalUrl);
+                selectedImages.push(finalUrl);
+              }
+            }
+          }
+        }
+
+        // Store/domain
+        const domain = window.location.hostname;
+
+        // Post-process title/price/description/images per request
+        const fullTitle = title || '';
+
+        // Shorten title to a reasonable length (e.g., 80 chars) without cutting words abruptly
+        const shortenTitle = (t, maxLen = 80) => {
+          if (!t) return '';
+          if (t.length <= maxLen) return t;
+          // Try to cut at last space before maxLen
+          const cut = t.lastIndexOf(' ', maxLen);
+          if (cut > 40) return t.slice(0, cut) + '...';
+          return t.slice(0, maxLen - 3) + '...';
+        };
+
+        const shortTitle = shortenTitle(fullTitle, 80);
+
+        // Ensure description contains the full title once followed by any scraped description.
+        // If the scraped description already begins with the full title, remove that duplicate.
+        const composedDescription = (() => {
+          const t = (fullTitle || '').trim();
+          let desc = (description || '').trim();
+          if (t && desc) {
+            // Remove any repeated occurrences of the title inside the scraped description
+            try {
+              const esc = t.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+              const re = new RegExp(esc, 'gi');
+              desc = desc.replace(re, '').trim();
+            } catch (e) {
+              // fallback: simple removal of exact prefix
+              if (desc.toLowerCase().startsWith(t.toLowerCase())) desc = desc.slice(t.length).trim();
+            }
+          }
+          // Put the full title once at the top, followed by remaining description if any
+          return (t ? (t + (desc ? '\n\n' + desc : '')) : desc).trim();
+        })();
+
+        // Normalize price: remove currency words like INR and any non-numeric characters except dot and comma
+        let normalizedPrice = price || '';
+        if (normalizedPrice) {
+          // Remove common currency words and symbols
+          normalizedPrice = normalizedPrice.replace(/INR\b/gi, '');
+          normalizedPrice = normalizedPrice.replace(/[₹$£€¥,\s]/g, '');
+          // Keep only digits and decimal
+          const m = normalizedPrice.match(/\d+(?:\.\d+)?/);
+          normalizedPrice = m ? m[0] : '';
+        }
+
+        // Normalize images: prefer full-size / original image URLs only
+        const normalizeImageUrl = (u) => {
+          if (!u || typeof u !== 'string') return null;
+          let url = u;
+          try {
+            // Remove query params
+            url = url.split('?')[0];
+            // Use getFullSizeUrl logic where possible
+            // Amazon patterns
+            url = url.replace(/_AC_[A-Z0-9]+_/g, '.');
+            url = url.replace(/_AC_\w+/g, '');
+            url = url.replace(/_SX\d+_SY\d+_/, '');
+            url = url.replace(/_SX\d+_/, '');
+            url = url.replace(/_SY\d+_/, '');
+            url = url.replace(/_\w+\.(jpg|jpeg|png|webp)$/i, '.$1');
+            // Flipkart pattern: /image/<WIDTH>x<HEIGHT>/ -> /image/
+            url = url.replace(/\/image\/\d+x\d+\//, '/image/');
+            // Remove common thumbnail markers
+            url = url.replace(/thumb|thumbnail|_thumb|_small|_mini/gi, '');
+            url = url.replace(/\/thumbnails?\//i, '/');
+            url = url.replace(/\/thumb\//i, '/');
+            url = url.replace(/([^:\/])\/+$/,'$1');
+
+            // Carefully remove accidental duplicate dots in the pathname (e.g. '..jpg' -> '.jpg')
+            try {
+              const parsed = new URL(url);
+              // Collapse runs of dots in the pathname to a single dot
+              parsed.pathname = parsed.pathname.replace(/\.{2,}/g, '.');
+              // Collapse duplicate slashes in the pathname
+              parsed.pathname = parsed.pathname.replace(/\/\/{2,}/g, '/');
+              // Rebuild the URL without query params
+              url = parsed.origin + parsed.pathname + (parsed.hash || '');
+            } catch (e) {
+              // If URL parsing fails, apply a conservative regex that avoids touching protocol
+              url = url.replace(/([^:])\.{2,}/g, '$1.');
+              url = url.replace(/\/\/{2,}/g, '/');
+            }
+          } catch (e) {
+            return u;
+          }
+          return url;
+        };
+
+        const uniqueImages = [];
+        for (const img of images) {
+          const norm = normalizeImageUrl(img);
+          if (!norm) continue;
+          // Filter out small/thumbnail indicators conservatively
+          const lowQuality = /(?:32x32|64x64|100x100|150x150|200x200|thumb|thumbnail|small|icon)/i;
+          if (lowQuality.test(norm)) continue;
+          if (!uniqueImages.includes(norm)) uniqueImages.push(norm);
+        }
+
+        // If we filtered too aggressively and have no images, fall back to original list (de-duplicated)
+        let finalImages = uniqueImages.length > 0 ? uniqueImages : Array.from(new Set(images.map(i => (i || '').split('?')[0])));
+
+        // Further filter images to likely product images and limit the total returned
+        const isLikelyProductImage = (u, titleText) => {
+          if (!u) return false;
+          const lower = u.toLowerCase();
+          // Exclude obvious non-product assets
+          const excludePat = /(promos?|promo|cms-rpd-img|banner|badge|logo|sprite|icon|spacer|placeholder|ads?|advert|avatar|avatar|user|google|gstatic|analytics|pixel)/i;
+          if (excludePat.test(lower)) return false;
+
+          // Prefer images on known product hosts or paths
+          if (/m\.media-amazon\.com|rukminim|flac|flipkart|product|products|gallery|images\/i/.test(lower)) return true;
+
+          // If filename is reasonably long and resembles an asset (no tiny names), accept
+          const pathPart = u.split('/').pop() || '';
+          if (/^[a-z0-9A-Z\-_,]+\.(jpg|jpeg|png|webp)$/i.test(pathPart) && pathPart.length > 8) return true;
+
+            // Heuristic: require a token match from the title for non-obvious hosts
+            if (titleText) {
+              const tokens = titleText.replace(/[^a-zA-Z0-9 ]/g, ' ').split(/\s+/).filter(t => t.length > 4).slice(0, 6).map(t => t.toLowerCase());
+              for (const tok of tokens) {
+                if (lower.includes(tok)) return true;
+              }
+            }
+
+          return false;
+        };
+
+  // Apply likely-product filter and cap results to top 6
+        try {
+          const filteredLikely = finalImages.filter(u => isLikelyProductImage(u, fullTitle));
+          if (filteredLikely && filteredLikely.length > 0) finalImages = filteredLikely;
+        } catch (e) {}
+
+  if (Array.isArray(finalImages) && finalImages.length > 20) finalImages = finalImages.slice(0, 20);
+
+        // Amazon-specific filtering: prefer product image hosts/paths and exclude promos/logos
+        try {
+          const isAmazon = domain && /(^|\.)amazon\./i.test(domain);
+          if (isAmazon) {
+            const amazonKeep = finalImages.filter(u => {
+              if (!u) return false;
+              const lower = u.toLowerCase();
+              // Exclude obvious non-product assets
+              const excludePat = /(promos?|promo|cms-rpd-img|banner|badge|logo|sprite|icon|spacer|placeholder|ads?|advert)/i;
+              if (excludePat.test(lower)) return false;
+              // Prefer Amazon product image paths (m.media-amazon.com/images/I/ or /images/I/)
+              if (/m\.media-amazon\.com\/images\/i\//i.test(u) || /\/images\/i\//i.test(u)) return true;
+              // Also accept images where filename looks like a product asset (alphanumeric and punctuation)
+              const path = u.split('/').pop() || '';
+              if (/^[a-z0-9A-Z\-_,]+\.[a-z]{3,4}$/i.test(path) && path.length > 8) return true;
+              return false;
+            });
+            if (amazonKeep.length > 0) {
+              finalImages = amazonKeep;
+            }
+          }
+        } catch (e) {
+          // ignore amazon-specific filtering errors
+        }
+
+  // Determine currency and create a displayPrice (escape $ with backslash)
+        let currency = '';
+        let displayPrice = normalizedPrice || '';
+        try {
+          if (price && /₹/.test(price)) { currency = 'INR'; displayPrice = 'INR ' + displayPrice; }
+          else if (price && /\$/.test(price)) { currency = 'USD'; displayPrice = '\\$' + displayPrice; }
+          else if (price && /£/.test(price)) { currency = 'GBP'; displayPrice = '£' + displayPrice; }
+          else if (price && /€/.test(price)) { currency = 'EUR'; displayPrice = '€' + displayPrice; }
+        } catch (e) {}
+
+  // Note: image width filtering is intentionally performed after page.evaluate
+  // in the Node-side async handler to avoid using await inside the page function.
+
+        return {
+          title: shortTitle,
+          fullTitle: fullTitle,
+          price: normalizedPrice,
+          original_price: originalPrice || null,
+          displayPrice,
+          currency,
+          description: composedDescription,
+          images: finalImages,
+          // include the broader unfiltered image candidate list so the client can optionally show them
+          images_all: Array.from(new Set(images.map(i => (i || '').split('?')[0]))),
+          domain
+        };
+      });
+
+      await browser.close();
+      console.log('Scraping completed successfully');
+
+      // Post-process images for minimum width (>=400px) and amazon-specific filtering
+      try {
+        if (data && Array.isArray(data.images) && data.images.length > 0) {
+          const filtered = await filterImagesByMinWidth(data.images, 400);
+          if (filtered && filtered.length > 0) data.images = filtered;
+          // Additional amazon filter (already applied in evaluate, but double-check)
+          try {
+            if (data.domain && /(^|\.)amazon\./i.test(data.domain)) {
+              const amazonKeep = data.images.filter(u => {
+                if (!u) return false;
+                const lower = u.toLowerCase();
+                const excludePat = /(promos?|promo|cms-rpd-img|banner|badge|logo|sprite|icon|spacer|placeholder|ads?|advert)/i;
+                if (excludePat.test(lower)) return false;
+                if (/m\.media-amazon\.com\/images\/i\//i.test(u) || /\/images\/i\//i.test(u)) return true;
+                const path = u.split('/').pop() || '';
+                if (/^[a-z0-9A-Z\-_,]+\.[a-z]{3,4}$/i.test(path) && path.length > 8) return true;
+                return false;
+              });
+              if (amazonKeep.length > 0) data.images = amazonKeep;
+            }
+          } catch (e) {}
+        }
+      } catch (e) {
+        console.error('Image width filtering failed:', e && (e.stack || e.message || e));
+      }
+
+      res.json(data);
+
+    } catch (playwrightError) {
+      console.error('Playwright scraping failed:', playwrightError && (playwrightError.stack || playwrightError.message || playwrightError));
+      
+      // Fallback: Try simple HTTP request with cheerio
+      try {
+        console.log('Attempting fallback scraping with cheerio...');
+        const axios = require('axios');
+        const cheerio = require('cheerio');
+        
+        const response = await axios.get(url, {
+          headers: {
+            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36'
+          },
+          timeout: 10000
+        });
+        
+        const $ = cheerio.load(response.data);
+        
+  let title = $('title').text().trim() || 
+       $('meta[property="og:title"]').attr('content') || 
+       $('h1').first().text().trim() ||
+       $('#productTitle').text().trim() ||
+       $('span.B_NuCI').first().text().trim() ||
+       $('span._35KyD6').first().text().trim();
+        
+        // Clean up title - remove domain prefixes
+        title = title.replace(/^(amazon\.com|www\.amazon\.com|flipkart\.com|www\.flipkart\.com|myntra\.com|www\.myntra\.com)\s*[-:]\s*/i, '');
+        title = title.replace(/\s*[-|]\s*amazon\.com.*$/i, '');
+        title = title.replace(/\s*[-|]\s*flipkart\.com.*$/i, '');
+        title = title.replace(/\s*[-|]\s*myntra\.com.*$/i, '');
+        title = title.trim();
+
+        // Try JSON-LD parsing for product info in fallback
+        try {
+          const ld = $('script[type="application/ld+json"]');
+          ld.each((i, el) => {
+            try {
+              const json = JSON.parse($(el).html() || '{}');
+              const product = Array.isArray(json) ? json.find(j => j['@type'] && String(j['@type']).toLowerCase() === 'product') : (json['@type'] && String(json['@type']).toLowerCase() === 'product' ? json : null);
+              if (product) {
+                if ((!title || title.length < 5) && product.name) title = product.name;
+                if ((!price || price === '') && product.offers) price = (product.offers.priceCurrency ? product.offers.priceCurrency + ' ' : '') + (product.offers.price || '');
+                if ((!description || description.length < 5) && product.description) description = product.description;
+              }
+            } catch (e) {}
+          });
+        } catch (e) {}
+        
+  let price = $('.a-price .a-offscreen').text().trim() ||
+       $('.a-price-whole').text().trim() ||
+       $('#priceblock_ourprice').text().trim() ||
+       $('#priceblock_dealprice').text().trim() ||
+       $('meta[property="product:price:amount"]').attr('content') ||
+       $('.price').first().text().trim() ||
+       $('[class*="price"]').first().text().trim() ||
+    $('._30jeq3').first().text().trim() || // Flipkart main price
+    $('div._30jeq3._1_WHN1').first().text().trim() ||
+    $('._3I9_wc').first().text().trim() ||
+    $('._25b18c').first().text().trim() ||
+    $('._16Jk6d').first().text().trim() ||
+    $('._1vC4OE').first().text().trim();
+        
+        // Clean up price - extract only numeric values
+        const priceMatch = price.match(/[\$₹£€]?\s*[\d,]+\.?\d*/);
+        price = priceMatch ? priceMatch[0].trim() : '';
+        
+        let description = $('#productDescription').text().trim() ||
+                         $('#feature-bullets').text().trim() ||
+                         $('.product-description').text().trim() ||
+                         $('meta[name="description"]').attr('content') ||
+                         $('meta[property="og:description"]').attr('content') ||
+                              $('.description').first().text().trim() ||
+                              $('._1mXcCf').first().text().trim() ||
+                              $('._2RngUh').first().text().trim() ||
+                              $('._2418kt').first().text().trim();
+        
+        // Clean up description - remove domain references
+        description = description.replace(/\b(amazon|flipkart|myntra)\.com\b/gi, '');
+        description = description.replace(/\s+/g, ' ').trim();
+        
+        // Images - improved fallback scraping with quality prioritization
+        const images = [];
+        const processedUrls = new Set();
+
+        // Function to check if URL is likely a thumbnail
+        const isThumbnail = (url) => {
+          const lowerUrl = url.toLowerCase();
+          return lowerUrl.includes('thumb') ||
+                 lowerUrl.includes('thumbnail') ||
+                 lowerUrl.includes('small') ||
+                 lowerUrl.includes('tiny') ||
+                 lowerUrl.includes('mini') ||
+                 lowerUrl.includes('icon') ||
+                 lowerUrl.includes('32x32') ||
+                 lowerUrl.includes('64x64') ||
+                 lowerUrl.includes('100x100') ||
+                 lowerUrl.includes('150x150') ||
+                 lowerUrl.includes('200x200') ||
+                 // Amazon specific size parameters
+                 lowerUrl.includes('_ac_us') ||
+                 lowerUrl.includes('_ac_sx') ||
+                 lowerUrl.includes('_ac_sy') ||
+                 lowerUrl.includes('_ac_sl') ||
+                 lowerUrl.includes('_sr') ||
+                 // General size indicators
+                 /\d+x\d+/.test(lowerUrl) && parseInt(lowerUrl.match(/(\d+)x(\d+)/)[1]) < 300;
+        };
+
+        // Function to try to get full-size URL from thumbnail
+        const getFullSizeUrl = (thumbnailUrl) => {
+          let fullUrl = thumbnailUrl;
+
+          // Amazon patterns - more comprehensive handling
+          if (thumbnailUrl.includes('m.media-amazon.com/images/I/')) {
+            // Remove Amazon size parameters like _AC_US40_, _AC_SX466_, _AC_SY300_, etc.
+            fullUrl = fullUrl.replace(/_\w+\.jpg$/, '.jpg');
+            fullUrl = fullUrl.replace(/_\w+\.png$/, '.png');
+            fullUrl = fullUrl.replace(/_\w+\.jpeg$/, '.jpeg');
+            fullUrl = fullUrl.replace(/_\w+\.webp$/, '.webp');
+
+            // Handle multiple size parameters (rare but possible)
+            fullUrl = fullUrl.replace(/_\w+_\w+\./, '.');
+
+            // If still has size parameters, try a more aggressive approach
+            if (fullUrl.includes('_AC_') || fullUrl.includes('_SR') || fullUrl.includes('_SY') || fullUrl.includes('_SX')) {
+              const parts = fullUrl.split('.');
+              if (parts.length >= 2) {
+                const extension = parts[parts.length - 1];
+                const baseUrl = fullUrl.substring(0, fullUrl.lastIndexOf('.'));
+                // Remove all size-related parameters
+                const cleanBase = baseUrl.replace(/_\w+$/, '');
+                fullUrl = cleanBase + '.' + extension;
+              }
+            }
+          }
+
+          // Flipkart patterns
+          if (thumbnailUrl.includes('rukminim1.flixcart.com')) {
+            fullUrl = thumbnailUrl.replace(/\/image\/\d+x\d+\//, '/image/');
+          }
+
+          // General patterns
+          fullUrl = fullUrl.replace(/\/thumb\//, '/');
+          fullUrl = fullUrl.replace(/\/thumbnails?\//, '/');
+          fullUrl = fullUrl.replace(/_thumb\./, '.');
+          fullUrl = fullUrl.replace(/_thumbnail\./, '.');
+          fullUrl = fullUrl.replace(/_small\./, '.');
+
+          return fullUrl;
+        };
+
+        // Function to get image quality score
+        const getImageQualityScore = (url) => {
+          let score = 0;
+
+          if (url.includes('1000x') || url.includes('1200x') || url.includes('1500x')) score += 10;
+          if (url.includes('800x') || url.includes('900x')) score += 8;
+          if (url.includes('600x') || url.includes('700x')) score += 6;
+          if (url.includes('400x') || url.includes('500x')) score += 4;
+
+          if (url.includes('.jpg') || url.includes('.jpeg')) score += 3;
+          if (url.includes('.png')) score += 2;
+
+          if (!url.includes('w=') && !url.includes('h=')) score += 2;
+
+          return score;
+        };
+
+        // Extract images from JavaScript variables and data attributes in cheerio
+        const imageCandidates = [];
+
+        $('script').each((i, script) => {
+          const scriptContent = $(script).html();
+          if (scriptContent) {
+            // Look for common patterns in JavaScript that contain image URLs
+            const imagePatterns = [
+              /"image"\s*:\s*"([^"]+)"/gi,
+              /'image'\s*:\s*'([^']+)'/gi,
+              /"images"\s*:\s*\[([^\]]+)\]/gi,
+              /'images'\s*:\s*\[([^\]]+)\]/gi,
+              /"largeImage"\s*:\s*"([^"]+)"/gi,
+              /'largeImage'\s*:\s*'([^']+)'/gi,
+              /"hiRes"\s*:\s*"([^"]+)"/gi,
+              /'hiRes'\s*:\s*'([^']+)'/gi,
+              /"mainImage"\s*:\s*"([^"]+)"/gi,
+              /'mainImage'\s*:\s*'([^']+)'/gi,
+              // Amazon specific patterns
+              /"large"\s*:\s*"([^"]+)"/gi,
+              /'large'\s*:\s*'([^']+)'/gi,
+              /data-image-url="([^"]+)"/gi,
+              /data-old-hires="([^"]+)"/gi,
+              /data-image-index="([^"]+)"/gi
+            ];
+
+            imagePatterns.forEach(pattern => {
+              let match;
+              while ((match = pattern.exec(scriptContent)) !== null) {
+                const imageUrl = match[1];
+                if (imageUrl && imageUrl.startsWith('http') && !processedUrls.has(imageUrl)) {
+                  processedUrls.add(imageUrl);
+                  const qualityScore = getImageQualityScore(imageUrl) + 3; // Bonus for script-extracted images
+                  imageCandidates.push({
+                    url: imageUrl,
+                    score: qualityScore,
+                    isThumbnail: isThumbnail(imageUrl)
+                  });
+                }
+              }
+            });
+
+            // Look for image arrays in JavaScript
+            const arrayPatterns = [
+              /images\s*=\s*\[([^\]]+)\]/gi,
+              /imageList\s*=\s*\[([^\]]+)\]/gi,
+              /productImages\s*=\s*\[([^\]]+)\]/gi,
+              /gallery\s*=\s*\[([^\]]+)\]/gi
+            ];
+
+            arrayPatterns.forEach(pattern => {
+              let match;
+              while ((match = pattern.exec(scriptContent)) !== null) {
+                const arrayContent = match[1];
+                // Extract URLs from the array
+                const urlMatches = arrayContent.match(/"([^"]+)"/g) || arrayContent.match(/'([^']+)'/g);
+                if (urlMatches) {
+                  urlMatches.forEach(urlMatch => {
+                    const imageUrl = urlMatch.slice(1, -1); // Remove quotes
+                    if (imageUrl && imageUrl.startsWith('http') && !processedUrls.has(imageUrl)) {
+                      processedUrls.add(imageUrl);
+                      const qualityScore = getImageQualityScore(imageUrl) + 3;
+                      imageCandidates.push({
+                        url: imageUrl,
+                        score: qualityScore,
+                        isThumbnail: isThumbnail(imageUrl)
+                      });
+                    }
+                  });
+                }
+              }
+            });
+          }
+        });
+
+        // Look for images in data attributes of any element
+        $('*').each((i, element) => {
+          const attrs = element.attributes;
+          if (attrs) {
+            for (let j = 0; j < attrs.length; j++) {
+              const attr = attrs[j];
+              if (attr.name && attr.name.startsWith('data-') && attr.value && attr.value.startsWith('http') && attr.value.includes('image')) {
+                if (!processedUrls.has(attr.value)) {
+                  processedUrls.add(attr.value);
+                  const qualityScore = getImageQualityScore(attr.value) + 2;
+                  imageCandidates.push({
+                    url: attr.value,
+                    score: qualityScore,
+                    isThumbnail: isThumbnail(attr.value)
+                  });
+                }
+              }
+            }
+          }
+        });
+
+        // Collect image candidates from img tags
+
+        $('img').each((i, img) => {
+          const sources = [];
+
+          const src = $(img).attr('src');
+          const dataSrc = $(img).attr('data-src');
+          const dataOriginal = $(img).attr('data-original');
+          const dataLazy = $(img).attr('data-lazy');
+          const dataLazySrc = $(img).attr('data-lazy-src');
+          const dataZoom = $(img).attr('data-zoom');
+          const dataFull = $(img).attr('data-full');
+          const dataLarge = $(img).attr('data-large');
+
+          if (src) sources.push(src);
+          if (dataSrc) sources.push(dataSrc);
+          if (dataOriginal) sources.push(dataOriginal);
+          if (dataLazy) sources.push(dataLazy);
+          if (dataLazySrc) sources.push(dataLazySrc);
+          if (dataZoom) sources.push(dataZoom);
+          if (dataFull) sources.push(dataFull);
+          if (dataLarge) sources.push(dataLarge);
+
+          sources.forEach(source => {
+            if (source && source.startsWith('http') && !processedUrls.has(source)) {
+              processedUrls.add(source);
+              const qualityScore = getImageQualityScore(source);
+              imageCandidates.push({
+                url: source,
+                score: qualityScore,
+                isThumbnail: isThumbnail(source)
+              });
+            }
+          });
+        });
+
+        // Sort by quality and select best images
+        imageCandidates.sort((a, b) => b.score - a.score);
+
+        const selectedImages = [];
+        const maxImages = 20;
+
+        // Prefer non-thumbnails first
+        for (const candidate of imageCandidates) {
+          if (!candidate.isThumbnail && selectedImages.length < maxImages) {
+            let finalUrl = candidate.url;
+            if (candidate.isThumbnail) {
+              finalUrl = getFullSizeUrl(candidate.url);
+            }
+            finalUrl = finalUrl.split('?')[0];
+
+            if (!images.includes(finalUrl)) {
+              images.push(finalUrl);
+              selectedImages.push(finalUrl);
+            }
+          }
+        }
+
+        // Add thumbnails as fallback
+        if (selectedImages.length < maxImages) {
+          for (const candidate of imageCandidates) {
+            if (selectedImages.length < maxImages) {
+              let finalUrl = candidate.url;
+              finalUrl = getFullSizeUrl(candidate.url);
+              finalUrl = finalUrl.split('?')[0];
+
+              if (!images.includes(finalUrl)) {
+                images.push(finalUrl);
+                selectedImages.push(finalUrl);
+              }
+            }
+          }
+        }
+        
+        const urlObj = new URL(url);
+        const domain = urlObj.hostname;
+        
+        // Apply Amazon-specific filtering to fallback images as well
+        try {
+          const isAmazon = domain && /(^|\.)amazon\./i.test(domain);
+          if (isAmazon) {
+            const filtered = images.filter(u => {
+              if (!u) return false;
+              const lower = u.toLowerCase();
+              const excludePat = /(promos?|promo|cms-rpd-img|banner|badge|logo|sprite|icon|spacer|placeholder|ads?|advert)/i;
+              if (excludePat.test(lower)) return false;
+              if (/m\.media-amazon\.com\/images\/i\//i.test(u) || /\/images\/i\//i.test(u)) return true;
+              const path = u.split('/').pop() || '';
+              if (/^[a-z0-9A-Z\-_,]+\.[a-z]{3,4}$/i.test(path) && path.length > 8) return true;
+              return false;
+            });
+            if (filtered.length > 0) images = filtered;
+          }
+        } catch (e) {}
+
+        // Normalize title/description to avoid repeating title twice
+        const t = (title || '').trim();
+        if (t && description) {
+          if (description.toLowerCase().startsWith(t.toLowerCase())) {
+            description = description.slice(t.length).trim();
+          }
+          if (description.toLowerCase().startsWith(t.toLowerCase())) {
+            description = description.slice(t.length).trim();
+          }
+        }
+
+        // Heuristic to keep likely product images and limit to top 8
+        const isLikelyProductImageFallback = (u, titleText) => {
+          if (!u) return false;
+          const lower = u.toLowerCase();
+          const excludePat = /(promos?|promo|cms-rpd-img|banner|badge|logo|sprite|icon|spacer|placeholder|ads?|advert|avatar|google|gstatic)/i;
+          if (excludePat.test(lower)) return false;
+          if (/m\.media-amazon\.com|rukminim|flipkart|product|products|gallery|images\//i.test(lower)) return true;
+          const pathPart = u.split('/').pop() || '';
+          if (/^[a-z0-9A-Z\-_,]+\.(jpg|jpeg|png|webp)$/i.test(pathPart) && pathPart.length > 8) return true;
+          if (titleText) {
+            const tokens = titleText.replace(/[^a-zA-Z0-9 ]/g, ' ').split(/\s+/).filter(Boolean).filter(s => s.length > 3).slice(0,6).map(s => s.toLowerCase());
+            for (const tok of tokens) if (lower.includes(tok)) return true;
+          }
+          return false;
+        };
+
+        try {
+          const likely = images.filter(u => isLikelyProductImageFallback(u, title));
+          if (likely && likely.length > 0) images = likely;
+        } catch (e) {}
+
+  if (images && images.length > 20) images = images.slice(0, 20);
+
+        // Determine currency and displayPrice for fallback
+        let currencyFallback = '';
+        let displayPriceFallback = price || '';
+        try {
+          if (price && /₹/.test(price)) { currencyFallback = 'INR'; displayPriceFallback = 'INR ' + (price || ''); }
+          else if (price && /\$/.test(price)) { currencyFallback = 'USD'; displayPriceFallback = '\\\$' + (price || ''); }
+          else if (price && /£/.test(price)) { currencyFallback = 'GBP'; displayPriceFallback = '£' + (price || ''); }
+          else if (price && /€/.test(price)) { currencyFallback = 'EUR'; displayPriceFallback = '€' + (price || ''); }
+        } catch (e) {}
+
+  // Attempt to extract original / list price (struck-through price) from common selectors
+  let originalPriceFallback = '';
+        try {
+          const listSelectors = [
+            '#priceblock_listprice',
+            '.a-text-strike',
+            '.priceBlockStrikePriceString',
+            '.list-price',
+            '.strike',
+            '.comparison_price'
+          ];
+          for (const sel of listSelectors) {
+            try {
+              const el = $(sel).first();
+              if (el && el.text()) {
+                const m = el.text().trim().match(/[\$₹£€]?\s*[\d,]+\.?\d*/);
+                if (m) { originalPriceFallback = m[0].trim(); break; }
+              }
+            } catch (e) {}
+          }
+        } catch (e) {}
+
+        const fallbackData = {
+          title: title || 'Product Title',
+          price: price || '',
+          original_price: originalPriceFallback || null,
+          displayPrice: displayPriceFallback,
+          currency: currencyFallback,
+          description: (t ? (t + (description ? '\n\n' + description : '')) : description) || '',
+          images,
+          images_all: Array.from(new Set(images.map(i => (i || '').split('?')[0]))),
+          domain
+        };
+        
+        console.log('Fallback scraping completed');
+        res.json(fallbackData);
+        
+      } catch (fallbackError) {
+        console.error('Fallback scraping also failed:', fallbackError && (fallbackError.stack || fallbackError.message || fallbackError));
+        const devDetails = {
+          playwright: playwrightError ? (playwrightError.stack || playwrightError.message || String(playwrightError)) : null,
+          fallback: fallbackError ? (fallbackError.stack || fallbackError.message || String(fallbackError)) : null
+        };
+        // Only include detailed traces in development
+        const responseBody = process.env.NODE_ENV === 'production' ?
+          { error: 'Failed to scrape product data', details: 'Both Playwright and fallback methods failed' } :
+          { error: 'Failed to scrape product data', details: 'Both Playwright and fallback methods failed', traces: devDetails };
+        res.status(500).json(responseBody);
+      }
+    }
+  } catch (error) {
+    console.error('General scraping error:', error);
+    res.status(500).json({ error: 'Failed to process scraping request' });
+  }
+});
+
 // Flag comment
 app.post('/api/comments/:id/flag', async (req, res) => {
   try {
@@ -1483,8 +2989,6 @@ app.post('/api/admin/competitor-research', requireSuperAdmin, async (req, res) =
     const duplicates = dealsWithDuplicates.filter(deal => deal.isDuplicate);
     const unique = dealsWithDuplicates.filter(deal => !deal.isDuplicate);
 
-    console.log(`✅ Unique deals: ${unique.length}, Duplicates: ${duplicates.length}`);
-
     res.json({
       deals: dealsWithDuplicates,
       summary: {
@@ -1506,14 +3010,10 @@ app.post('/api/admin/insert-researched-deals', requireSuperAdmin, async (req, re
     const CompetitorResearcher = require('./scripts/competitor-research');
     const researcher = new CompetitorResearcher();
 
-    console.log(`💾 Inserting ${deals.length} researched deals...`);
-
     // Filter deals based on duplicate status
     const dealsToInsert = insertDuplicates
       ? deals
       : deals.filter(deal => !deal.isDuplicate);
-
-    console.log(`📝 Will insert ${dealsToInsert.length} deals (${insertDuplicates ? 'including' : 'excluding'} duplicates)`);
 
     const insertedDeals = await researcher.saveDealsToDatabase(dealsToInsert, pool, createdBy);
 
@@ -1538,7 +3038,6 @@ app.post('/api/admin/insert-researched-deals', requireSuperAdmin, async (req, re
       })
     ]);
 
-    console.log(`✅ Successfully inserted ${insertedDeals.length} deals`);
     res.json({
       inserted: insertedDeals.length,
       skipped: deals.length - dealsToInsert.length,
@@ -1763,8 +3262,6 @@ app.post('/api/auth/signin', async (req, res) => {
     
     // Return user data (without password) and include session info
     const { password_hash, ...userData } = user;
-    console.log('Signin successful - returning user:', userData);
-    console.log('Setting cookie for user ID:', user.id);
     res.json({ 
       user: userData, 
       authenticated: true,
@@ -2719,41 +4216,27 @@ app.get('/api/admin/user-stats/:userId', async (req, res) => {
 // Admin user action endpoints
 app.post('/api/admin/admin-ban-user', requireAuth, async (req, res) => {
   try {
-    console.log('🔧 Ban user request received:', req.body);
-    console.log('🔧 Headers:', req.headers);
-    
     const sessionId = req.session.id;
     const elevationToken = req.headers['x-admin-elevation'];
     
-    console.log('🔧 Session ID:', sessionId);
-    console.log('🔧 Elevation token:', elevationToken ? 'Present' : 'Missing');
-    
     if (!elevationToken) {
-      console.log('🔧 ERROR: No elevation token provided');
       return res.status(428).json({ error: 'Admin elevation required' });
     }
     
     // Verify user is admin/superadmin
     const { rows } = await pool.query('SELECT role FROM users WHERE id = $1', [req.session.userId]);
-    console.log('🔧 User role check:', rows[0]);
     
     if (rows.length === 0 || !['admin', 'superadmin'].includes(rows[0].role)) {
-      console.log('🔧 ERROR: Insufficient permissions');
       return res.status(403).json({ error: 'Insufficient permissions' });
     }
     
     const { user_id, reason, duration_days } = req.body;
     const banExpiry = duration_days ? new Date(Date.now() + duration_days * 24 * 60 * 60 * 1000) : null;
     
-    console.log('🔧 Banning user:', user_id, 'for', duration_days, 'days');
-    console.log('🔧 Ban expiry:', banExpiry);
-    
     const result = await pool.query(
       'UPDATE users SET status = $1, ban_expiry = $2 WHERE id = $3', 
       ['banned', banExpiry, user_id]
     );
-    
-    console.log('🔧 Database update result:', result.rowCount, 'rows affected');
     
     res.json({ success: true, message: 'User banned successfully' });
   } catch (err) {
@@ -2791,41 +4274,27 @@ app.post('/api/admin/admin-unban-user', requireAuth, async (req, res) => {
 
 app.post('/api/admin/admin-suspend-user', requireAuth, async (req, res) => {
   try {
-    console.log('🔧 Suspend user request received:', req.body);
-    console.log('🔧 Headers:', req.headers);
-    
     const sessionId = req.session.id;
     const elevationToken = req.headers['x-admin-elevation'];
     
-    console.log('🔧 Session ID:', sessionId);
-    console.log('🔧 Elevation token:', elevationToken ? 'Present' : 'Missing');
-    
     if (!elevationToken) {
-      console.log('🔧 ERROR: No elevation token provided');
       return res.status(428).json({ error: 'Admin elevation required' });
     }
     
     // Verify user is admin/superadmin
     const { rows } = await pool.query('SELECT role FROM users WHERE id = $1', [req.session.userId]);
-    console.log('🔧 User role check:', rows[0]);
     
     if (rows.length === 0 || !['admin', 'superadmin'].includes(rows[0].role)) {
-      console.log('🔧 ERROR: Insufficient permissions');
       return res.status(403).json({ error: 'Insufficient permissions' });
     }
     
     const { user_id, reason, duration_days } = req.body;
     const suspendExpiry = duration_days ? new Date(Date.now() + duration_days * 24 * 60 * 60 * 1000) : null;
     
-    console.log('🔧 Suspending user:', user_id, 'for', duration_days, 'days');
-    console.log('🔧 Suspend expiry:', suspendExpiry);
-    
     const result = await pool.query(
       'UPDATE users SET status = $1, suspend_expiry = $2 WHERE id = $3', 
       ['suspended', suspendExpiry, user_id]
     );
-    
-    console.log('🔧 Database update result:', result.rowCount, 'rows affected');
     
     res.json({ success: true, message: 'User suspended successfully' });
   } catch (err) {
@@ -3386,7 +4855,6 @@ app.post('/api/push/send', async (req, res) => {
   try {
     const { user_id, title, body, data } = req.body;
     // Mock implementation - in production, integrate with push service
-    console.log(`Push notification to user ${user_id}: ${title} - ${body}`);
     res.json({ success: true, message: 'Push notification sent' });
   } catch (err) {
     res.status(500).json({ error: err.message });
@@ -3418,7 +4886,6 @@ app.get('/api/gamification/stats/:userId', async (req, res) => {
 app.post('/api/gamification/award-points', async (req, res) => {
   try {
     const { userId, points, action } = req.body;
-    console.log(`Awarded ${points} points to user ${userId} for ${action}`);
     res.json({ success: true });
   } catch (err) {
     res.status(500).json({ error: err.message });
@@ -3428,7 +4895,6 @@ app.post('/api/gamification/award-points', async (req, res) => {
 app.post('/api/gamification/award-badge', async (req, res) => {
   try {
     const { userId, badgeId } = req.body;
-    console.log(`Awarded badge ${badgeId} to user ${userId}`);
     res.json({ success: true });
   } catch (err) {
     res.status(500).json({ error: err.message });
