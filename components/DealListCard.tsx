@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, Image } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, Image, Alert } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Heart, Share2, Bookmark, Clock, TrendingUp, Star, MapPin, Eye, MessageCircle, ChevronUp, ChevronDown, Edit3 } from 'lucide-react-native';
@@ -50,6 +50,7 @@ interface DealListCardProps {
 
 export default function DealListCard({ deal, isGuest, onVote, userRole, userId }: DealListCardProps) {
   const [hasViewed, setHasViewed] = useState(false);
+  const [isLiked, setIsLiked] = useState(false);
 
   useEffect(() => {
     if (!deal || !deal.id) return;
@@ -138,18 +139,11 @@ export default function DealListCard({ deal, isGuest, onVote, userRole, userId }
               </LinearGradient>
             )}
             
-            {/* Overlay badges: NEW (top-left), HOT (top-right), others bottom-left */}
+            {/* Overlay badges: NEW (top-left), others bottom-left */}
             <View style={styles.imageBadges}>
               {badges.includes('NEW') && (
                 <View style={styles.newBadge}>
                   <Text style={styles.badgeText}>NEW</Text>
-                </View>
-              )}
-
-              {badges.includes('HOT') && (
-                <View style={[styles.trendingBadge, styles.hotTopRight]}>
-                  <TrendingUp size={12} color="#ffffff" />
-                  <Text style={styles.badgeText}>HOT</Text>
                 </View>
               )}
 
@@ -174,6 +168,13 @@ export default function DealListCard({ deal, isGuest, onVote, userRole, userId }
                 )}
               </View>
             </View>
+            {/* HOT badge positioned relative to imageSection so it appears at top-right */}
+            {badges.includes('HOT') && (
+              <View style={[styles.trendingBadge, styles.hotTopRight]}>
+                <TrendingUp size={12} color="#ffffff" />
+                <Text style={styles.badgeText}>HOT</Text>
+              </View>
+            )}
           </View>
 
           {/* Content Section */}
@@ -218,71 +219,17 @@ export default function DealListCard({ deal, isGuest, onVote, userRole, userId }
                 </View>
                 {discountPercentage > 0 && (
                   <View style={styles.discountBadge}>
-                    <Text style={styles.discountText}>-{discountPercentage}%</Text>
+                    <Text style={styles.discountText}>{discountPercentage}% OFF</Text>
                   </View>
                 )}
-                
-                {/* Engagement stats */}
-                <View style={styles.engagementStats}>
-                  <View style={styles.statItem}>
-                    <Eye size={14} color="#94a3b8" />
-                    <Text style={styles.statText}>{(deal.views_count ?? (deal as any).view_count) || 0}</Text>
-                  </View>
-                  <View style={styles.statItem}>
-                    <MessageCircle size={14} color="#94a3b8" />
-                    <Text style={styles.statText}>{deal.comments_count || 0}</Text>
-                  </View>
-                </View>
               </View>
             </View>
 
             {/* Action Section */}
             <View style={styles.actionSection}>
-              {/* Vote controls */}
-              <View style={styles.voteControls}>
-                <TouchableOpacity
-                  style={[styles.voteButton, userVote === 'up' && styles.voteButtonUp]}
-                  onPress={(e: any) => { e.stopPropagation(); handleVote('up'); }}
-                  disabled={isGuest}
-                >
-                  <ChevronUp 
-                    size={18} 
-                    color={userVote === 'up' ? '#ffffff' : '#64748b'} 
-                  />
-                </TouchableOpacity>
-                <Text style={[styles.voteCount, netVotes > 0 && styles.positiveVotes]}>
-                  {netVotes > 0 ? `+${netVotes}` : netVotes}
-                </Text>
+              {/* Vote controls removed - counters moved to bottom-right overlay */}
 
-                <TouchableOpacity
-                  style={[styles.voteButton, userVote === 'down' && styles.voteButtonDown]}
-                  onPress={(e: any) => { e.stopPropagation(); handleVote('down'); }}
-                  disabled={isGuest}
-                >
-                  <ChevronDown 
-                    size={18} 
-                    color={userVote === 'down' ? '#ffffff' : '#64748b'} 
-                  />
-                </TouchableOpacity>
-              </View>
-
-              {/* Action buttons */}
-              <View style={styles.actionButtons}>
-                {canEdit && (
-                  <TouchableOpacity style={styles.actionButton} onPress={(e: any) => { e.stopPropagation(); handleEdit(); }}>
-                    <Text style={{ fontSize: 12, color: '#6366f1', fontWeight: '700' }}>Edit</Text>
-                  </TouchableOpacity>
-                )}
-                <TouchableOpacity style={styles.actionButton} onPress={(e: any) => e.stopPropagation()}>
-                  <Heart size={18} color="#64748b" />
-                </TouchableOpacity>
-                <TouchableOpacity style={styles.actionButton} onPress={(e: any) => e.stopPropagation()}>
-                  <Bookmark size={18} color="#64748b" />
-                </TouchableOpacity>
-                <TouchableOpacity style={styles.actionButton} onPress={(e: any) => e.stopPropagation()}>
-                  <Share2 size={18} color="#64748b" />
-                </TouchableOpacity>
-              </View>
+              {/* Action buttons removed here; kept in bottom-right actions to avoid overlap */}
 
               {/* User info */}
               {deal.user && (
@@ -291,6 +238,35 @@ export default function DealListCard({ deal, isGuest, onVote, userRole, userId }
                   <Text style={styles.userRole}>{deal.user.role}</Text>
                 </View>
               )}
+            </View>
+            {/* Bottom-left counters overlay */}
+            <View style={styles.bottomLeftCounters} pointerEvents="none">
+              <View style={styles.pill}>
+                <Eye size={12} color="#94a3b8" />
+                <Text style={styles.pillText}>{(deal.views_count ?? (deal as any).view_count) || 0}</Text>
+              </View>
+              <View style={styles.pill}>
+                <MessageCircle size={12} color="#94a3b8" />
+                <Text style={styles.pillText}>{deal.comments_count ?? (deal as any).comment_count ?? 0}</Text>
+              </View>
+              <View style={styles.pill}>
+                <Heart size={12} color="#ef4444" />
+                <Text style={styles.pillText}>{(deal as any).votes_up || 0}</Text>
+              </View>
+            </View>
+            {/* Bottom-right action icons (interactive) */}
+            <View style={styles.bottomRightActions} pointerEvents="box-none">
+              {canEdit && (
+                <TouchableOpacity style={styles.actionButton} onPress={(e:any) => { e.stopPropagation(); handleEdit(); }}>
+                  <Text style={{ fontSize: 12, color: '#6366f1', fontWeight: '700' }}>Edit</Text>
+                </TouchableOpacity>
+              )}
+              <TouchableOpacity style={styles.actionButton} onPress={(e:any) => e.stopPropagation()}>
+                <Bookmark size={18} color="#64748b" />
+              </TouchableOpacity>
+              <TouchableOpacity style={styles.actionButton} onPress={(e:any) => e.stopPropagation()}>
+                <Share2 size={18} color="#64748b" />
+              </TouchableOpacity>
             </View>
           </View>
         </TouchableOpacity>
@@ -353,14 +329,57 @@ const styles = StyleSheet.create({
     borderRadius: 12,
     gap: 3,
   },
+  newBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#10b981',
+    paddingHorizontal: 6,
+    paddingVertical: 3,
+    borderRadius: 12,
+    gap: 6,
+  },
+  hotTopRight: {
+    position: 'absolute',
+    top: 8,
+    right: 8,
+    zIndex: 5,
+  },
+  bottomBadgeRow: {
+    position: 'absolute',
+    bottom: 8,
+    left: 8,
+    flexDirection: 'row',
+    gap: 8,
+    zIndex: 5,
+  },
   popularBadge: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#8b5cf6',
+    backgroundColor: '#6366f1',
     paddingHorizontal: 6,
     paddingVertical: 3,
     borderRadius: 12,
     gap: 3,
+  },
+  engagementStatsPills: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  pill: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: 'rgba(226,232,240,0.9)',
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 12,
+    marginRight: 8,
+  },
+  pillText: {
+    marginLeft: 6,
+    fontSize: 12,
+    color: '#64748b',
+    fontWeight: '600',
   },
   expiringBadge: {
     flexDirection: 'row',
@@ -552,5 +571,23 @@ const styles = StyleSheet.create({
     fontWeight: '500',
     textTransform: 'capitalize',
     marginTop: 2,
+  },
+  bottomLeftCounters: {
+    position: 'absolute',
+    left: 12,
+    bottom: 12,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  zIndex: 5,
+  },
+  bottomRightActions: {
+    position: 'absolute',
+    right: 12,
+    bottom: 12,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  zIndex: 20,
   },
 });
