@@ -1217,8 +1217,8 @@ app.post('/api/deals', async (req, res) => {
       dealData.category_id,
       dealData.store_id,
       dealData.created_by,
-      dealData.city || 'Unknown',
-      dealData.state || 'Unknown',
+  dealData.city || '',
+  dealData.state || '',
       dealData.status || 'pending'
     ]);
     

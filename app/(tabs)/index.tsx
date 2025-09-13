@@ -48,7 +48,16 @@ const fetchDealsFromApi = async () => {
     const { apiClient } = await import('@/utils/apiClient');
     const data = await apiClient.get('/deals', { status: 'live' });
     // Ensure data is always an array
-    return Array.isArray(data) ? data : [];
+    const arr = Array.isArray(data) ? data : [];
+    // Normalize keys for UI components
+    return arr.map((d: any) => ({
+      ...d,
+      images: d.images || (d.image ? [d.image] : []),
+      // Provide both normalized keys so different components can read either
+      views_count: d.view_count || d.views_count || 0,
+      view_count: d.view_count || d.views_count || 0,
+      image: (d.images && d.images[0]) || d.image || null
+    }));
   } catch (error) {
     console.error('Error fetching deals:', error);
     return [];
@@ -418,6 +427,36 @@ export default function HomeScreen() {
         loadDeals();
         lastLoadTimeRef.current = now;
       } else {
+        // If we have deals but user navigated back from a detail page recently,
+        // force a lightweight refresh to pick up updated counts/images.
+        // Use the navigation state: when returning from detail, React Navigation
+        // will trigger focus — we refresh if the last focus was more than 1s ago
+        const lastFocus = lastLoadTimeRef.current || 0;
+        if (Date.now() - lastFocus > 1000 && deals.length > 0) {
+          // Perform a quick background refresh (no spinner) to update view_count/images
+          (async () => {
+            try {
+              const latest = await fetchDealsFromApi();
+              // Merge incoming data into existing deals to preserve UI state where possible
+              setDeals(prev => {
+                const byId = new Map(prev.map(d => [String(d.id), d]));
+                latest.forEach(d => {
+                  const idStr = String(d.id);
+                  if (byId.has(idStr)) {
+                    // Update counts and images only
+                    const prevDeal = byId.get(idStr);
+                    byId.set(idStr, { ...prevDeal, ...d, image: d.images?.[0] || (prevDeal && prevDeal.image) });
+                  } else {
+                    byId.set(idStr, { ...d, image: d.images?.[0] });
+                  }
+                });
+                return Array.from(byId.values());
+              });
+            } catch (e) {
+              // ignore refresh errors
+            }
+          })();
+        }
       }
     }, [deals.length, loadDeals]) // Removed 'loading' dependency to prevent unnecessary reloads
   );

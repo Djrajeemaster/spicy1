@@ -88,6 +88,13 @@ class DealService {
     }, 'DealService.voteDeal');
   }
 
+  incrementView(dealId: string) {
+    return safeAsync(async () => {
+      const data = await apiClient.post(`/deals/${dealId}/view`);
+      return data as { view_count: number };
+    }, 'DealService.incrementView');
+  }
+
   getPendingDeals() {
     return safeAsync(async () => {
       // Include deals that need admin attention: pending, draft, flagged, reported

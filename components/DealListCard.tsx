@@ -66,7 +66,9 @@ export default function DealListCard({ deal, isGuest, onVote, userRole, userId }
 
   const isTrending = (() => {
     const hoursAgo = (Date.now() - new Date(deal.created_at).getTime()) / (1000 * 60 * 60);
-    return hoursAgo <= 24 && votesUp > 5;
+    // Use normalized views_count when available for consistency with server normalization
+    const views = (deal.views_count as number) || (deal as any).view_count || 0;
+    return hoursAgo <= 24 && votesUp > 5 && views > 5;
   })();
 
   const handleEdit = () => {
@@ -90,7 +92,7 @@ export default function DealListCard({ deal, isGuest, onVote, userRole, userId }
           {/* Image Section */}
           <View style={styles.imageSection}>
             {deal.images && deal.images.length > 0 ? (
-              <Image source={{ uri: deal.images[0] }} style={styles.dealImage} />
+              <Image source={{ uri: deal.images[0] }} style={styles.dealImage} resizeMode="contain" />
             ) : (
               <LinearGradient
                 colors={['#6366f1', '#8b5cf6']}
@@ -167,7 +169,7 @@ export default function DealListCard({ deal, isGuest, onVote, userRole, userId }
                 <View style={styles.engagementStats}>
                   <View style={styles.statItem}>
                     <Eye size={14} color="#94a3b8" />
-                    <Text style={styles.statText}>{deal.views_count || 0}</Text>
+                    <Text style={styles.statText}>{(deal.views_count ?? (deal as any).view_count) || 0}</Text>
                   </View>
                   <View style={styles.statItem}>
                     <MessageCircle size={14} color="#94a3b8" />

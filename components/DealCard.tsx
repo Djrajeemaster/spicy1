@@ -71,7 +71,7 @@ export function DealCard({ deal, onVote, isGuest, userId, userRole }: DealCardPr
 
   return (
     <TouchableOpacity style={styles.card} onPress={handleCardPress} activeOpacity={0.8}>
-      <Image source={{ uri: deal.image }} style={styles.image} />
+      <Image source={{ uri: deal.image }} style={styles.image} resizeMode="contain" />
       <View style={styles.content}>
         <Text style={styles.title} numberOfLines={2}>{deal.title}</Text>
         
@@ -100,6 +100,13 @@ export function DealCard({ deal, onVote, isGuest, userId, userRole }: DealCardPr
               <MessageCircle size={18} color="#6366f1" />
               <Text style={styles.statText}>{comments}</Text>
             </TouchableOpacity>
+            {(typeof (deal as any).view_count !== 'undefined' || typeof (deal as any).views_count !== 'undefined') && (
+              <View style={styles.statButton}>
+                <Text style={styles.statText}>
+                  {(deal as any).views_count ?? (deal as any).view_count ?? 0}
+                </Text>
+              </View>
+            )}
             {canEdit && !isGuest && (
               <TouchableOpacity style={styles.editButton} onPress={handleEdit}>
                 <Text style={styles.editText}>
@@ -198,10 +205,10 @@ const styles = StyleSheet.create({
     marginRight: 16,
   },
   statText: {
-    marginLeft: 6,
-    fontSize: 14,
-    fontWeight: '600',
-    color: '#64748b',
+  marginLeft: 6,
+  fontSize: 13,
+  fontWeight: '600',
+  color: '#64748b',
   },
   viewDealButton: {
     backgroundColor: '#6366f1',

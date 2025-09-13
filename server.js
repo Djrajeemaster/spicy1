@@ -12,6 +12,105 @@ const multer = require('multer');
 // store uploads temporarily then move into assets
 const upload = multer({ dest: path.join(__dirname, 'tmp_uploads') });
 const { chromium } = require('playwright');
+const axios = require('axios');
+
+// Shared Playwright browser to avoid launching per-request (speeds up scraping)
+let sharedBrowser = null;
+let sharedBrowserLaunching = false;
+
+const getSharedBrowser = async () => {
+  if (sharedBrowser) return sharedBrowser;
+  if (sharedBrowserLaunching) {
+    // wait until browser is launched
+    while (sharedBrowserLaunching && !sharedBrowser) {
+      await new Promise(r => setTimeout(r, 100));
+    }
+    return sharedBrowser;
+  }
+
+  try {
+    sharedBrowserLaunching = true;
+    sharedBrowser = await chromium.launch({
+      headless: true,
+      args: [
+        '--no-sandbox',
+        '--disable-setuid-sandbox',
+        '--disable-dev-shm-usage',
+        '--disable-accelerated-2d-canvas',
+        '--no-first-run',
+        '--no-zygote',
+        '--disable-gpu',
+        '--disable-blink-features=AutomationControlled'
+      ]
+    });
+    sharedBrowserLaunching = false;
+    return sharedBrowser;
+  } catch (e) {
+    sharedBrowserLaunching = false;
+    throw e;
+  }
+};
+
+// Helper: parse width from common URL tokens (Flipkart, Amazon, general patterns)
+const getWidthFromUrl = (u) => {
+  if (!u || typeof u !== 'string') return null;
+  try {
+    let m;
+    // Flipkart style /image/800x800/
+    m = u.match(/\/image\/(\d{2,5})x(\d{2,5})\//i);
+    if (m) return parseInt(m[1], 10);
+    // explicit WxH e.g., 800x800 in filename
+    m = u.match(/(\d{2,5})x(\d{2,5})/);
+    if (m) return parseInt(m[1], 10);
+    // Amazon _SX800_ or _SY800_
+    m = u.match(/_SX(\d{2,5})_/i);
+    if (m) return parseInt(m[1], 10);
+    m = u.match(/_SY(\d{2,5})_/i);
+    if (m) return parseInt(m[1], 10);
+    // path segments like /800/800/
+    m = u.match(/\/(\d{2,5})\/(\d{2,5})\//);
+    if (m) return parseInt(m[1], 10);
+  } catch (e) {}
+  return null;
+};
+
+// Helper: filter images by minimum width. Uses URL tokens first, then HEAD size heuristic as fallback.
+const filterImagesByMinWidth = async (images, minWidth = 400) => {
+  if (!Array.isArray(images) || images.length === 0) return images;
+
+  const kept = [];
+  const toHead = [];
+
+  for (const img of images) {
+    const w = getWidthFromUrl(img);
+    if (w !== null) {
+      if (w >= minWidth) kept.push(img);
+      continue;
+    }
+    toHead.push(img);
+  }
+
+  // For URLs without tokens, do a fast HEAD and accept if content-length > threshold
+  const headThreshold = 20 * 1024; // 20 KB
+  if (toHead.length > 0) {
+    const headChecks = toHead.map(async (url) => {
+      try {
+        const resp = await axios.head(url, { timeout: 3000, maxRedirects: 3 });
+        const len = resp.headers && resp.headers['content-length'] ? parseInt(resp.headers['content-length'], 10) : 0;
+        if (!isNaN(len) && len >= headThreshold) {
+          kept.push(url);
+        }
+      } catch (e) {
+        // ignore failures; do not keep the image
+      }
+    });
+
+    await Promise.all(headChecks);
+  }
+
+  // If filtering stripped everything, return the original list as a fallback
+  return kept.length > 0 ? kept : images;
+};
 
 // Import security middleware
 const { securityHeaders } = require('./middleware/security');
@@ -23,6 +122,10 @@ const port = process.env.PORT || 3000;
 const pool = new Pool({
   connectionString: process.env.DATABASE_URL,
 });
+
+// In-memory recent view increments to prevent rapid duplicate increments per session/IP
+// Key format: `${dealId}:${sessionIdOrIp}` -> timestamp (ms)
+const recentViewIncrements = new Map();
 
 // Parse JSON bodies
 app.use(express.json());
@@ -1139,6 +1242,54 @@ app.get('/api/deals/:id', async (req, res) => {
   }
 });
 
+// Increment view count for a deal
+app.post('/api/deals/:id/view', async (req, res) => {
+  try {
+    const { id } = req.params;
+    // Dedupe rapid duplicate increments from the same session or IP.
+    const sessionId = req.cookies && req.cookies.session_id;
+    const ip = req.ip || req.connection && req.connection.remoteAddress || req.headers['x-forwarded-for'] || 'unknown';
+    const ownerKey = `${id}:${sessionId || ip}`;
+
+    const now = Date.now();
+    const windowMs = 5000; // 5 seconds
+
+    // Clean up old entries occasionally
+    if (recentViewIncrements.size > 5000) {
+      for (const [k, v] of recentViewIncrements) {
+        if (now - v > 60000) recentViewIncrements.delete(k);
+      }
+    }
+
+    const last = recentViewIncrements.get(ownerKey) || 0;
+    if (now - last < windowMs) {
+      // Treat as a duplicate rapid call; return current view_count without incrementing
+      try {
+        const { rows: found } = await pool.query('SELECT view_count FROM deals WHERE id = $1', [id]);
+        if (found.length === 0) return res.status(404).json({ error: 'Deal not found' });
+        return res.json({ view_count: found[0].view_count, deduped: true });
+      } catch (e) {
+        return res.status(500).json({ error: 'Failed to read deal' });
+      }
+    }
+
+    // Record this increment attempt
+    recentViewIncrements.set(ownerKey, now);
+
+    const { rows } = await pool.query(
+      `UPDATE deals SET view_count = COALESCE(view_count, 0) + 1 WHERE id = $1 RETURNING view_count`,
+      [id]
+    );
+
+    if (rows.length === 0) return res.status(404).json({ error: 'Deal not found' });
+
+    res.json({ view_count: rows[0].view_count });
+  } catch (err) {
+    console.error('Error incrementing view count:', err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
 // Update deal
 app.put('/api/deals/:id', async (req, res) => {
   try {
@@ -1218,8 +1369,8 @@ app.post('/api/deals', async (req, res) => {
       dealData.category_id,
       dealData.store_id,
       dealData.created_by,
-      dealData.city || 'Unknown',
-      dealData.state || 'Unknown',
+  dealData.city || '',
+  dealData.state || '',
       dealData.status || 'pending',
       dealData.images || []
     ]);
@@ -1422,31 +1573,81 @@ app.post('/api/scrape-product', async (req, res) => {
     try {
       // Try Playwright first
       console.log('Attempting Playwright scraping...');
-      const browser = await chromium.launch({ 
-        headless: true,
-        args: [
-          '--no-sandbox',
-          '--disable-setuid-sandbox',
-          '--disable-dev-shm-usage',
-          '--disable-accelerated-2d-canvas',
-          '--no-first-run',
-          '--no-zygote',
-          '--disable-gpu'
-        ]
+      let browser = await getSharedBrowser();
+
+      // Create a context with a realistic user agent and small anti-detection scripts
+      let context;
+      try {
+        context = await browser.newContext({
+        userAgent: 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/116.0.0.0 Safari/537.36',
+        viewport: { width: 1280, height: 800 },
       });
-      console.log('Browser launched successfully');
-      const page = await browser.newPage();
+      } catch (e) {
+        // If the shared browser appears closed, reset and retry once
+        console.warn('Shared browser context creation failed, restarting shared browser...', e && (e.message || e));
+        try {
+          sharedBrowser = null;
+          browser = await getSharedBrowser();
+          context = await browser.newContext({
+            userAgent: 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/116.0.0.0 Safari/537.36',
+            viewport: { width: 1280, height: 800 },
+          });
+        } catch (err) {
+          throw err;
+        }
+      }
 
-      // Set user agent to avoid bot detection
-      await page.setUserAgent('Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36');
+      // Reduce automation fingerprints
+      await context.addInitScript(() => {
+        try {
+          Object.defineProperty(navigator, 'webdriver', { get: () => false });
+        } catch (e) {}
+        try {
+          window.navigator.chrome = { runtime: {} };
+        } catch (e) {}
+        try {
+          Object.defineProperty(navigator, 'languages', { get: () => ['en-US', 'en'] });
+        } catch (e) {}
+        try {
+          Object.defineProperty(navigator, 'plugins', { get: () => [1,2,3,4,5] });
+        } catch (e) {}
+      });
 
-      await page.goto(url, { waitUntil: 'networkidle', timeout: 30000 });
+      const page = await context.newPage();
+
+      // Navigate quickly to DOMContentLoaded and then wait briefly for likely selectors
+      await page.goto(url, { waitUntil: 'domcontentloaded', timeout: 30000 });
+
+      // Short targeted waits for typical product page markers (title/price/meta)
+      const quickSelectors = [
+        'h1',
+        'title',
+        'meta[property="og:title"]',
+        'meta[name="description"]',
+        '.a-price',
+        '#priceblock_ourprice',
+        '.price',
+        '._30jeq3',
+        'span.B_NuCI'
+      ];
+
+      try {
+        await page.waitForSelector(quickSelectors.join(','), { timeout: 2500 });
+      } catch (e) {
+        // If no quick selector appeared, continue — some pages need longer JS
+      }
 
       // Extract data
       const data = await page.evaluate(() => {
         const getTextContent = (selectors) => {
           for (const selector of selectors) {
             const element = document.querySelector(selector);
+            if (!element) continue;
+            // If meta tag, read content
+            if (element.tagName && element.tagName.toLowerCase() === 'meta') {
+              const c = element.getAttribute('content');
+              if (c && c.trim()) return c.trim();
+            }
             if (element && element.textContent?.trim()) {
               return element.textContent.trim();
             }
@@ -1454,24 +1655,52 @@ app.post('/api/scrape-product', async (req, res) => {
           return '';
         };
 
-        // Title selectors - more specific for product pages
+        // Title selectors - prioritize Amazon product title first, then others
         let title = getTextContent([
+          '#productTitle', // Amazon primary
+          '#title',
+          'h1#title',
           'h1',
+          'span.B_NuCI', // Flipkart
+          'span._35KyD6',
           '[data-testid="product-title"]',
           '.product-title',
           '.product-name',
-          '#productTitle',
-          '#title',
-          '.a-size-large',
-          'meta[property="og:title"]'
-        ]) || document.title;
+          'meta[property="og:title"]',
+          'meta[name="twitter:title"]'
+        ]) || document.title || '';
 
-        // Clean up title - remove domain prefixes and extra text
-        title = title.replace(/^(amazon\.com|www\.amazon\.com|flipkart\.com|www\.flipkart\.com|myntra\.com|www\.myntra\.com)\s*[-:]\s*/i, '');
-        title = title.replace(/\s*[-|]\s*amazon\.com.*$/i, '');
-        title = title.replace(/\s*[-|]\s*flipkart\.com.*$/i, '');
-        title = title.replace(/\s*[-|]\s*myntra\.com.*$/i, '');
-        title = title.trim();
+        // Try JSON-LD product data for title/price/description if present
+        try {
+          const ldScripts = document.querySelectorAll('script[type="application/ld+json"]');
+          for (const s of ldScripts) {
+            try {
+              const json = JSON.parse(s.textContent || s.innerText || '{}');
+              const product = (Array.isArray(json) ? json.find(j => j['@type'] && j['@type'].toLowerCase() === 'product') : (json['@type'] && json['@type'].toLowerCase() === 'product' ? json : null));
+              if (product) {
+                if (!title || title.length < 5) title = (product.name || title);
+                if ((!price || price === '') && product.offers) {
+                  price = (product.offers.priceCurrency ? product.offers.priceCurrency + ' ' : '') + (product.offers.price || '');
+                }
+                if (!description || description.length < 5) description = product.description || description;
+                break;
+              }
+            } catch (e) {
+              // ignore JSON parse errors
+            }
+          }
+        } catch (e) {}
+
+  // Clean up title - remove domain prefixes and helper UI text
+  title = title.replace(/^(amazon\.com|www\.amazon\.com|flipkart\.com|www\.flipkart\.com|myntra\.com|www\.myntra\.com)\s*[-:]\s*/i, '');
+  title = title.replace(/\s*[-|]\s*amazon\.com.*$/i, '');
+  title = title.replace(/\s*[-|]\s*flipkart\.com.*$/i, '');
+  title = title.replace(/\s*[-|]\s*myntra\.com.*$/i, '');
+  // Remove repeated UI helper fragments such as 'Product summary presents key product information' or keyboard shortcuts
+  title = title.replace(/Product summary presents key product information/gi, '');
+  title = title.replace(/Keyboard shortcut[\s\S]*$/i, '');
+  title = title.replace(/\s*See more product details.*$/i, '');
+  title = title.replace(/\s+/g, ' ').trim();
 
         // Price selectors - more specific for product prices
         let price = getTextContent([
@@ -1485,31 +1714,168 @@ app.post('/api/scrape-product', async (req, res) => {
           '.product-price',
           '.current-price',
           '[class*="price"]',
-          'meta[property="product:price:amount"]'
+          'meta[property="product:price:amount"]',
+          '._30jeq3', // Flipkart main price
+          'div._30jeq3',
+          'div._30jeq3._1_WHN1',
+          '._3I9_wc', // Flipkart alternate price class
+          '._25b18c',
+          '._16Jk6d',
+          '.\_1vC4OE'
         ]);
 
         // Clean up price - extract only numeric values
         const priceMatch = price.match(/[\$₹£€]?\s*[\d,]+\.?\d*/);
         price = priceMatch ? priceMatch[0].trim() : '';
+        
+        // Try to extract an original / list price (Amazon often shows a 'List Price' or struck-through price)
+        let originalPrice = '';
+        try {
+          // Common Amazon selectors for list/strike price and other hosts where list price is present
+          const listSelectors = [
+            '#priceblock_listprice',
+            '#price_feature_div .a-text-strike',
+            '.a-text-strike',
+            '.priceBlockStrikePriceString',
+            '.priceBlockSavingsString',
+            '.list-price',
+            '.strike',
+            '.comparison_price'
+          ];
+          for (const sel of listSelectors) {
+            const el = document.querySelector(sel);
+            if (el && el.textContent && el.textContent.trim()) {
+              const m = el.textContent.trim().match(/[\$₹£€]?\s*[\d,]+\.?\d*/);
+              if (m) { originalPrice = m[0].trim(); break; }
+            }
+          }
+        } catch (e) {}
 
-        // Description selectors - more specific
-        let description = getTextContent([
-          '[data-testid="product-description"]',
-          '.product-description',
-          '#productDescription',
-          '#feature-bullets',
-          '.a-unordered-list',
-          'meta[name="description"]',
-          'meta[property="og:description"]'
-        ]);
+        // Description selectors - prioritize structured Amazon/feature bullets and product description
+        let description = '';
 
-        // Clean up description - remove domain references
-        description = description.replace(/\b(amazon|flipkart|myntra)\.com\b/gi, '');
+        // Prefer Amazon feature bullets if present
+        try {
+          const bullets = document.querySelectorAll('#feature-bullets .a-list-item');
+          if (bullets && bullets.length > 0) {
+            const parts = [];
+            bullets.forEach(b => {
+              const t = b.textContent && b.textContent.trim();
+              if (t) parts.push(t);
+            });
+            if (parts.length > 0) description = parts.join('\n');
+          }
+        } catch (e) {}
+
+        if (!description) {
+          description = getTextContent([
+            '#productDescription',
+            '[data-testid="product-description"]',
+            '.product-description',
+            '.a-unordered-list',
+            'meta[name="description"]',
+            'meta[property="og:description"]',
+            '.\_1mXcCf',
+            '.\_2RngUh',
+            '.\_2418kt',
+            'div._1mXcCf',
+            'div._2RngUh'
+          ]);
+        }
+
+        // Clean up description - remove domain references and UI helper noise
+        description = (description || '').replace(/\b(amazon|flipkart|myntra)\.com\b/gi, '');
+        // Remove repeated UI helper fragments and keyboard shortcut blocks
+        description = description.replace(/Product summary presents key product information/gi, '');
+        description = description.replace(/Keyboard shortcut[\s\S]*?(?=About this item|$)/gi, '');
+        description = description.replace(/›?\s*See more product details[\s\S]*$/i, '');
         description = description.replace(/\s+/g, ' ').trim();
+
+        // As a last resort, try JSON-LD again for description
+        try {
+          const ldScripts2 = document.querySelectorAll('script[type="application/ld+json"]');
+          for (const s of ldScripts2) {
+            try {
+              const json = JSON.parse(s.textContent || s.innerText || '{}');
+              const product = (Array.isArray(json) ? json.find(j => j['@type'] && j['@type'].toLowerCase() === 'product') : (json['@type'] && json['@type'].toLowerCase() === 'product' ? json : null));
+              if (product) {
+                if (!description || description.length < 5) description = product.description || description;
+                if ((!price || price === '') && product.offers) price = (product.offers.priceCurrency ? product.offers.priceCurrency + ' ' : '') + (product.offers.price || '');
+                break;
+              }
+            } catch (e) {}
+          }
+        } catch (e) {}
 
         // Images - prioritize high-quality images over thumbnails
         const images = [];
         const processedUrls = new Set();
+
+        // For Amazon product pages, prefer extracting the gallery thumbnails (main product images)
+        // directly from the product gallery selectors. This avoids picking up unrelated suggestion
+        // images that appear elsewhere on the page.
+        try {
+          const hostname = (window.location.hostname || '').toLowerCase();
+          if (/amazon\./i.test(hostname)) {
+            const gallerySelectors = [
+              '#altImages img',
+              'div#altImages img',
+              '#imgTagWrapperId img',
+              'img#landingImage',
+              'img[data-image-index]',
+              'div#mainImageContainer img',
+              'div#img-canvas img'
+            ];
+
+            const galleryUrls = [];
+            gallerySelectors.forEach(sel => {
+              const nodes = document.querySelectorAll(sel);
+              nodes.forEach(img => {
+                // Try various attributes where Amazon stores larger urls
+                const candidates = [];
+                const dataA = img.getAttribute('data-a-dynamic-image');
+                if (dataA) {
+                  try {
+                    const parsed = JSON.parse(dataA);
+                    // parsed keys are URLs mapped to sizes
+                    Object.keys(parsed || {}).forEach(k => candidates.push(k));
+                  } catch (e) {}
+                }
+                const attrs = ['data-old-hires','data-src','data-lazy','data-lazy-src','data-old-hires','src'];
+                attrs.forEach(a => {
+                  const v = img.getAttribute(a);
+                  if (v) candidates.push(v);
+                });
+
+                candidates.forEach(c => {
+                  if (c && typeof c === 'string' && c.startsWith('http')) {
+                    // convert to a probable full-size URL using existing thumbnail-to-full logic
+                    let full = c.split('?')[0];
+                    try {
+                      if (full.includes('m.media-amazon.com/images/I/')) {
+                        full = full.replace(/_AC_[A-Z0-9_]+/g, '');
+                        full = full.replace(/_SX\d+_SY\d+_/, '');
+                        full = full.replace(/_SX\d+_/, '');
+                        full = full.replace(/_SY\d+_/, '');
+                        full = full.replace(/\.\./g, '.');
+                      }
+                    } catch (e) {}
+                    if (!galleryUrls.includes(full)) galleryUrls.push(full);
+                  }
+                });
+              });
+            });
+
+            if (galleryUrls.length > 0) {
+              galleryUrls.forEach(u => {
+                processedUrls.add(u);
+                images.push(u);
+              });
+            }
+          }
+        } catch (e) {
+          // ignore Amazon gallery extraction errors and fall back to general logic
+        }
 
         // Function to check if URL is likely a thumbnail
         const isThumbnail = (url) => {
@@ -1696,6 +2062,11 @@ app.post('/api/scrape-product', async (req, res) => {
           'img[data-full]',
           'img[data-large]',
           'img[data-original]'
+          ,
+          // Flipkart specific selectors
+          '._396cs4',
+          '._2r_TV6 img',
+          'img[class*="_396cs4"]',
         ];
 
         productSelectors.forEach(selector => {
@@ -1857,21 +2228,228 @@ app.post('/api/scrape-product', async (req, res) => {
         // Store/domain
         const domain = window.location.hostname;
 
+        // Post-process title/price/description/images per request
+        const fullTitle = title || '';
+
+        // Shorten title to a reasonable length (e.g., 80 chars) without cutting words abruptly
+        const shortenTitle = (t, maxLen = 80) => {
+          if (!t) return '';
+          if (t.length <= maxLen) return t;
+          // Try to cut at last space before maxLen
+          const cut = t.lastIndexOf(' ', maxLen);
+          if (cut > 40) return t.slice(0, cut) + '...';
+          return t.slice(0, maxLen - 3) + '...';
+        };
+
+        const shortTitle = shortenTitle(fullTitle, 80);
+
+        // Ensure description contains the full title once followed by any scraped description.
+        // If the scraped description already begins with the full title, remove that duplicate.
+        const composedDescription = (() => {
+          const t = (fullTitle || '').trim();
+          let desc = (description || '').trim();
+          if (t && desc) {
+            // Remove any repeated occurrences of the title inside the scraped description
+            try {
+              const esc = t.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+              const re = new RegExp(esc, 'gi');
+              desc = desc.replace(re, '').trim();
+            } catch (e) {
+              // fallback: simple removal of exact prefix
+              if (desc.toLowerCase().startsWith(t.toLowerCase())) desc = desc.slice(t.length).trim();
+            }
+          }
+          // Put the full title once at the top, followed by remaining description if any
+          return (t ? (t + (desc ? '\n\n' + desc : '')) : desc).trim();
+        })();
+
+        // Normalize price: remove currency words like INR and any non-numeric characters except dot and comma
+        let normalizedPrice = price || '';
+        if (normalizedPrice) {
+          // Remove common currency words and symbols
+          normalizedPrice = normalizedPrice.replace(/INR\b/gi, '');
+          normalizedPrice = normalizedPrice.replace(/[₹$£€¥,\s]/g, '');
+          // Keep only digits and decimal
+          const m = normalizedPrice.match(/\d+(?:\.\d+)?/);
+          normalizedPrice = m ? m[0] : '';
+        }
+
+        // Normalize images: prefer full-size / original image URLs only
+        const normalizeImageUrl = (u) => {
+          if (!u || typeof u !== 'string') return null;
+          let url = u;
+          try {
+            // Remove query params
+            url = url.split('?')[0];
+            // Use getFullSizeUrl logic where possible
+            // Amazon patterns
+            url = url.replace(/_AC_[A-Z0-9]+_/g, '.');
+            url = url.replace(/_AC_\w+/g, '');
+            url = url.replace(/_SX\d+_SY\d+_/, '');
+            url = url.replace(/_SX\d+_/, '');
+            url = url.replace(/_SY\d+_/, '');
+            url = url.replace(/_\w+\.(jpg|jpeg|png|webp)$/i, '.$1');
+            // Flipkart pattern: /image/<WIDTH>x<HEIGHT>/ -> /image/
+            url = url.replace(/\/image\/\d+x\d+\//, '/image/');
+            // Remove common thumbnail markers
+            url = url.replace(/thumb|thumbnail|_thumb|_small|_mini/gi, '');
+            url = url.replace(/\/thumbnails?\//i, '/');
+            url = url.replace(/\/thumb\//i, '/');
+            url = url.replace(/([^:\/])\/+$/,'$1');
+
+            // Carefully remove accidental duplicate dots in the pathname (e.g. '..jpg' -> '.jpg')
+            try {
+              const parsed = new URL(url);
+              // Collapse runs of dots in the pathname to a single dot
+              parsed.pathname = parsed.pathname.replace(/\.{2,}/g, '.');
+              // Collapse duplicate slashes in the pathname
+              parsed.pathname = parsed.pathname.replace(/\/\/{2,}/g, '/');
+              // Rebuild the URL without query params
+              url = parsed.origin + parsed.pathname + (parsed.hash || '');
+            } catch (e) {
+              // If URL parsing fails, apply a conservative regex that avoids touching protocol
+              url = url.replace(/([^:])\.{2,}/g, '$1.');
+              url = url.replace(/\/\/{2,}/g, '/');
+            }
+          } catch (e) {
+            return u;
+          }
+          return url;
+        };
+
+        const uniqueImages = [];
+        for (const img of images) {
+          const norm = normalizeImageUrl(img);
+          if (!norm) continue;
+          // Filter out small/thumbnail indicators conservatively
+          const lowQuality = /(?:32x32|64x64|100x100|150x150|200x200|thumb|thumbnail|small|icon)/i;
+          if (lowQuality.test(norm)) continue;
+          if (!uniqueImages.includes(norm)) uniqueImages.push(norm);
+        }
+
+        // If we filtered too aggressively and have no images, fall back to original list (de-duplicated)
+        let finalImages = uniqueImages.length > 0 ? uniqueImages : Array.from(new Set(images.map(i => (i || '').split('?')[0])));
+
+        // Further filter images to likely product images and limit the total returned
+        const isLikelyProductImage = (u, titleText) => {
+          if (!u) return false;
+          const lower = u.toLowerCase();
+          // Exclude obvious non-product assets
+          const excludePat = /(promos?|promo|cms-rpd-img|banner|badge|logo|sprite|icon|spacer|placeholder|ads?|advert|avatar|avatar|user|google|gstatic|analytics|pixel)/i;
+          if (excludePat.test(lower)) return false;
+
+          // Prefer images on known product hosts or paths
+          if (/m\.media-amazon\.com|rukminim|flac|flipkart|product|products|gallery|images\/i/.test(lower)) return true;
+
+          // If filename is reasonably long and resembles an asset (no tiny names), accept
+          const pathPart = u.split('/').pop() || '';
+          if (/^[a-z0-9A-Z\-_,]+\.(jpg|jpeg|png|webp)$/i.test(pathPart) && pathPart.length > 8) return true;
+
+            // Heuristic: require a token match from the title for non-obvious hosts
+            if (titleText) {
+              const tokens = titleText.replace(/[^a-zA-Z0-9 ]/g, ' ').split(/\s+/).filter(t => t.length > 4).slice(0, 6).map(t => t.toLowerCase());
+              for (const tok of tokens) {
+                if (lower.includes(tok)) return true;
+              }
+            }
+
+          return false;
+        };
+
+  // Apply likely-product filter and cap results to top 6
+        try {
+          const filteredLikely = finalImages.filter(u => isLikelyProductImage(u, fullTitle));
+          if (filteredLikely && filteredLikely.length > 0) finalImages = filteredLikely;
+        } catch (e) {}
+
+  if (Array.isArray(finalImages) && finalImages.length > 20) finalImages = finalImages.slice(0, 20);
+
+        // Amazon-specific filtering: prefer product image hosts/paths and exclude promos/logos
+        try {
+          const isAmazon = domain && /(^|\.)amazon\./i.test(domain);
+          if (isAmazon) {
+            const amazonKeep = finalImages.filter(u => {
+              if (!u) return false;
+              const lower = u.toLowerCase();
+              // Exclude obvious non-product assets
+              const excludePat = /(promos?|promo|cms-rpd-img|banner|badge|logo|sprite|icon|spacer|placeholder|ads?|advert)/i;
+              if (excludePat.test(lower)) return false;
+              // Prefer Amazon product image paths (m.media-amazon.com/images/I/ or /images/I/)
+              if (/m\.media-amazon\.com\/images\/i\//i.test(u) || /\/images\/i\//i.test(u)) return true;
+              // Also accept images where filename looks like a product asset (alphanumeric and punctuation)
+              const path = u.split('/').pop() || '';
+              if (/^[a-z0-9A-Z\-_,]+\.[a-z]{3,4}$/i.test(path) && path.length > 8) return true;
+              return false;
+            });
+            if (amazonKeep.length > 0) {
+              finalImages = amazonKeep;
+            }
+          }
+        } catch (e) {
+          // ignore amazon-specific filtering errors
+        }
+
+  // Determine currency and create a displayPrice (escape $ with backslash)
+        let currency = '';
+        let displayPrice = normalizedPrice || '';
+        try {
+          if (price && /₹/.test(price)) { currency = 'INR'; displayPrice = 'INR ' + displayPrice; }
+          else if (price && /\$/.test(price)) { currency = 'USD'; displayPrice = '\\$' + displayPrice; }
+          else if (price && /£/.test(price)) { currency = 'GBP'; displayPrice = '£' + displayPrice; }
+          else if (price && /€/.test(price)) { currency = 'EUR'; displayPrice = '€' + displayPrice; }
+        } catch (e) {}
+
+  // Note: image width filtering is intentionally performed after page.evaluate
+  // in the Node-side async handler to avoid using await inside the page function.
+
         return {
-          title,
-          price,
-          description,
-          images,
+          title: shortTitle,
+          fullTitle: fullTitle,
+          price: normalizedPrice,
+          original_price: originalPrice || null,
+          displayPrice,
+          currency,
+          description: composedDescription,
+          images: finalImages,
+          // include the broader unfiltered image candidate list so the client can optionally show them
+          images_all: Array.from(new Set(images.map(i => (i || '').split('?')[0]))),
           domain
         };
       });
 
       await browser.close();
       console.log('Scraping completed successfully');
+
+      // Post-process images for minimum width (>=400px) and amazon-specific filtering
+      try {
+        if (data && Array.isArray(data.images) && data.images.length > 0) {
+          const filtered = await filterImagesByMinWidth(data.images, 400);
+          if (filtered && filtered.length > 0) data.images = filtered;
+          // Additional amazon filter (already applied in evaluate, but double-check)
+          try {
+            if (data.domain && /(^|\.)amazon\./i.test(data.domain)) {
+              const amazonKeep = data.images.filter(u => {
+                if (!u) return false;
+                const lower = u.toLowerCase();
+                const excludePat = /(promos?|promo|cms-rpd-img|banner|badge|logo|sprite|icon|spacer|placeholder|ads?|advert)/i;
+                if (excludePat.test(lower)) return false;
+                if (/m\.media-amazon\.com\/images\/i\//i.test(u) || /\/images\/i\//i.test(u)) return true;
+                const path = u.split('/').pop() || '';
+                if (/^[a-z0-9A-Z\-_,]+\.[a-z]{3,4}$/i.test(path) && path.length > 8) return true;
+                return false;
+              });
+              if (amazonKeep.length > 0) data.images = amazonKeep;
+            }
+          } catch (e) {}
+        }
+      } catch (e) {
+        console.error('Image width filtering failed:', e && (e.stack || e.message || e));
+      }
+
       res.json(data);
 
     } catch (playwrightError) {
-      console.error('Playwright scraping failed:', playwrightError);
+      console.error('Playwright scraping failed:', playwrightError && (playwrightError.stack || playwrightError.message || playwrightError));
       
       // Fallback: Try simple HTTP request with cheerio
       try {
@@ -1888,10 +2466,12 @@ app.post('/api/scrape-product', async (req, res) => {
         
         const $ = cheerio.load(response.data);
         
-        let title = $('title').text().trim() || 
-                   $('meta[property="og:title"]').attr('content') || 
-                   $('h1').first().text().trim() ||
-                   $('#productTitle').text().trim();
+  let title = $('title').text().trim() || 
+       $('meta[property="og:title"]').attr('content') || 
+       $('h1').first().text().trim() ||
+       $('#productTitle').text().trim() ||
+       $('span.B_NuCI').first().text().trim() ||
+       $('span._35KyD6').first().text().trim();
         
         // Clean up title - remove domain prefixes
         title = title.replace(/^(amazon\.com|www\.amazon\.com|flipkart\.com|www\.flipkart\.com|myntra\.com|www\.myntra\.com)\s*[-:]\s*/i, '');
@@ -1899,14 +2479,36 @@ app.post('/api/scrape-product', async (req, res) => {
         title = title.replace(/\s*[-|]\s*flipkart\.com.*$/i, '');
         title = title.replace(/\s*[-|]\s*myntra\.com.*$/i, '');
         title = title.trim();
+
+        // Try JSON-LD parsing for product info in fallback
+        try {
+          const ld = $('script[type="application/ld+json"]');
+          ld.each((i, el) => {
+            try {
+              const json = JSON.parse($(el).html() || '{}');
+              const product = Array.isArray(json) ? json.find(j => j['@type'] && String(j['@type']).toLowerCase() === 'product') : (json['@type'] && String(json['@type']).toLowerCase() === 'product' ? json : null);
+              if (product) {
+                if ((!title || title.length < 5) && product.name) title = product.name;
+                if ((!price || price === '') && product.offers) price = (product.offers.priceCurrency ? product.offers.priceCurrency + ' ' : '') + (product.offers.price || '');
+                if ((!description || description.length < 5) && product.description) description = product.description;
+              }
+            } catch (e) {}
+          });
+        } catch (e) {}
         
-        let price = $('.a-price .a-offscreen').text().trim() ||
-                   $('.a-price-whole').text().trim() ||
-                   $('#priceblock_ourprice').text().trim() ||
-                   $('#priceblock_dealprice').text().trim() ||
-                   $('meta[property="product:price:amount"]').attr('content') ||
-                   $('.price').first().text().trim() ||
-                   $('[class*="price"]').first().text().trim();
+  let price = $('.a-price .a-offscreen').text().trim() ||
+       $('.a-price-whole').text().trim() ||
+       $('#priceblock_ourprice').text().trim() ||
+       $('#priceblock_dealprice').text().trim() ||
+       $('meta[property="product:price:amount"]').attr('content') ||
+       $('.price').first().text().trim() ||
+       $('[class*="price"]').first().text().trim() ||
+    $('._30jeq3').first().text().trim() || // Flipkart main price
+    $('div._30jeq3._1_WHN1').first().text().trim() ||
+    $('._3I9_wc').first().text().trim() ||
+    $('._25b18c').first().text().trim() ||
+    $('._16Jk6d').first().text().trim() ||
+    $('._1vC4OE').first().text().trim();
         
         // Clean up price - extract only numeric values
         const priceMatch = price.match(/[\$₹£€]?\s*[\d,]+\.?\d*/);
@@ -1917,7 +2519,10 @@ app.post('/api/scrape-product', async (req, res) => {
                          $('.product-description').text().trim() ||
                          $('meta[name="description"]').attr('content') ||
                          $('meta[property="og:description"]').attr('content') ||
-                         $('.description').first().text().trim();
+                              $('.description').first().text().trim() ||
+                              $('._1mXcCf').first().text().trim() ||
+                              $('._2RngUh').first().text().trim() ||
+                              $('._2418kt').first().text().trim();
         
         // Clean up description - remove domain references
         description = description.replace(/\b(amazon|flipkart|myntra)\.com\b/gi, '');
@@ -2184,11 +2789,99 @@ app.post('/api/scrape-product', async (req, res) => {
         const urlObj = new URL(url);
         const domain = urlObj.hostname;
         
+        // Apply Amazon-specific filtering to fallback images as well
+        try {
+          const isAmazon = domain && /(^|\.)amazon\./i.test(domain);
+          if (isAmazon) {
+            const filtered = images.filter(u => {
+              if (!u) return false;
+              const lower = u.toLowerCase();
+              const excludePat = /(promos?|promo|cms-rpd-img|banner|badge|logo|sprite|icon|spacer|placeholder|ads?|advert)/i;
+              if (excludePat.test(lower)) return false;
+              if (/m\.media-amazon\.com\/images\/i\//i.test(u) || /\/images\/i\//i.test(u)) return true;
+              const path = u.split('/').pop() || '';
+              if (/^[a-z0-9A-Z\-_,]+\.[a-z]{3,4}$/i.test(path) && path.length > 8) return true;
+              return false;
+            });
+            if (filtered.length > 0) images = filtered;
+          }
+        } catch (e) {}
+
+        // Normalize title/description to avoid repeating title twice
+        const t = (title || '').trim();
+        if (t && description) {
+          if (description.toLowerCase().startsWith(t.toLowerCase())) {
+            description = description.slice(t.length).trim();
+          }
+          if (description.toLowerCase().startsWith(t.toLowerCase())) {
+            description = description.slice(t.length).trim();
+          }
+        }
+
+        // Heuristic to keep likely product images and limit to top 8
+        const isLikelyProductImageFallback = (u, titleText) => {
+          if (!u) return false;
+          const lower = u.toLowerCase();
+          const excludePat = /(promos?|promo|cms-rpd-img|banner|badge|logo|sprite|icon|spacer|placeholder|ads?|advert|avatar|google|gstatic)/i;
+          if (excludePat.test(lower)) return false;
+          if (/m\.media-amazon\.com|rukminim|flipkart|product|products|gallery|images\//i.test(lower)) return true;
+          const pathPart = u.split('/').pop() || '';
+          if (/^[a-z0-9A-Z\-_,]+\.(jpg|jpeg|png|webp)$/i.test(pathPart) && pathPart.length > 8) return true;
+          if (titleText) {
+            const tokens = titleText.replace(/[^a-zA-Z0-9 ]/g, ' ').split(/\s+/).filter(Boolean).filter(s => s.length > 3).slice(0,6).map(s => s.toLowerCase());
+            for (const tok of tokens) if (lower.includes(tok)) return true;
+          }
+          return false;
+        };
+
+        try {
+          const likely = images.filter(u => isLikelyProductImageFallback(u, title));
+          if (likely && likely.length > 0) images = likely;
+        } catch (e) {}
+
+  if (images && images.length > 20) images = images.slice(0, 20);
+
+        // Determine currency and displayPrice for fallback
+        let currencyFallback = '';
+        let displayPriceFallback = price || '';
+        try {
+          if (price && /₹/.test(price)) { currencyFallback = 'INR'; displayPriceFallback = 'INR ' + (price || ''); }
+          else if (price && /\$/.test(price)) { currencyFallback = 'USD'; displayPriceFallback = '\\\$' + (price || ''); }
+          else if (price && /£/.test(price)) { currencyFallback = 'GBP'; displayPriceFallback = '£' + (price || ''); }
+          else if (price && /€/.test(price)) { currencyFallback = 'EUR'; displayPriceFallback = '€' + (price || ''); }
+        } catch (e) {}
+
+  // Attempt to extract original / list price (struck-through price) from common selectors
+  let originalPriceFallback = '';
+        try {
+          const listSelectors = [
+            '#priceblock_listprice',
+            '.a-text-strike',
+            '.priceBlockStrikePriceString',
+            '.list-price',
+            '.strike',
+            '.comparison_price'
+          ];
+          for (const sel of listSelectors) {
+            try {
+              const el = $(sel).first();
+              if (el && el.text()) {
+                const m = el.text().trim().match(/[\$₹£€]?\s*[\d,]+\.?\d*/);
+                if (m) { originalPriceFallback = m[0].trim(); break; }
+              }
+            } catch (e) {}
+          }
+        } catch (e) {}
+
         const fallbackData = {
           title: title || 'Product Title',
           price: price || '',
-          description: description || '',
+          original_price: originalPriceFallback || null,
+          displayPrice: displayPriceFallback,
+          currency: currencyFallback,
+          description: (t ? (t + (description ? '\n\n' + description : '')) : description) || '',
           images,
+          images_all: Array.from(new Set(images.map(i => (i || '').split('?')[0]))),
           domain
         };
         
@@ -2196,11 +2889,16 @@ app.post('/api/scrape-product', async (req, res) => {
         res.json(fallbackData);
         
       } catch (fallbackError) {
-        console.error('Fallback scraping also failed:', fallbackError);
-        res.status(500).json({ 
-          error: 'Failed to scrape product data', 
-          details: 'Both Playwright and fallback methods failed' 
-        });
+        console.error('Fallback scraping also failed:', fallbackError && (fallbackError.stack || fallbackError.message || fallbackError));
+        const devDetails = {
+          playwright: playwrightError ? (playwrightError.stack || playwrightError.message || String(playwrightError)) : null,
+          fallback: fallbackError ? (fallbackError.stack || fallbackError.message || String(fallbackError)) : null
+        };
+        // Only include detailed traces in development
+        const responseBody = process.env.NODE_ENV === 'production' ?
+          { error: 'Failed to scrape product data', details: 'Both Playwright and fallback methods failed' } :
+          { error: 'Failed to scrape product data', details: 'Both Playwright and fallback methods failed', traces: devDetails };
+        res.status(500).json(responseBody);
       }
     }
   } catch (error) {

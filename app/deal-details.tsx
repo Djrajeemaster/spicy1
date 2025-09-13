@@ -96,6 +96,34 @@ export default function DealDetailsScreen() {
 
   useEffect(() => { loadData(); }, [loadData]);
 
+  // Increment view count once when the detail page is loaded
+  useEffect(() => {
+    const viewedKey = deal ? `deal_viewed_${deal.id}` : null;
+    const already = typeof window !== 'undefined' && viewedKey ? sessionStorage.getItem(viewedKey) : null;
+    if (!deal) return;
+    if (already) {
+      // Already incremented in this session
+      return;
+    }
+
+    let cancelled = false;
+    (async () => {
+      try {
+        const [err, data] = await dealService.incrementView(deal.id as string);
+        if (cancelled) return;
+        if (!err && data && (data as any).view_count !== undefined) {
+          setViewCount((data as any).view_count || 0);
+          if (typeof window !== 'undefined' && viewedKey) {
+            try { sessionStorage.setItem(viewedKey, String(Date.now())); } catch (e) { /* ignore */ }
+          }
+        }
+      } catch (e) {
+        // ignore
+      }
+    })();
+    return () => { cancelled = true; };
+  }, [deal]);
+
   useEffect(() => {
     if (deal?.category_id) {
       (async () => {
@@ -280,6 +308,7 @@ export default function DealDetailsScreen() {
         <Image 
           source={{ uri: selectedImage || 'https://placehold.co/600x400' }} 
           style={styles.desktopCardImage as any}
+          resizeMode="contain"
           onError={() => {
             if (selectedImage) {
               setImageLoadErrors(prev => new Set([...prev, selectedImage]));
@@ -301,24 +330,7 @@ export default function DealDetailsScreen() {
         {getStatusBadges()}
       </View>
 
-      {/* Enhanced Stats Row */}
-      <View style={styles.statsRow}>
-        <View style={styles.statItem}>
-          <Heart size={16} color="#ef4444" />
-          <Text style={styles.statValue}>{voteCounts.up}</Text>
-          <Text style={styles.statLabel}>Likes</Text>
-        </View>
-        <View style={styles.statItem}>
-          <Eye size={16} color="#6366f1" />
-          <Text style={styles.statValue}>{viewCount}</Text>
-          <Text style={styles.statLabel}>Views</Text>
-        </View>
-        <View style={styles.statItem}>
-          <TrendingUp size={16} color="#10b981" />
-          <Text style={styles.statValue}>{discount}%</Text>
-          <Text style={styles.statLabel}>Saved</Text>
-        </View>
-      </View>
+  {/* large stats row removed — using compact counters under CTA instead */}
 
       {/* Enhanced Price Section */}
       <View style={styles.priceSection}>
@@ -343,6 +355,22 @@ export default function DealDetailsScreen() {
           <Text style={styles.enhancedCTAText}>Get This Deal</Text>
         </LinearGradient>
       </TouchableOpacity>
+
+      {/* Small compact counters under CTA (mobile & web under the CTA) */}
+      <View style={styles.smallCountersRow}>
+          <View style={[styles.smallCounter, isDesktop ? styles.smallCounterDesktop : styles.smallCounterMobile]}>
+            <Heart size={isDesktop ? 16 : 12} color="#ef4444" />
+            <Text style={[styles.smallCounterText, isDesktop ? styles.smallCounterTextDesktop : styles.smallCounterTextMobile]}>{voteCounts.up}</Text>
+          </View>
+          <View style={[styles.smallCounter, isDesktop ? styles.smallCounterDesktop : styles.smallCounterMobile]}>
+            <Eye size={isDesktop ? 16 : 12} color="#6366f1" />
+            <Text style={[styles.smallCounterText, isDesktop ? styles.smallCounterTextDesktop : styles.smallCounterTextMobile]}>{viewCount}</Text>
+          </View>
+          <View style={[styles.smallCounter, isDesktop ? styles.smallCounterDesktop : styles.smallCounterMobile]}>
+            <TrendingUp size={isDesktop ? 16 : 12} color="#10b981" />
+            <Text style={[styles.smallCounterText, isDesktop ? styles.smallCounterTextDesktop : styles.smallCounterTextMobile]}>{discount}%</Text>
+          </View>
+      </View>
 
       {/* Quick Actions */}
       <View style={styles.quickActions}>
@@ -395,7 +423,7 @@ export default function DealDetailsScreen() {
       />
       <ScrollView style={styles.scrollView} contentContainerStyle={styles.scrollContainer}>
         {!isDesktop && (
-          <ImageBackground source={{ uri: selectedImage || 'https://placehold.co/600x400' }} style={styles.headerImageBackground}>
+          <ImageBackground source={{ uri: selectedImage || 'https://placehold.co/600x400' }} style={styles.headerImageBackground} imageStyle={styles.headerImage}>
             <LinearGradient colors={['rgba(0,0,0,0.6)', 'transparent', 'rgba(0,0,0,0.8)']} style={styles.headerOverlay}>
               <View style={styles.header}>
                 <TouchableOpacity onPress={handleBackPress} style={styles.backIcon}><ArrowLeft size={24} color="#FFFFFF" /></TouchableOpacity>
@@ -502,7 +530,8 @@ const styles = StyleSheet.create({
   backButton: { backgroundColor: '#6366f1', paddingHorizontal: 24, paddingVertical: 12, borderRadius: 20 },
   backButtonText: { color: '#FFFFFF', fontWeight: 'bold' },
   
-  headerImageBackground: { height: 250, justifyContent: 'space-between' },
+  headerImageBackground: { height: 320, justifyContent: 'space-between', alignItems: 'center' },
+  headerImage: { resizeMode: 'contain' },
   headerOverlay: { flex: 1, justifyContent: 'space-between', padding: 16, paddingTop: Platform.OS === 'ios' ? 40 : 20 },
   header: { flexDirection: 'row' },
   backIcon: { backgroundColor: 'rgba(0,0,0,0.4)', padding: 8, borderRadius: 20 },
@@ -581,7 +610,7 @@ const styles = StyleSheet.create({
   desktopDetailsColumn: { flex: 3, paddingRight: 24 },
   desktopActionColumn: { flex: 2, position: 'relative', top: 16 },
   desktopActionCard: { backgroundColor: '#FFFFFF', marginTop: 0 },
-  desktopCardImage: { width: '100%', height: 200, borderRadius: 16, backgroundColor: '#e2e8f0', marginBottom: 20 },
+  desktopCardImage: { width: '100%', height: 300, borderRadius: 16, backgroundColor: '#e2e8f0', marginBottom: 20 },
   categoryTextDesktop: { fontSize: 14, fontWeight: 'bold', color: '#6366f1', marginBottom: 8, textTransform: 'uppercase' },
   titleDesktop: { fontSize: 28, fontWeight: 'bold', color: '#1e293b', marginBottom: 16, lineHeight: 36 },
   
@@ -708,5 +737,38 @@ const styles = StyleSheet.create({
     fontSize: 10,
     fontWeight: '600',
     textAlign: 'center',
+  },
+  smallCountersRow: {
+    flexDirection: 'row',
+    justifyContent: 'center',
+    alignItems: 'center',
+    gap: 10,
+    marginTop: 12,
+    marginBottom: 8,
+    width: '100%',
+  },
+  smallCounter: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: 'rgba(15,23,42,0.03)',
+    paddingHorizontal: 6,
+    paddingVertical: 4,
+    borderRadius: 999,
+    minWidth: 36,
+    justifyContent: 'center',
+  },
+  smallCounterText: {
+    marginLeft: 6,
+    fontSize: 11,
+    color: '#475569',
+    fontWeight: '700',
+  },
+  smallCounterDesktop: {
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    minWidth: 48,
+  },
+  smallCounterTextDesktop: {
+    fontSize: 14,
   },
 });

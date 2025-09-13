@@ -127,8 +127,8 @@ export function EnhancedDealCardV2({ deal, isGuest, onVote, userRole, userId }: 
   const isExpiringSoon = timeRemaining && timeRemaining.includes('h') && parseInt(timeRemaining) < 24;
 
   const getStatusPill = () => {
-    const netVotes = deal.votes_up || 0;
-    const views = deal.view_count || 0;
+  const netVotes = deal.votes_up || 0;
+  const views = (deal.view_count as number) || (deal as any).views_count || 0;
     
     if (isExpiringSoon) {
       return (
@@ -185,6 +185,7 @@ export function EnhancedDealCardV2({ deal, isGuest, onVote, userRole, userId }: 
           <Image 
             source={{ uri: deal.images?.[0] || 'https://placehold.co/100x80/e2e8f0/64748b?text=No+Image' }}
             style={styles.mobileImage}
+            resizeMode="contain"
           />
           {discountPercentage > 0 && (
             <View style={styles.mobileDiscountBadge}>
@@ -239,6 +240,7 @@ export function EnhancedDealCardV2({ deal, isGuest, onVote, userRole, userId }: 
         <Image 
           source={{ uri: deal.images?.[0] || 'https://placehold.co/400x160/e2e8f0/64748b?text=No+Image' }}
           style={styles.image}
+          resizeMode="contain"
         />
         <View style={styles.imageOverlay} />
         
@@ -286,7 +288,7 @@ export function EnhancedDealCardV2({ deal, isGuest, onVote, userRole, userId }: 
           <View style={styles.leftStats}>
             <View style={styles.stat}>
               <Eye size={10} color="#6366f1" />
-              <Text style={styles.statText}>{typeof deal.view_count === 'number' ? deal.view_count : 0}</Text>
+              <Text style={styles.statText}>{typeof (deal.view_count as number) === 'number' ? deal.view_count : ((deal as any).views_count || 0)}</Text>
             </View>
             <View style={styles.stat}>
               <Heart size={10} color="#ef4444" />

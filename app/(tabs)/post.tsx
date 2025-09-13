@@ -65,6 +65,9 @@ export default function PostDealScreen() {
   const [uploadingImages, setUploadingImages] = useState(false);
   const [scrapingLoading, setScrapingLoading] = useState(false);
   const [scrapedImages, setScrapedImages] = useState<string[]>([]);
+  const [scrapedAllImages, setScrapedAllImages] = useState<string[] | null>(null);
+  const [showAllScraped, setShowAllScraped] = useState(false);
+  const [scrapedData, setScrapedData] = useState<{ title?: string; price?: string; description?: string; images?: string[]; domain?: string } | null>(null);
 
   // Enhanced state variables
   const [duplicates, setDuplicates] = useState<any[]>([]);
@@ -154,6 +157,9 @@ export default function PostDealScreen() {
       // Only reset if user has some data and it's been more than 30 seconds since last interaction
       // This prevents accidental resets while actively using the form
       
+      // Clear any previous notices when this screen is focused so old success messages don't linger
+      setNotice(null);
+
       return () => {
         // On blur (leaving the page), mark the time
         if (hasFormData) {
@@ -294,8 +300,9 @@ export default function PostDealScreen() {
     
     if (!selectedImages.includes(imageUrl)) {
       setSelectedImages(prev => [...prev, imageUrl]);
-      // Remove from scraped images
-      setScrapedImages(prev => prev.filter(img => img !== imageUrl));
+  // Remove from scraped images lists (filtered + all)
+  setScrapedImages(prev => prev.filter(img => img !== imageUrl));
+  setScrapedAllImages(prev => prev ? prev.filter(img => img !== imageUrl) : prev);
       notify('Image Added', 'Image added to your deal!', 'success');
     }
   };
@@ -307,8 +314,11 @@ export default function PostDealScreen() {
       return;
     }
     
+    // Choose which scraped list is currently visible
+    const sourceList = (showAllScraped && scrapedAllImages && scrapedAllImages.length > 0) ? scrapedAllImages : scrapedImages;
+
     // Filter out images that are already selected to prevent duplicates
-    const imagesToAdd = scrapedImages
+    const imagesToAdd = (sourceList || [])
       .filter(img => !selectedImages.includes(img))
       .slice(0, remainingSlots);
     
@@ -318,7 +328,9 @@ export default function PostDealScreen() {
     }
     
     setSelectedImages(prev => [...prev, ...imagesToAdd]);
+    // Remove added images from both lists
     setScrapedImages(prev => prev.filter(img => !imagesToAdd.includes(img)));
+    setScrapedAllImages(prev => prev ? prev.filter(img => !imagesToAdd.includes(img)) : prev);
     
     notify(`${imagesToAdd.length} image${imagesToAdd.length > 1 ? 's' : ''} added`, 'All available images added to your deal!', 'success');
   };
@@ -762,17 +774,54 @@ export default function PostDealScreen() {
           images: string[];
           domain: string;
         };
+        // Use server-provided short title (scrapedData.title) for the title input
         if (scrapedData.title && !formData.title) {
           setFormData(prev => ({ ...prev, title: scrapedData.title }));
         }
-        if (scrapedData.price && !formData.price) {
-          // Clean price by removing currency symbols and formatting
-          const cleanPrice = scrapedData.price.replace(/[$,₹,€,£,¥]/g, '').trim();
-          setFormData(prev => ({ ...prev, price: cleanPrice }));
+
+        // Use server-normalized price (already numeric) if available
+        if (typeof scrapedData.price !== 'undefined' && scrapedData.price !== null && scrapedData.price !== '' && !formData.price) {
+          // Server returns numeric-only price (e.g., '7999')
+          setFormData(prev => ({ ...prev, price: String(scrapedData.price) }));
         }
-        if (scrapedData.description && !formData.description) {
-          setFormData(prev => ({ ...prev, description: scrapedData.description }));
+
+        // Use fullTitle (server returns fullTitle) for the description preferentially
+        if ((scrapedData as any).fullTitle && !formData.description) {
+          // Remove repeated title occurrences conservatively and keep description readable
+          let desc = (scrapedData.description || '').trim();
+          const t = ((scrapedData as any).fullTitle || '').trim();
+          try {
+            if (t && desc) {
+              // Remove exact title prefixes and any repeated full-title lines
+              const lines = desc.split(/\n+/).map(l => l.trim()).filter(Boolean);
+              // Drop leading lines that are equal or start with the title
+              while (lines.length > 0 && lines[0].toLowerCase().startsWith(t.toLowerCase())) lines.shift();
+              // Remove any other occurrences of the full title inside remaining text
+              const esc = t.replace(/[.*+?^${}()|[\\]\\]/g, '\\\$&');
+              const re = new RegExp(esc, 'gi');
+              desc = lines.join('\n').replace(re, '').trim();
+            }
+          } catch (e) {}
+          // Compose candidate description with title once at top
+          const candidateDesc = t + (desc ? '\n\n' + desc : '');
+          // Limit description length to avoid huge blobs in the form field
+          const MAX_LEN = 2000;
+          setFormData(prev => ({ ...prev, description: candidateDesc.length > MAX_LEN ? candidateDesc.slice(0, MAX_LEN) + '...' : candidateDesc }));
+        } else if (scrapedData.description && !formData.description) {
+          // If only description exists, strip any leading title occurrences more robustly
+          let descOnly = (scrapedData.description || '').trim();
+          const t = (scrapedData.title || '').trim();
+          try {
+            // Remove leading exact title lines
+            const lines = descOnly.split(/\n+/).map(l => l.trim()).filter(Boolean);
+            while (lines.length > 0 && t && lines[0].toLowerCase().startsWith(t.toLowerCase())) lines.shift();
+            descOnly = lines.join('\n').trim();
+          } catch (e) {}
+          const MAX_LEN = 2000;
+          setFormData(prev => ({ ...prev, description: descOnly.length > MAX_LEN ? descOnly.slice(0, MAX_LEN) + '...' : descOnly }));
         }
+  // store full scraped payload for UI affordances
+  setScrapedData(scrapedData);
         // For store, we can try to find or suggest
         if (scrapedData.domain) {
           // Find matching store
@@ -785,12 +834,41 @@ export default function PostDealScreen() {
           }
         }
         if (scrapedData.images && scrapedData.images.length > 0) {
-          // Store scraped images for manual selection
+          // Store scraped images for manual selection (filtered)
           setScrapedImages(scrapedData.images);
-          
+          // Store the unfiltered list if provided
+          if ((scrapedData as any).images_all && Array.isArray((scrapedData as any).images_all)) {
+            setScrapedAllImages((scrapedData as any).images_all);
+            // Default to showing all scraped images for Amazon domains
+            if ((scrapedData as any).domain && /amazon\./i.test((scrapedData as any).domain)) {
+              setShowAllScraped(true);
+            }
+          } else {
+            setScrapedAllImages(null);
+          }
+
+          // Default to showing all scraped images for known Amazon domains
+          try {
+            if ((scrapedData as any).domain && /(^|\.)amazon\./i.test((scrapedData as any).domain)) {
+              setShowAllScraped(true);
+            }
+          } catch (e) {}
+
           // Show notification about found images
           notify(`${scrapedData.images.length} image${scrapedData.images.length > 1 ? 's' : ''} found`, 'Images are available below for manual selection.', 'success');
         }
+        // Wire scraped original price into the form if available and the originalPrice field is empty
+        try {
+          const orig = (scrapedData as any).original_price ?? (scrapedData as any).originalPrice ?? null;
+          if (orig && !formData.originalPrice) {
+            // Minimal normalization: strip currency symbols and commas, keep decimal point
+            const clean = String(orig).replace(/[^0-9.]/g, '').replace(/^(\.+)/, '').trim();
+            if (clean) {
+              setFormData(prev => ({ ...prev, originalPrice: clean }));
+              notify('Original price applied', `Using scraped original price: ${orig}`, 'success');
+            }
+          }
+        } catch (e) {}
       } catch (error) {
         console.error('Scraping failed:', error);
       } finally {
@@ -806,7 +884,7 @@ export default function PostDealScreen() {
     onPress: () => void;
     isStore?: boolean;
   }) => {
-    const displayText = item ? (isStore ? (item as Store).name : (item as Category).emoji + ' ' + (item as Category).name) : 'No Store';
+  const displayText = item ? (isStore ? (item as Store).name : (item as Category).name) : 'No Store';
     return (
       <TouchableOpacity style={styles.categoryWrapper} onPress={onPress}>
         {isSelected ? (
@@ -1018,6 +1096,15 @@ export default function PostDealScreen() {
               onChangeText={(text) => setFormData((prev) => ({ ...prev, description: text }))}
               placeholderTextColor="#94a3b8"
             />
+            {/* Use scraped description shortcut */}
+            {scrapedData?.description && !formData.description && (
+              <TouchableOpacity
+                style={styles.suggestionButton}
+                onPress={() => setFormData(prev => ({ ...prev, description: scrapedData.description || '' }))}
+              >
+                <Text style={styles.suggestionText}>💡 Use description from site: {scrapedData.description?.substring(0, 120)}{scrapedData.description && scrapedData.description.length > 120 ? '...' : ''}</Text>
+              </TouchableOpacity>
+            )}
           </View>
         </View>
 
@@ -1085,6 +1172,16 @@ export default function PostDealScreen() {
                 />
               </View>
               <Text style={styles.helpText}>For % off or coupon deals, leave empty</Text>
+                {/* Use scraped price shortcut */}
+                {scrapedData?.price && !formData.price && (
+                  <TouchableOpacity style={{ marginTop: 8 }} onPress={() => {
+                    const clean = (scrapedData.price || '').replace(/[$,₹,€,£,¥]/g, '').trim();
+                    setFormData(prev => ({ ...prev, price: clean }));
+                    notify('Price applied', `Using scraped price: ${clean}`, 'success');
+                  }}>
+                    <Text style={{ color: '#0369a1', fontWeight: '700' }}>Use scraped price: {scrapedData.price}</Text>
+                  </TouchableOpacity>
+                )}
             </View>
 
             <View style={[styles.inputGroup, { flex: 1, marginLeft: 8 }]}>
@@ -1208,23 +1305,30 @@ export default function PostDealScreen() {
           )}
 
           {/* Scraped Images Section */}
-          {scrapedImages.length > 0 && (
+          {(scrapedImages.length > 0 || (scrapedAllImages && scrapedAllImages.length > 0)) && (
             <View style={styles.scrapedImagesSection}>
               <View style={styles.scrapedImagesHeader}>
-                <Text style={styles.scrapedImagesTitle}>📸 Found Images ({scrapedImages.length})</Text>
+                <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+                  <Text style={styles.scrapedImagesTitle}>📸 Found Images ({showAllScraped ? (scrapedAllImages ? scrapedAllImages.length : 0) : scrapedImages.length})</Text>
+                  {scrapedAllImages && scrapedAllImages.length > 0 && (
+                    <TouchableOpacity onPress={() => setShowAllScraped(prev => !prev)} style={{ marginLeft: 8 }}>
+                      <Text style={{ color: '#0369a1', fontSize: 13 }}>{showAllScraped ? 'Show Filtered' : 'Show All'}</Text>
+                    </TouchableOpacity>
+                  )}
+                </View>
                 <TouchableOpacity 
                   style={styles.addAllImagesButton}
                   onPress={addAllScrapedImages}
                 >
                   <Text style={styles.addAllImagesText}>
-                    Add All ({Math.min(scrapedImages.length, 5 - selectedImages.length)})
+                    Add All ({Math.min((showAllScraped && scrapedAllImages ? scrapedAllImages.length : scrapedImages.length), 5 - selectedImages.length)})
                   </Text>
                 </TouchableOpacity>
               </View>
               <Text style={styles.scrapedImagesSubtitle}>Click images to add them to your deal</Text>
               <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.scrapedImagesScroll}>
                 <View style={styles.scrapedImagesList}>
-                  {scrapedImages.map((uri, index) => (
+                  {(showAllScraped && scrapedAllImages ? scrapedAllImages : scrapedImages).map((uri, index) => (
                     <TouchableOpacity 
                       key={index} 
                       style={styles.scrapedImageItem}
@@ -1355,10 +1459,6 @@ const styles = StyleSheet.create({
     color: '#64748b',
     marginBottom: 8,
   },
-  scrapedImageContainer: {
-    position: 'relative',
-    marginRight: 8,
-  },
   scrapedImageSelected: {
     borderWidth: 2,
     borderColor: '#6366f1',
@@ -1442,24 +1542,25 @@ const styles = StyleSheet.create({
     overflow: 'hidden',
   },
   scrapedImage: {
-    width: 80,
-    height: 80,
-    borderRadius: 6,
+    width: 120,
+    height: 120,
+    borderRadius: 8,
   },
   scrapedImageOverlay: {
     position: 'absolute',
-    top: 0,
-    left: 0,
-    right: 0,
-    bottom: 0,
-    backgroundColor: 'rgba(99, 102, 241, 0.8)',
+    top: 6,
+    right: 6,
+    width: 28,
+    height: 28,
+    borderRadius: 14,
+    backgroundColor: 'rgba(99, 102, 241, 0.9)',
     justifyContent: 'center',
     alignItems: 'center',
   },
   scrapedImageText: {
-    fontSize: 24,
+    fontSize: 16,
     color: '#FFFFFF',
-    fontWeight: 'bold',
+    fontWeight: '700',
   },
   addImageButton: {
     marginBottom: 12,
